@@ -319,11 +319,6 @@ function createTask(formData) {
     sheet.getRange(newRow, 12, 1, 2)
       .setNumberFormat('mmm d, yyyy hh:mm');
 
-    // Recalculate the parent after adding a subtask.
-    if (parentTaskId) {
-      refreshParentSchedule(sheet, parentTaskId);
-    }
-
     return {
       success: true,
       taskId: taskId,
@@ -355,75 +350,6 @@ function findTaskRow(sheet, taskId) {
   return index + 2;
 }
 
-// Recalculates a parent's dates from its current subtasks.
-function refreshParentSchedule(sheet, parentTaskId) {
-  parentTaskId = String(parentTaskId || '').trim();
-
-  if (!parentTaskId) return;
-
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return;
-
-  const rows = sheet.getRange(
-    2, 1, lastRow - 1, 14
-  ).getValues();
-
-  const parentIndex = rows.findIndex(
-    row => String(row[0]).trim() === parentTaskId
-  );
-
-  if (parentIndex === -1) {
-    throw new Error('Parent task not found: ' + parentTaskId);
-  }
-
-  const children = rows.filter(
-    row => String(row[13] || '').trim() === parentTaskId
-  );
-
-  // Preserve the last schedule when no children remain.
-  if (!children.length) return;
-
-  const validDates = values => values
-    .map(value => {
-      if (value instanceof Date && !isNaN(value.getTime())) {
-        return value;
-      }
-
-      return parseLocalDate(value);
-    })
-    .filter(Boolean);
-
-  const starts = validDates(children.map(row => row[5]));
-  const ends = validDates(children.map(row => row[6]));
-
-  if (!starts.length || !ends.length) return;
-
-  const earliestStart = new Date(
-    Math.min(...starts.map(date => date.getTime()))
-  );
-
-  const latestEnd = new Date(
-    Math.max(...ends.map(date => date.getTime()))
-  );
-
-  const parentRow = parentIndex + 2;
-
-  // Update the parent's planned schedule.
-  sheet.getRange(parentRow, 6, 1, 2).setValues([[
-    earliestStart,
-    latestEnd
-  ]]);
-
-  // Update inclusive duration.
-  sheet.getRange(parentRow, 8).setFormula(
-    `=IF(OR(F${parentRow}="",G${parentRow}=""),"",G${parentRow}-F${parentRow}+1)`
-  );
-
-  sheet.getRange(parentRow, 6, 1, 2)
-    .setNumberFormat('mmm d, yyyy');
-
-  sheet.getRange(parentRow, 13).setValue(new Date());
-}
 // Updates task details without changing its status.
 // Updates task details without changing its status.
 function updateTask(formData) {
@@ -438,15 +364,10 @@ function updateTask(formData) {
     const startDate = parseLocalDate(formData.startDate);
     const endDate = parseLocalDate(formData.endDate);
     const description = String(formData.description || '').trim();
-    const dayOffset = Number(formData.dayOffset || 0);
 
     if (!taskId || !taskName || !category ||
         !priority || !startDate || !endDate) {
       throw new Error('Please complete all required fields.');
-    }
-
-    if (!Number.isInteger(dayOffset)) {
-      throw new Error('Invalid reschedule offset.');
     }
 
     if (!CONFIG.CATEGORIES.includes(category)) {
@@ -470,23 +391,6 @@ function updateTask(formData) {
 
     const row = findTaskRow(sheet, taskId);
 
-    // Remember the current parent relationship.
-    const currentParentTaskId = String(
-      sheet.getRange(row, 14).getValue() || ''
-    ).trim();
-
-    // Determine whether this task has children.
-    const lastRow = sheet.getLastRow();
-
-    const rows = lastRow >= 2
-      ? sheet.getRange(2, 1, lastRow - 1, 14).getValues()
-      : [];
-
-    const hasChildren = rows.some(row =>
-      String(row[13] || '').trim() === taskId
-    );
-
-    // Update editable fields only.
     sheet.getRange(row, 2, 1, 3).setValues([[
       taskName, category, priority
     ]]);
@@ -498,45 +402,6 @@ function updateTask(formData) {
     sheet.getRange(row, 9).setValue(description);
     sheet.getRange(row, 13).setValue(new Date());
 
-    if (hasChildren && dayOffset !== 0) {
-      rows.forEach((childValues, index) => {
-        if (String(childValues[13] || '').trim() !== taskId) return;
-
-        const childStart = childValues[5] instanceof Date
-          ? childValues[5]
-          : parseLocalDate(childValues[5]);
-        const childEnd = childValues[6] instanceof Date
-          ? childValues[6]
-          : parseLocalDate(childValues[6]);
-
-        if (!childStart || !childEnd) return;
-
-        const childRow = index + 2;
-        sheet.getRange(childRow, 6, 1, 2).setValues([[
-          addDays(childStart, dayOffset),
-          addDays(childEnd, dayOffset)
-        ]]);
-        sheet.getRange(childRow, 13).setValue(new Date());
-      });
-
-      refreshParentSchedule(sheet, taskId);
-
-      return {
-        success: true,
-        message: taskId + ' rescheduled successfully!'
-      };
-    }
-
-    // Editing a subtask recalculates its parent.
-    if (currentParentTaskId) {
-      refreshParentSchedule(sheet, currentParentTaskId);
-    }
-
-    // Editing a parent with children recalculates its schedule.
-    if (hasChildren) {
-      refreshParentSchedule(sheet, taskId);
-    }
-
     return {
       success: true,
       message: taskId + ' updated successfully!'
@@ -545,12 +410,6 @@ function updateTask(formData) {
   } finally {
     lock.releaseLock();
   }
-}
-
-function addDays(dateValue, days) {
-  const date = new Date(dateValue.getTime());
-  date.setDate(date.getDate() + days);
-  return date;
 }
 
 // Updates status and actual work dates.
@@ -1033,7 +892,7 @@ function doGet() {
     .setTitle('Video Production Manager')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
-// Deletes a task and recalculates its former parent's schedule.
+// Deletes a task without changing its former parent's schedule.
 function deleteTask(taskId) {
   const lock = LockService.getDocumentLock();
   lock.waitLock(10000);
@@ -1074,17 +933,7 @@ function deleteTask(taskId) {
       }
     }
 
-    // Preserve the parent ID before deleting the row.
-    const formerParentTaskId = String(
-      sheet.getRange(row, 14).getValue() || ''
-    ).trim();
-
     sheet.deleteRow(row);
-
-    // Recalculate the former parent's schedule.
-    if (formerParentTaskId) {
-      refreshParentSchedule(sheet, formerParentTaskId);
-    }
 
     SpreadsheetApp.flush();
 
@@ -1123,10 +972,6 @@ function setTaskParent(taskId, newParentTaskId) {
     }
 
     const taskRow = findTaskRow(sheet, taskId);
-
-    const previousParentTaskId = String(
-      sheet.getRange(taskRow, 14).getValue() || ''
-    ).trim();
 
     const lastRow = sheet.getLastRow();
 
@@ -1183,19 +1028,6 @@ function setTaskParent(taskId, newParentTaskId) {
 
     // Update selected task timestamp.
     sheet.getRange(taskRow, 13).setValue(now);
-
-    // Recalculate the previous parent.
-    if (
-      previousParentTaskId &&
-      previousParentTaskId !== newParentTaskId
-    ) {
-      refreshParentSchedule(sheet, previousParentTaskId);
-    }
-
-    // Recalculate the destination parent.
-    if (newParentTaskId) {
-      refreshParentSchedule(sheet, newParentTaskId);
-    }
 
     SpreadsheetApp.flush();
 
