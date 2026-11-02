@@ -438,10 +438,15 @@ function updateTask(formData) {
     const startDate = parseLocalDate(formData.startDate);
     const endDate = parseLocalDate(formData.endDate);
     const description = String(formData.description || '').trim();
+    const dayOffset = Number(formData.dayOffset || 0);
 
     if (!taskId || !taskName || !category ||
         !priority || !startDate || !endDate) {
       throw new Error('Please complete all required fields.');
+    }
+
+    if (!Number.isInteger(dayOffset)) {
+      throw new Error('Invalid reschedule offset.');
     }
 
     if (!CONFIG.CATEGORIES.includes(category)) {
@@ -473,13 +478,13 @@ function updateTask(formData) {
     // Determine whether this task has children.
     const lastRow = sheet.getLastRow();
 
-    const hasChildren = lastRow >= 2 &&
-      sheet.getRange(2, 14, lastRow - 1, 1)
-        .getDisplayValues()
-        .flat()
-        .some(parentId =>
-          String(parentId).trim() === taskId
-        );
+    const rows = lastRow >= 2
+      ? sheet.getRange(2, 1, lastRow - 1, 14).getValues()
+      : [];
+
+    const hasChildren = rows.some(row =>
+      String(row[13] || '').trim() === taskId
+    );
 
     // Update editable fields only.
     sheet.getRange(row, 2, 1, 3).setValues([[
@@ -492,6 +497,35 @@ function updateTask(formData) {
 
     sheet.getRange(row, 9).setValue(description);
     sheet.getRange(row, 13).setValue(new Date());
+
+    if (hasChildren && dayOffset !== 0) {
+      rows.forEach((childValues, index) => {
+        if (String(childValues[13] || '').trim() !== taskId) return;
+
+        const childStart = childValues[5] instanceof Date
+          ? childValues[5]
+          : parseLocalDate(childValues[5]);
+        const childEnd = childValues[6] instanceof Date
+          ? childValues[6]
+          : parseLocalDate(childValues[6]);
+
+        if (!childStart || !childEnd) return;
+
+        const childRow = index + 2;
+        sheet.getRange(childRow, 6, 1, 2).setValues([[
+          addDays(childStart, dayOffset),
+          addDays(childEnd, dayOffset)
+        ]]);
+        sheet.getRange(childRow, 13).setValue(new Date());
+      });
+
+      refreshParentSchedule(sheet, taskId);
+
+      return {
+        success: true,
+        message: taskId + ' rescheduled successfully!'
+      };
+    }
 
     // Editing a subtask recalculates its parent.
     if (currentParentTaskId) {
@@ -511,6 +545,12 @@ function updateTask(formData) {
   } finally {
     lock.releaseLock();
   }
+}
+
+function addDays(dateValue, days) {
+  const date = new Date(dateValue.getTime());
+  date.setDate(date.getDate() + days);
+  return date;
 }
 
 // Updates status and actual work dates.

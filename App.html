@@ -1585,7 +1585,7 @@ html += `<div class="task-cell"
     const dayWidth = parseFloat(
       getComputedStyle(document.documentElement)
         .getPropertyValue('--day-width')
-    );
+    ) || 38;
 
     let moved = false;
 
@@ -1631,7 +1631,8 @@ html += `<div class="task-cell"
         priority: t.priority,
         startDate: dateKey(newStart),
         endDate: dateKey(newEnd),
-        description: t.description
+        description: t.description,
+        dayOffset: dayOffset
       };
 
       bar.style.opacity = '0.5';
