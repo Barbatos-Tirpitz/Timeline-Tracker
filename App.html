@@ -610,55 +610,63 @@
 
     .modal-body {
   padding: 26px 28px;
-}
+  }
 
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 20px;
-  row-gap: 22px;
-}
-
-.form-field {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  min-width: 0;
-}
-
-.form-field.full {
-  grid-column: 1 / -1;
-}
-
-.form-field label {
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.form-field input,
-.form-field select,
-.form-field textarea {
+  #timelineShell {
   width: 100%;
-  min-height: 42px;
-  padding: 11px 12px;
-  border: 1px solid #c8d0dc;
-  border-radius: 6px;
-  outline: none;
-  color: var(--text);
-  background: white;
-}
+  max-height: 70vh;
+  overflow: auto;
+  position: relative;
+  overscroll-behavior: contain;
+  }
 
-.form-field input:focus,
-.form-field select:focus,
-.form-field textarea:focus {
-  border-color: var(--blue);
-  box-shadow: 0 0 0 2px #e9f2ff;
-}
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 20px;
+    row-gap: 22px;
+  }
 
-.form-field textarea {
-  resize: vertical;
-  min-height: 105px;
-}
+  .form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    min-width: 0;
+  }
+
+  .form-field.full {
+    grid-column: 1 / -1;
+  }
+
+  .form-field label {
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .form-field input,
+  .form-field select,
+  .form-field textarea {
+    width: 100%;
+    min-height: 42px;
+    padding: 11px 12px;
+    border: 1px solid #c8d0dc;
+    border-radius: 6px;
+    outline: none;
+    color: var(--text);
+    background: white;
+  }
+
+  .form-field input:focus,
+  .form-field select:focus,
+  .form-field textarea:focus {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 2px #e9f2ff;
+  }
+
+  .form-field textarea {
+    resize: vertical;
+    min-height: 105px;
+  }
     .form-field input:focus, .form-field select:focus, .form-field textarea:focus { border-color: var(--blue); }
     .form-field textarea { resize: vertical; min-height: 88px; }
 
@@ -1002,19 +1010,60 @@
   const DAY = 86400000;
 
   function parseDate(value) {
-    if (!value) return null;
-    if (value instanceof Date) return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  if (!value) return null;
 
-    const s = String(value).trim();
-    let match = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-    if (match) return new Date(+match[1], +match[2] - 1, +match[3]);
+  if (value instanceof Date) {
+    if (isNaN(value.getTime())) return null;
 
-    match = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-    if (match) return new Date(+match[3], +match[1] - 1, +match[2]);
-
-    const d = new Date(s);
-    return isNaN(d) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    return new Date(
+      value.getFullYear(),
+      value.getMonth(),
+      value.getDate()
+    );
   }
+
+  const s = String(value).trim();
+
+  // ISO format: YYYY-MM-DD
+  let match = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+
+    const date = new Date(year, month - 1, day);
+
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) return null;
+
+    return date;
+  }
+
+  // Philippine format: DD/MM/YYYY or DD-MM-YYYY
+  match = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+
+  if (match) {
+    const day = Number(match[1]);
+    const month = Number(match[2]);
+    const year = Number(match[3]);
+
+    const date = new Date(year, month - 1, day);
+
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) return null;
+
+    return date;
+  }
+
+  return null;
+}
 
   function dateKey(d) {
     return d ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` : '';
@@ -1038,33 +1087,35 @@
   }
 
   function normalizeTask(t) {
-    const get = (...keys) => {
-      for (const key of keys) if (t[key] !== undefined) return t[key];
-      return '';
-    };
+  const get = (...keys) => {
+    for (const key of keys) {
+      if (t[key] !== undefined) return t[key];
+    }
+    return '';
+  };
 
-    const start = parseDate(get('startDate', 'start', 'plannedStart', 'start_date'));
-    const end = parseDate(get('endDate', 'end', 'plannedEnd', 'end_date'));
-    const progressValue = get('progress');
+  const start = parseDate(get('startDate', 'start', 'plannedStart', 'start_date'));
+  const end = parseDate(get('endDate', 'end', 'plannedEnd', 'end_date'));
+  const progressValue = get('progress');
 
-    return {
-      id: String(get('taskId', 'id', 'taskID', 'task_id') ?? ''),
-      name: String(get('taskName', 'name', 'title', 'task_name') ?? ''),
-      category: String(get('category') || 'Editing'),
-      priority: String(get('priority') || 'Medium'),
-      status: String(get('status') || 'To Do'),
-      start,
-      end,
-      description: String(get('description') || ''),
-      parentTaskId: String(get('parentTaskId') || ''),
-      subtaskCount: Number(get('subtaskCount') || 0),
-      completedSubtaskCount: Number(get('completedSubtaskCount') || 0),
-      progress: progressValue === '' || progressValue === null
+  return {
+    id: String(get('taskId', 'id', 'taskID', 'task_id') ?? ''),
+    name: String(get('taskName', 'name', 'title', 'task_name') ?? ''),
+    category: String(get('category') || 'Editing'),
+    priority: String(get('priority') || 'Medium'),
+    status: String(get('status') || 'To Do'),
+    start,
+    end,
+    description: String(get('description') || ''),
+    parentTaskId: String(get('parentTaskId') || '').trim(),
+    subtaskCount: Number(get('subtaskCount') || 0),
+    completedSubtaskCount: Number(get('completedSubtaskCount') || 0),
+    progress: progressValue == null || progressValue === ''
       ? null
       : Number(progressValue),
-      raw: t
-    };
-  }
+    raw: t
+  };
+}
 
   function loadTasks(onLoaded) {
   $('timelineShell').innerHTML =
@@ -1099,6 +1150,15 @@
         response.hasTasks === true && response.total > 0;
 
       state.tasks = response.tasks.map(normalizeTask);
+      // Outputs the response for debugging.
+      console.log('Backend total:', response.total);
+      console.log('Frontend task count:', state.tasks.length);
+      console.table(state.tasks.map(t => ({
+        id: t.id,
+        name: t.name,
+        status: t.status,
+        parentTaskId: t.parentTaskId
+      })));
 
       updateCategories();
       render();
@@ -1246,7 +1306,7 @@
   return { start, end, today };
 }
 
-  function render() {
+function render() {
   renderStats();
 
   // Backend confirms whether the database contains tasks.
@@ -1260,9 +1320,56 @@
     return;
   }
 
-  const allTasks = filteredTasks();
+  const filtered = filteredTasks();
 
-  const { start, end, today } = visibleRange(allTasks);
+// Group visible subtasks under their parent.
+const visibleById = new Map(filtered.map(t => [t.id, t]));
+const childrenByParent = new Map();
+
+filtered.forEach(t => {
+  if (!t.parentTaskId) return;
+
+  if (!childrenByParent.has(t.parentTaskId)) {
+    childrenByParent.set(t.parentTaskId, []);
+  }
+
+  childrenByParent.get(t.parentTaskId).push(t);
+});
+
+// Keep parents and their subtasks together.
+const allTasks = [];
+const added = new Set();
+
+filtered.forEach(t => {
+  // A task is a root when its parent isn't in the filtered results.
+  if (t.parentTaskId && visibleById.has(t.parentTaskId)) {
+    return;
+  }
+
+  if (!added.has(t.id)) {
+    allTasks.push(t);
+    added.add(t.id);
+  }
+
+  const children = childrenByParent.get(t.id) || [];
+
+  children.forEach(child => {
+    if (!added.has(child.id)) {
+      allTasks.push(child);
+      added.add(child.id);
+    }
+  });
+});
+
+// Preserve any remaining tasks, including orphaned records.
+filtered.forEach(t => {
+  if (!added.has(t.id)) {
+    allTasks.push(t);
+    added.add(t.id);
+  }
+});
+
+const { start, end, today } = visibleRange(allTasks);
 
   // Only show tasks overlapping the selected week or month.
   const tasks = state.zoom === 'day'
@@ -1302,35 +1409,35 @@
 
   bottom = d.getDate();
 
-} else if (state.zoom === 'week') {
-  top = d.toLocaleDateString(undefined, {
-    weekday: 'short'
-  });
+  } else if (state.zoom === 'week') {
+    top = d.toLocaleDateString(undefined, {
+      weekday: 'short'
+    });
 
   bottom = d.toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric'
   });
 
-} else {
-  top = d.toLocaleDateString(undefined, {
-    weekday: 'short'
-  }).slice(0, 2);
+  } else {
+    top = d.toLocaleDateString(undefined, {
+      weekday: 'short'
+    }).slice(0, 2);
 
-  bottom = d.getDate();
-}
+    bottom = d.getDate();
+  }
 
       const monthStart = d.getDate() === 1;
 
-html += `<div class="date-header
-  ${weekend ? 'weekend' : ''}
-  ${isToday ? 'today' : ''}
-  ${monthStart ? 'month-start' : ''}"
-  title="${esc(d.toDateString())}">
-  <span>${top}</span>
-  <span class="day-number">${bottom}</span>
-</div>`;
-    }
+  html += `<div class="date-header
+    ${weekend ? 'weekend' : ''}
+    ${isToday ? 'today' : ''}
+    ${monthStart ? 'month-start' : ''}"
+    title="${esc(d.toDateString())}">
+    <span>${top}</span>
+    <span class="day-number">${bottom}</span>
+  </div>`;
+      }
 
     if (!tasks.length) {
       html += `<div class="empty"><strong>No matching tasks</strong>Create a task or adjust your filters.</div>`;
@@ -1340,7 +1447,8 @@ html += `<div class="date-header
     }
 
     for (const t of tasks) {
-      html += `<div class="task-cell">
+     html += `<div class="task-cell"
+        style="padding-left:${t.parentTaskId ? '34px' : '14px'}">
         <div class="task-color" style="background:${barColor(t.status)}"></div>
         <div class="task-info">
           <div class="task-title" title="${esc(t.name)}" onclick="openEdit('${esc(t.id)}')">${esc(t.name || 'Untitled task')}</div>
@@ -1354,21 +1462,21 @@ html += `<div class="date-header
         const isToday = dateKey(d) === dateKey(today);
         const monthStart = d.getDate() === 1;
 
-html += `<div class="day-cell
-  ${weekend ? 'weekend' : ''}
-  ${isToday ? 'today' : ''}
-  ${monthStart ? 'month-start' : ''}"></div>`;
+  html += `<div class="day-cell
+    ${weekend ? 'weekend' : ''}
+    ${isToday ? 'today' : ''}
+    ${monthStart ? 'month-start' : ''}"></div>`;
+        }
       }
-    }
 
     html += '</div>';
     $('timelineShell').innerHTML = html;
 
     const grid = $('timelineShell').querySelector('.timeline');
-const rows = grid.querySelectorAll('.task-cell');
-const dayCells = grid.querySelectorAll('.day-cell');
+  const rows = grid.querySelectorAll('.task-cell');
+  const dayCells = grid.querySelectorAll('.day-cell');
 
-tasks.forEach((t, index) => {
+  tasks.forEach((t, index) => {
 
   // A task needs valid start and end dates.
   if (!t.start || !t.end) return;
@@ -1398,7 +1506,8 @@ tasks.forEach((t, index) => {
 
   const bar = document.createElement('div');
 
-  bar.className = `task-bar ${statusClass(t.status)}`;
+  bar.className = 'task-bar';
+  bar.style.backgroundColor = barColor(t.status);
 
   // Position using actual calendar cell measurements.
   bar.style.left =
@@ -1514,7 +1623,7 @@ tasks.forEach((t, index) => {
   });
 
   grid.appendChild(bar);
-});
+  });
 
     if (!state.anchor) {
       const offset = dayDiff(start, today);
@@ -1560,7 +1669,7 @@ tasks.forEach((t, index) => {
   }
 
   render();
-}
+  }
 
   function goToday() {
     state.anchor = null;
@@ -1586,7 +1695,7 @@ tasks.forEach((t, index) => {
         <td><a href="#" onclick="openEdit('${esc(t.id)}');return false" style="color:#0c66e4;font-weight:600;text-decoration:none">${esc(t.name)}</a><div class="task-meta">${esc(t.id)}</div></td>
         <td>${esc(t.category)}</td>
         <td>${esc(t.priority)}</td>
-        <td><span class="pill ${pillClass(t.status)}">${esc(t.status)}</span></td>
+        <td><span class="pill" style="background-color:${barColor(t.status)};color:#fff">${esc(t.status)}</span></td>
         <td>${t.start ? esc(dateKey(t.start)) : '—'}</td>
         <td>${t.end ? esc(dateKey(t.end)) : '—'}</td>
       </tr>`).join('')}</tbody>
@@ -1611,7 +1720,7 @@ tasks.forEach((t, index) => {
         const percent = total ? n / total * 100 : 0;
         return `<div style="margin:20px 0">
           <div style="display:flex;justify-content:space-between;margin-bottom:8px">
-            <span><span class="pill ${pillClass(s)}">${esc(s)}</span></span>
+            <span class="pill" style="background-color:${barColor(s)};color:#fff">${esc(s)}</span>
             <strong>${n}</strong>
           </div>
           <div style="height:7px;background:#edf0f4;border-radius:8px;overflow:hidden">
@@ -1644,165 +1753,166 @@ tasks.forEach((t, index) => {
     b.addEventListener('click', () => switchView(b.dataset.view)));
 
   function renderSubtaskPanel(task) {
-  const panel = $('subtasksPanel');
-  const title = $('subtasksTitle');
-  const count = $('subtasksCount');
-  const content = $('subtasksContent');
+    const panel = $('subtasksPanel');
+    const title = $('subtasksTitle');
+    const count = $('subtasksCount');
+    const content = $('subtasksContent');
 
-  panel.style.display = 'block';
+    panel.style.display = 'block';
 
-  // CASE 1: The selected task is a subtask.
-  if (task.parentTaskId) {
-    const parent = state.tasks.find(
-      t => t.id === task.parentTaskId
+    // CASE 1: The selected task is a subtask.
+    if (task.parentTaskId) {
+      const parent = state.tasks.find(
+        t => t.id === task.parentTaskId
+      );
+
+      title.textContent = 'Parent task';
+      count.textContent = parent
+        ? 'This task belongs to another task.'
+        : 'The original parent could not be found.';
+
+      const availableParents = state.tasks.filter(
+        t => !t.parentTaskId && t.id !== task.id
+      );
+
+      content.innerHTML = `
+        <div class="subtask-row">
+          <div class="subtask-info">
+            <div class="task-meta">Current parent</div>
+            ${
+              parent
+                ? `<button type="button" class="subtask-link"
+                    onclick="openEdit('${esc(parent.id)}')">
+                    ${esc(parent.name)}
+                  </button>
+                  <div class="task-meta">${esc(parent.id)}</div>`
+                : '<strong>Unavailable</strong>'
+            }
+          </div>
+        </div>
+
+        <div class="subtask-transfer">
+          <strong>Transfer subtask</strong>
+
+          <select id="transferParentSelect">
+            <option value="">None — make standalone</option>
+            ${availableParents.map(p => `
+              <option value="${esc(p.id)}"
+                ${p.id === task.parentTaskId ? 'selected' : ''}>
+                ${esc(p.name)} (${esc(p.id)})
+              </option>
+            `).join('')}
+          </select>
+
+          <button type="button" class="btn btn-primary"
+            onclick="transferCurrentSubtask()">
+            Transfer task
+          </button>
+        </div>
+      `;
+
+      return;
+    }
+
+    // CASE 2: The selected task is a parent.
+    const children = state.tasks.filter(
+      t => t.parentTaskId === task.id
     );
 
-    title.textContent = 'Parent task';
-    count.textContent = parent
-      ? 'This task belongs to another task.'
-      : 'The original parent could not be found.';
+    title.textContent = 'Subtasks';
 
-    const availableParents = state.tasks.filter(
-      t => !t.parentTaskId && t.id !== task.id
-    );
+    const progress = children.length
+      ? Math.max(0, Math.min(100, Number(task.progress) || 0))
+      : 0;
 
-    content.innerHTML = `
+    count.textContent = children.length
+      ? `${children.length} subtasks · ${progress}% complete`
+      : 'No subtasks yet';
+
+    const childRows = children.map(child => `
       <div class="subtask-row">
         <div class="subtask-info">
-          <div class="task-meta">Current parent</div>
-          ${
-            parent
-              ? `<button type="button" class="subtask-link"
-                   onclick="openEdit('${esc(parent.id)}')">
-                   ${esc(parent.name)}
-                 </button>
-                 <div class="task-meta">${esc(parent.id)}</div>`
-              : '<strong>Unavailable</strong>'
-          }
+          <button type="button" class="subtask-link"
+            onclick="openEdit('${esc(child.id)}')">
+            ${esc(child.name)}
+          </button>
+          <div class="task-meta">
+            ${esc(child.id)} · ${esc(child.category)}
+          </div>
         </div>
+
+        <span class="pill"
+          style="background-color:${barColor(child.status)};color:#fff">
+          ${esc(child.status)}
+        </span>
       </div>
+    `).join('');
 
-      <div class="subtask-transfer">
-        <strong>Transfer subtask</strong>
-
-        <select id="transferParentSelect">
-          <option value="">None — make standalone</option>
-          ${availableParents.map(p => `
-            <option value="${esc(p.id)}"
-              ${p.id === task.parentTaskId ? 'selected' : ''}>
-              ${esc(p.name)} (${esc(p.id)})
-            </option>
-          `).join('')}
-        </select>
-
-        <button type="button" class="btn btn-primary"
-          onclick="transferCurrentSubtask()">
-          Transfer task
-        </button>
-      </div>
-    `;
-
-    return;
-  }
-
-  // CASE 2: The selected task is a parent.
-  const children = state.tasks.filter(
-    t => t.parentTaskId === task.id
+    const availableParents = state.tasks.filter(
+    t => !t.parentTaskId && t.id !== task.id
   );
 
-  title.textContent = 'Subtasks';
+    content.innerHTML = `
+      ${
+        children.length
+          ? `<div class="subtask-list">${childRows}</div>`
+          : `<div class="subtask-empty">
+              No subtasks yet. Add the individual steps needed to complete this task.
+            </div>`
+      }
 
-const progress = children.length
-  ? Math.max(0, Math.min(100, Number(task.progress) || 0))
-  : 0;
+      <div class="subtask-create">
+        <input id="newSubtaskName"
+          maxlength="200"
+          placeholder="Enter a subtask name..."
+          onkeydown="if(event.key==='Enter'){event.preventDefault();createSubtask()}">
 
-count.textContent = children.length
-  ? `${children.length} subtasks · ${progress}% complete`
-  : 'No subtasks yet';
-
-  const childRows = children.map(child => `
-    <div class="subtask-row">
-      <div class="subtask-info">
-        <button type="button" class="subtask-link"
-          onclick="openEdit('${esc(child.id)}')">
-          ${esc(child.name)}
+        <button type="button" class="btn btn-primary"
+          onclick="createSubtask()">
+          ＋ Add
         </button>
-        <div class="task-meta">
-          ${esc(child.id)} · ${esc(child.category)}
-        </div>
+      </div>
+      <div class="subtask-transfer">
+    <strong>Convert this task into a subtask</strong>
+
+    <div class="task-meta">
+      ${
+        children.length
+          ? `${children.length} existing subtasks will be moved to the selected parent as sibling tasks.`
+          : 'Move this task under another top-level task.'
+      }
+    </div>
+
+    <select id="transferParentSelect">
+      <option value="">Choose a parent task...</option>
+
+      ${availableParents.map(p => `
+        <option value="${esc(p.id)}">
+          ${esc(p.name)} (${esc(p.id)})
+        </option>
+      `).join('')}
+    </select>
+
+    <button type="button"
+      class="btn"
+      onclick="transferCurrentSubtask()"
+      ${availableParents.length ? '' : 'disabled'}>
+      Convert to subtask
+    </button>
+  </div>
+  ${children.length ? `
+    <div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <span class="task-meta">Subtask completion</span>
+        <strong>${progress}%</strong>
       </div>
 
-      <span class="pill ${pillClass(child.status)}">
-        ${esc(child.status)}
-      </span>
+      <div style="height:8px;background:#e9edf3;border-radius:8px;overflow:hidden">
+        <div style="width:${progress}%;height:100%;background:#22a06b;border-radius:8px"></div>
+      </div>
     </div>
-  `).join('');
-
-  const availableParents = state.tasks.filter(
-  t => !t.parentTaskId && t.id !== task.id
-);
-
-  content.innerHTML = `
-    ${
-      children.length
-        ? `<div class="subtask-list">${childRows}</div>`
-        : `<div class="subtask-empty">
-             No subtasks yet. Add the individual steps needed to complete this task.
-           </div>`
-    }
-
-    <div class="subtask-create">
-      <input id="newSubtaskName"
-        maxlength="200"
-        placeholder="Enter a subtask name..."
-        onkeydown="if(event.key==='Enter'){event.preventDefault();createSubtask()}">
-
-      <button type="button" class="btn btn-primary"
-        onclick="createSubtask()">
-        ＋ Add
-      </button>
-    </div>
-    <div class="subtask-transfer">
-  <strong>Convert this task into a subtask</strong>
-
-  <div class="task-meta">
-    ${
-      children.length
-        ? `${children.length} existing subtasks will be moved to the selected parent as sibling tasks.`
-        : 'Move this task under another top-level task.'
-    }
-  </div>
-
-  <select id="transferParentSelect">
-    <option value="">Choose a parent task...</option>
-
-    ${availableParents.map(p => `
-      <option value="${esc(p.id)}">
-        ${esc(p.name)} (${esc(p.id)})
-      </option>
-    `).join('')}
-  </select>
-
-  <button type="button"
-    class="btn"
-    onclick="transferCurrentSubtask()"
-    ${availableParents.length ? '' : 'disabled'}>
-    Convert to subtask
-  </button>
-</div>
-${children.length ? `
-  <div style="margin-bottom:14px">
-    <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-      <span class="task-meta">Subtask completion</span>
-      <strong>${progress}%</strong>
-    </div>
-
-    <div style="height:8px;background:#e9edf3;border-radius:8px;overflow:hidden">
-      <div style="width:${progress}%;height:100%;background:#22a06b;border-radius:8px"></div>
-    </div>
-  </div>
-` : ''}
-  `;
+  ` : ''}
+    `;
 }
 function createSubtask() {
   const parent = state.tasks.find(
