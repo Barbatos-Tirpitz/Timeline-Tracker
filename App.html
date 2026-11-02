@@ -1006,6 +1006,18 @@
     ]
   };
 
+  const collapsedTaskIds = new Set();
+
+  function toggleTaskCollapse(taskId) {
+    if (collapsedTaskIds.has(taskId)) {
+      collapsedTaskIds.delete(taskId);
+    } else {
+      collapsedTaskIds.add(taskId);
+    }
+
+    render();
+  }
+
   const $ = id => document.getElementById(id);
   const DAY = 86400000;
 
@@ -1357,28 +1369,32 @@ filtered.forEach(t => {
     if (!added.has(child.id)) {
       allTasks.push(child);
       added.add(child.id);
+      }
+    });
+  });
+
+  // Preserve any remaining tasks, including orphaned records.
+  filtered.forEach(t => {
+    if (!added.has(t.id)) {
+      allTasks.push(t);
+      added.add(t.id);
     }
   });
-});
 
-// Preserve any remaining tasks, including orphaned records.
-filtered.forEach(t => {
-  if (!added.has(t.id)) {
-    allTasks.push(t);
-    added.add(t.id);
-  }
-});
+    const displayTasks = allTasks.filter(t =>
+      !t.parentTaskId || !collapsedTaskIds.has(t.parentTaskId)
+    );
 
-const { start, end, today } = visibleRange(allTasks);
+    const { start, end, today } = visibleRange(displayTasks);
 
-  // Only show tasks overlapping the selected week or month.
-  const tasks = state.zoom === 'day'
-    ? allTasks
-    : allTasks.filter(t =>
-        !t.start ||
-        !t.end ||
-        (t.start <= end && t.end >= start)
-      );
+    // Only show tasks overlapping the selected week or month.
+    const tasks = state.zoom === 'day'
+      ? displayTasks
+      : displayTasks.filter(t =>
+          !t.start ||
+          !t.end ||
+          (t.start <= end && t.end >= start)
+        );
 
   const dayCount = dayDiff(start, end) + 1;
 
@@ -1447,9 +1463,28 @@ const { start, end, today } = visibleRange(allTasks);
     }
 
     for (const t of tasks) {
-     html += `<div class="task-cell"
-        style="padding-left:${t.parentTaskId ? '34px' : '14px'}">
+  const hasChildren = allTasks.some(
+  child => child.parentTaskId === t.id
+);
+
+const isCollapsed = collapsedTaskIds.has(t.id);
+
+html += `<div class="task-cell"
+  style="padding-left:${t.parentTaskId ? '34px' : '14px'}">
+
+        ${hasChildren ? `
+          <button
+            type="button"
+            title="${isCollapsed ? 'Expand subtasks' : 'Collapse subtasks'}"
+            aria-label="${isCollapsed ? 'Expand subtasks' : 'Collapse subtasks'}"
+            onclick="toggleTaskCollapse('${esc(t.id)}')"
+            style="border:0;background:transparent;cursor:pointer;padding:2px;width:18px;flex-shrink:0;color:#6b778c">
+            ${isCollapsed ? '▶' : '▼'}
+          </button>
+        ` : ''}
+
         <div class="task-color" style="background:${barColor(t.status)}"></div>
+        
         <div class="task-info">
           <div class="task-title" title="${esc(t.name)}" onclick="openEdit('${esc(t.id)}')">${esc(t.name || 'Untitled task')}</div>
           <div class="task-meta">${esc(t.id)} · ${esc(t.category)}</div>
