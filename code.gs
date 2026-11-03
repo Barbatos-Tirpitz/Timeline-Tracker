@@ -22,7 +22,8 @@ const CONFIG = {
   CATEGORIES: [
     'Graphic Design',
     'Video editing',
-    'Scheduling'
+    'Scheduling',
+    'Revision'
   ],
   PRIORITIES: ['Low', 'Medium', 'High']
 };
@@ -1372,6 +1373,8 @@ function normalizeInvoice_(input) {
   const dueDate = invoiceText_(input.dueDate, 'Due date', 10);
   if (!parseLocalDate(issueDate) || !parseLocalDate(dueDate)) throw new Error('Choose valid issue and due dates.');
   const senderName = invoiceText_(input.senderName, 'Your name or business', 200);
+  const number = invoiceText_(input.number, 'Invoice number', 40);
+  if (number && !/^[A-Za-z0-9][A-Za-z0-9 ._/-]*$/.test(number)) throw new Error('Invoice numbers must start with a letter or digit and use letters, digits, spaces, dots, slashes, underscores or hyphens.');
   if (!Array.isArray(input.lines) || input.lines.length > 100) throw new Error('An invoice can contain up to 100 lines.');
   const seen = new Set();
   const lines = input.lines.map((line, index) => {
@@ -1388,7 +1391,7 @@ function normalizeInvoice_(input) {
   });
   if (status !== 'Draft' && (!senderName || !lines.length)) throw new Error('Add your name or business and at least one line before issuing.');
   const invoice = {
-    id, number: invoiceText_(input.number, 'Invoice number', 40), client, currency, status,
+    id, number, name: invoiceText_(input.name, 'Invoice name', 120), client, currency, status,
     periodStart: input.periodStart, periodEnd: input.periodEnd, issueDate, dueDate,
     periodMode, videoDateBasis, videoScope, includeUnassigned: input.includeUnassigned === true,
     senderName, senderDetails: invoiceText_(input.senderDetails, 'Sender details', 1000),
@@ -1463,7 +1466,7 @@ function getInvoiceWorkspace() {
   return {
     success: true, settings: settings.settings, settingsRevision: settings.revision, today: settings.today,
     invoices: records.map(invoice => ({
-      id: invoice.id, number: invoice.number, client: invoice.client, periodStart: invoice.periodStart, periodEnd: invoice.periodEnd,
+      id: invoice.id, number: invoice.number, name: invoice.name, client: invoice.client, periodStart: invoice.periodStart, periodEnd: invoice.periodEnd,
       currency: invoice.currency, status: invoice.status, totalMinor: invoice.totalMinor, defaultRate: invoice.defaultRate,
       revision: invoice.revision, updatedAt: invoice.updatedAt, lineCount: invoice.lines.length,
       totalHours: invoice.lines.reduce((total, line) => total + Math.round(line.hours * 100), 0) / 100
@@ -1504,11 +1507,14 @@ function saveInvoice(input) {
     }
     let maximum = 0;
     store.rows.forEach(row => {
-      const match = String(row[1] || '').match(/^INV-(\d+)$/);
+      const match = String(row[1] || '').match(/^INV-(\d+)$/i);
       if (match) maximum = Math.max(maximum, Number(match[1]));
     });
     const now = new Date().toISOString();
-    invoice.number = current ? current.number : 'INV-' + String(maximum + 1).padStart(5, '0');
+    invoice.number = invoice.number || (current ? current.number : 'INV-' + String(maximum + 1).padStart(5, '0'));
+    if (store.rows.some(row => row[0] !== invoice.id && String(row[1] || '').trim().toLowerCase() === invoice.number.toLowerCase())) {
+      throw new Error('Invoice number already exists. Choose a unique invoice number.');
+    }
     invoice.revision = (current ? current.revision : 0) + 1;
     invoice.createdAt = current ? current.createdAt : now;
     invoice.updatedAt = now;

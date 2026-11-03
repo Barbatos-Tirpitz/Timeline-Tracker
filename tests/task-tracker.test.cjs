@@ -563,7 +563,7 @@ test('active category validation and errors only list the new categories; legacy
     assert.doesNotThrow(() => app.context.validateCategory_(category));
     assert.equal(app.context.categoryForUpgrade_(category), category);
   }
-  const message = 'Invalid task category. Allowed categories: Graphic Design, Video editing, Scheduling.';
+  const message = 'Invalid task category. Allowed categories: Graphic Design, Video editing, Scheduling, Revision.';
   for (const category of ['Graphics', 'Pre-production', 'Editing', 'Post-production', 'Subtitles', 'Review', 'Delivery']) {
     assert.throws(() => app.context.validateCategory_(category), error => error.message === message);
     assert.equal(app.context.categoryForUpgrade_(category), category === 'Graphics' ? 'Graphic Design' : 'Video editing');
@@ -1142,6 +1142,91 @@ test('completed hours and parent totals update on reopening, transfer and deleti
   assert.equal(app.rows[2][6], first[6]);
   app.context.deleteTask('VID-002');
   assert.equal(app.context.getTasks().tasks.find(task => task.taskId === 'VID-004').totalHours, 0);
+});
+
+test('Revision is accepted independently of legacy category conversion', () => {
+  const app = server([]);
+  assert.doesNotThrow(() => app.context.validateCategory_('Revision'));
+  assert.equal(app.context.categoryForUpgrade_('Revision'), 'Revision');
+  assert.equal(app.context.categoryForUpgrade_('Review'), 'Video editing');
+});
+
+test('invoice numbers and names are customizable on drafts and numbers remain unique', () => {
+  const app = invoiceServer();
+  const first = app.context.saveInvoice(invoiceDraft({ number: 'ACME/2026-01', name: 'November video editing' })).invoice;
+  assert.equal(first.number, 'ACME/2026-01');
+  assert.equal(first.name, 'November video editing');
+  const renamed = app.context.saveInvoice({ ...first, number: 'ACME-2026-02', name: 'Updated editing invoice' }).invoice;
+  assert.equal(app.context.getInvoice(renamed.id).invoice.name, 'Updated editing invoice');
+  assert.throws(() => app.context.saveInvoice(invoiceDraft({ id: 'INV-another-custom', number: 'acme-2026-02' })), /already exists/);
+  assert.throws(() => app.context.saveInvoice(invoiceDraft({ number: '=HYPERLINK("bad")' })), /must start/);
+  const issued = app.context.saveInvoice({ ...renamed, status: 'Issued' }).invoice;
+  assert.throws(() => app.context.saveInvoice({ ...issued, name: 'Changed' }), /cannot be edited/);
+});
+
+test('weekly, fortnightly and monthly task periods use inclusive shared calendar ranges', () => {
+  const app = client();
+  const state = app.getState();
+  state.spreadsheetToday = '2026-11-04';
+  for (const [period, start, end] of [['weekly', '2026-11-02', '2026-11-08'], ['fortnightly', '2026-11-02', '2026-11-15'], ['monthly', '2026-11-01', '2026-11-30']]) {
+    app.setTaskPeriod(period);
+    assert.equal(state.list.filters.from, start);
+    assert.equal(state.list.filters.to, end);
+    const range = app.dashboardRange(period, app.parseDate('2026-11-04'));
+    assert.equal(app.dateKey(range.start), start);
+    assert.equal(app.dateKey(range.end), end);
+  }
+  app.setTaskPeriod('fortnightly');
+  app.moveTaskPeriod(1);
+  assert.equal(state.list.filters.from, '2026-11-16');
+  state.zoom = 'fortnight'; state.anchor = app.parseDate('2026-11-04');
+  const visible = app.visibleRange([]);
+  assert.equal(app.dayDiff(visible.start, visible.end), 13);
+  app.resetTaskFilters();
+  assert.equal(state.list.period, 'all');
+  assert.equal(state.list.filters.from, '');
+});
+
+test('generated PDF uses only invoice data, custom identity, full dates and page numbering without a script URL', () => {
+  const app = client();
+  const text = [];
+  let pages = 1;
+  class Pdf {
+    constructor() { this.internal = { pageSize: { getWidth: () => 210, getHeight: () => 297 } }; }
+    setProperties(value) { this.properties = value; }
+    setFont() {} setFontSize() {} setDrawColor() {} line() {} setPage() {}
+    text(value) { text.push(Array.isArray(value) ? value.join(' ') : value); }
+    splitTextToSize(value) { return String(value).split('\n'); }
+    addPage() { pages++; }
+    getNumberOfPages() { return pages; }
+  }
+  const invoice = invoiceDraft({ number: 'ACME/2026-01', name: 'November editing' });
+  const pdf = app.buildInvoicePdf(invoice, Pdf);
+  assert.equal(pdf.properties.title, 'November editing');
+  assert.match(text.join('\n'), /ACME\/2026-01/);
+  assert.match(text.join('\n'), /November 3, 2026/);
+  assert.match(text.join('\n'), /USD 87.50/);
+  assert.match(text.join('\n'), /Page 1 of 1/);
+  assert.doesNotMatch(text.join('\n'), /script\.google\.com|file:\/\//);
+  assert.equal(app.invoiceFilename(invoice, 'pdf'), 'Invoice-ACME-2026-01-November editing.pdf');
+});
+
+test('rapid PDF clicks generate one copy and library failures restore the export control', async () => {
+  const app = client();
+  app.savedFiles = [];
+  app.pdfMessages = [];
+  app.getState().invoices.editor = invoiceDraft({ number: 'ACME/01', name: 'Editing' });
+  vm.runInContext(`updateInvoiceBusy=()=>{};showToast=message=>pdfMessages.push(message);
+    loadInvoicePdfLibrary=()=>Promise.resolve(function Pdf(){});
+    buildInvoicePdf=()=>({save:async filename=>savedFiles.push(filename)});`, app);
+  await Promise.all([app.downloadCurrentInvoicePdf(), app.downloadCurrentInvoicePdf()]);
+  assert.equal(app.savedFiles.length, 1);
+  assert.equal(app.savedFiles[0], 'Invoice-ACME-01-Editing.pdf');
+  assert.equal(app.getState().invoices.pdfBusy, false);
+  vm.runInContext('loadInvoicePdfLibrary=()=>Promise.reject(new Error("Library unavailable"));', app);
+  await app.downloadCurrentInvoicePdf();
+  assert.equal(app.getState().invoices.pdfBusy, false);
+  assert.equal(app.pdfMessages.at(-1), 'Library unavailable');
 });
 
 test('display dates use readable full and compact English months without changing stored date keys', () => {
