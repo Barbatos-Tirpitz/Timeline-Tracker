@@ -632,13 +632,14 @@ test('adding subtasks retains names and quantity for further additions instead o
   app.resetSubtaskPanel(parent.id);
   state.subtaskPanel.quantity = 3;
   app.elements.set('newSubtaskName', { value: 'Edit\nSchedule' });
-  vm.runInContext('parentHasUnsavedChanges=()=>false; showToast=()=>{}; loadTasks=()=>{state.syncing=false;};', app);
+  vm.runInContext('Date.now=()=>1000; parentHasUnsavedChanges=()=>false; showToast=()=>{}; loadTasks=()=>{state.syncing=false;};', app);
   app.createSubtask();
   app.calls[0].success({ success: true, created: 6 });
   assert.equal(state.subtaskPanel.draft, 'Edit\nSchedule');
   assert.equal(state.subtaskPanel.quantity, 3);
   assert.equal(state.subtaskPanel.lastCreated, 6);
   assert.equal(state.subtaskPanel.page, 2);
+  vm.runInContext('Date.now=()=>1800;', app);
   app.createSubtask();
   assert.equal(app.calls.length, 2);
   assert.equal(app.calls[1].args[2], 3);
@@ -655,4 +656,396 @@ test('repeated creation appends without removing existing subtasks', () => {
   assert.equal(app.rows.length, 7);
   assert.deepEqual(app.rows.slice(2, 5).map(row => row[0]), firstIds);
   assert.equal(new Set(app.rows.slice(1).map(row => row[0])).size, 6);
+});
+
+test('subtask client tags use each child assignment, show Unassigned, and escape all names', () => {
+  const app = client();
+  assert.match(app.renderSubtaskClientTags(listTask('VID-1')), /Unassigned/);
+  const child = listTask('VID-2', 'VID-1', { clients: ['Client <One>', 'Acme, Inc.', 'Client "Three"', 'Delta'] });
+  const markup = app.renderSubtaskClientTags(child);
+  assert.equal((markup.match(/class="subtask-client-tag"/g) || []).length, 2);
+  assert.match(markup, /2 more clients/);
+  assert.match(markup, /Client &lt;One&gt;/);
+  assert.match(markup, /Client &quot;Three&quot;/);
+  assert.doesNotMatch(markup, /Client <One>/);
+  app.getState().taskById.set('VID-1', listTask('VID-1', '', { clients: ['Parent only'] }));
+  assert.doesNotMatch(app.renderSubtaskClientTags(child), /Parent only/);
+  assert.doesNotMatch(app.renderSubtaskClientTags({ ...child, clients: [] }), /more clients/);
+});
+
+test('duplicate commands stay blocked after a fast refresh, while new payloads and deliberate repeats work', () => {
+  const app = loadingClient();
+  const state = app.getState();
+  state.loaded = true;
+  app.clock = 1000;
+  app.messages = [];
+  vm.runInContext('Date.now=()=>clock; showToast=message=>messages.push(message);', app);
+  let rejections = 0;
+  let failures = 0;
+  const run = name => app.mutationRunner().withSuccessHandler(() => app.loadTasks())
+    .withRejectionHandler(() => rejections++).withFailureHandler(() => failures++)
+    .createSubtasks('VID-1', [name], 2);
+  run('Edit');
+  run('Edit');
+  assert.equal(app.calls.length, 1);
+  assert.equal(failures, 1);
+  app.calls[0].success({ success: true });
+  app.calls[1].success({ success: true, tasks: [] });
+  app.clock = 1100;
+  run('Edit');
+  assert.equal(app.calls.length, 2);
+  assert.equal(rejections, 1);
+  assert.equal(failures, 1);
+  assert.equal(state.writing, false);
+  run('Schedule');
+  assert.equal(app.calls.length, 3);
+  app.calls[2].success({ success: true });
+  app.calls[3].success({ success: true, tasks: [] });
+  app.clock = 1700;
+  run('Edit');
+  assert.equal(app.calls.length, 5);
+  assert.equal(app.calls[4].method, 'createSubtasks');
+});
+
+test('duplicate command keys ignore object field order and restore caller busy state without an RPC', () => {
+  const app = loadingClient();
+  const state = app.getState();
+  state.loaded = true;
+  vm.runInContext('Date.now=()=>1000; showToast=()=>{};', app);
+  const first = { taskName: 'Edit', category: 'Scheduling' };
+  app.mutationRunner().withSuccessHandler(() => app.loadTasks()).createTask(first);
+  app.calls[0].success({ success: true });
+  app.calls[1].success({ success: true, tasks: [] });
+  app.elements.set('saveBtn', { disabled: true, textContent: 'Saving...' });
+  app.mutationRunner().withRejectionHandler(() => app.setSaving(false))
+    .createTask({ category: 'Scheduling', taskName: 'Edit' });
+  assert.equal(app.calls.length, 2);
+  assert.equal(app.elements.get('saveBtn').disabled, false);
+  assert.equal(app.elements.get('saveBtn').textContent, 'Create task');
+});
+
+test('failed commands reconcile without retrying and become available again after the cooldown', () => {
+  const app = loadingClient();
+  const state = app.getState();
+  state.loaded = true;
+  app.clock = 1000;
+  vm.runInContext('Date.now=()=>clock; showToast=()=>{};', app);
+  state.subtaskPanel.draft = 'Keep draft';
+  state.subtaskPanel.quantity = 3;
+  const run = () => app.mutationRunner().withFailureHandler(() => {}).createSubtasks('VID-1', ['Keep draft'], 3);
+  run();
+  app.calls[0].failure(new Error('Network failed'));
+  assert.equal(app.calls[1].method, 'getTasks');
+  app.calls[1].success({ success: true, tasks: [] });
+  run();
+  assert.equal(app.calls.length, 2);
+  app.clock = 1800;
+  run();
+  assert.equal(app.calls.length, 3);
+  assert.equal(state.subtaskPanel.draft, 'Keep draft');
+  assert.equal(state.subtaskPanel.quantity, 3);
+});
+
+test('duplicate modal submission restores Save without reporting a server failure', () => {
+  const app = loadingClient();
+  const state = app.getState();
+  state.loaded = true;
+  app.messages = [];
+  vm.runInContext('Date.now=()=>1000; showToast=message=>messages.push(message);', app);
+  const payload = { taskName: 'Campaign', category: 'Scheduling', priority: 'Medium', startDate: '2026-11-01', endDate: '2026-11-15', description: '', parentTaskId: '', clients: [] };
+  app.mutationRunner().withSuccessHandler(() => app.loadTasks()).createTask(payload);
+  app.calls[0].success({ success: true });
+  app.calls[1].success({ success: true, tasks: [] });
+  for (const [id, value] of Object.entries({ taskName: payload.taskName, category: payload.category, priority: payload.priority, startDate: payload.startDate, endDate: payload.endDate, description: '', parentTaskId: '' })) {
+    app.elements.set(id, { value });
+  }
+  app.elements.set('formError', { style: { display: 'none' } });
+  app.elements.set('saveBtn', { disabled: false, textContent: 'Create task' });
+  app.saveTask({ preventDefault() {} });
+  assert.equal(app.calls.length, 2);
+  assert.equal(app.elements.get('saveBtn').disabled, false);
+  assert.equal(app.elements.get('saveBtn').textContent, 'Create task');
+  assert.equal(app.elements.get('formError').style.display, 'none');
+  assert.match(app.messages[0], /already submitted/);
+});
+
+function invoiceDraft(overrides = {}) {
+  return {
+    id: 'INV-test-invoice-001', client: 'Acme', currency: 'USD', status: 'Draft',
+    periodStart: '2026-11-03', periodEnd: '2026-11-16', issueDate: '2026-11-16', dueDate: '2026-11-16',
+    senderName: 'Video Studio', defaultRate: 25,
+    lines: [{ taskId: 'VID-001', description: 'Opening video', hours: 3.5, rate: 25 }], ...overrides
+  };
+}
+
+test('invoice calculations use billable hours and rounded minor units, never schedule duration', () => {
+  const app = server([]);
+  const invoice = app.context.normalizeInvoice_(invoiceDraft());
+  assert.equal(invoice.totalMinor, 8750);
+  assert.equal(invoice.lines[0].hours, 3.5);
+  const rounding = app.context.normalizeInvoice_(invoiceDraft({ lines: [{ description: 'Video', hours: 0.01, rate: 0.5 }] }));
+  assert.equal(rounding.totalMinor, 1);
+  assert.throws(() => app.context.normalizeInvoice_(invoiceDraft({ periodEnd: '2026-11-17' })), /14 calendar days/);
+  assert.throws(() => app.context.normalizeInvoice_(invoiceDraft({ lines: [{ description: 'Video', hours: -1, rate: 25 }] })), /nonnegative/);
+  assert.throws(() => app.context.normalizeInvoice_(invoiceDraft({ lines: [{ description: 'Video', hours: 1.111, rate: 25 }] })), /two decimal/);
+});
+
+test('invoice drafts may be incomplete but issuing requires sender, lines, positive hours and rates', () => {
+  const app = server([]);
+  assert.equal(app.context.normalizeInvoice_(invoiceDraft({ senderName: '', lines: [] })).status, 'Draft');
+  assert.throws(() => app.context.normalizeInvoice_(invoiceDraft({ status: 'Issued', senderName: '' })), /name or business/);
+  assert.throws(() => app.context.normalizeInvoice_(invoiceDraft({ status: 'Issued', lines: [{ description: 'Video', hours: 0, rate: 25 }] })), /positive hours/);
+  const line = invoiceDraft().lines[0];
+  assert.throws(() => app.context.normalizeInvoice_(invoiceDraft({ lines: [line, line] })), /more than once/);
+  assert.throws(() => app.context.normalizeInvoice_(invoiceDraft({ currency: 'INVALID' })), /supported/);
+});
+
+function invoiceServer() {
+  const sheets = new Map();
+  let releases = 0;
+  function makeSheet() {
+    const rows = [];
+    return {
+      rows, getLastRow: () => rows.length, getMaxRows: () => 10000,
+      getRange(row, column, height = 1, width = 1) {
+        return {
+          getValues: () => Array.from({ length: height }, (_, offset) => Array.from({ length: width }, (_, index) => rows[row - 1 + offset]?.[column - 1 + index] ?? '')),
+          setValues(values) { values.forEach((valuesRow, offset) => {
+            if (!rows[row - 1 + offset]) rows[row - 1 + offset] = [];
+            valuesRow.forEach((value, index) => { rows[row - 1 + offset][column - 1 + index] = value; });
+          }); return this; }
+        };
+      },
+      deleteRows(row, count) { rows.splice(row - 1, count); }
+    };
+  }
+  const spreadsheet = {
+    getSheetByName: name => sheets.get(name) || null,
+    insertSheet(name) { const sheet = makeSheet(); sheets.set(name, sheet); return sheet; },
+    getSpreadsheetTimeZone: () => 'UTC'
+  };
+  const context = vm.createContext({ Date,
+    SpreadsheetApp: { getActiveSpreadsheet: () => spreadsheet },
+    Utilities: { formatDate: date => date.toISOString().slice(0, 10) },
+    LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() { releases++; } }) }
+  });
+  vm.runInContext(backend, context);
+  return { context, sheets, releases: () => releases };
+}
+
+test('invoice workspace reads create no sheets; saves preserve snapshots and detect stale revisions', () => {
+  const app = invoiceServer();
+  const workspace = app.context.getInvoiceWorkspace();
+  assert.equal(workspace.invoices.length, 0);
+  assert.equal(app.sheets.size, 0);
+  const first = app.context.saveInvoice(invoiceDraft()).invoice;
+  assert.equal(first.number, 'INV-00001');
+  assert.equal(first.revision, 1);
+  assert.equal(app.sheets.get('Invoice_Master').rows.length, 2);
+  assert.throws(() => app.context.saveInvoice(invoiceDraft()), /another session/);
+  const issued = app.context.saveInvoice({ ...first, status: 'Issued' }).invoice;
+  assert.equal(issued.totalMinor, 8750);
+  assert.throws(() => app.context.saveInvoice({ ...issued, senderName: 'Changed' }), /cannot be edited/);
+  assert.throws(() => app.context.saveInvoice(invoiceDraft({ id: 'INV-second-invoice', status: 'Issued' })), /already exists/);
+  const paid = app.context.changeInvoiceStatus(issued.id, issued.revision, 'Paid').invoice;
+  assert.equal(paid.status, 'Paid');
+  assert.ok(paid.paidAt);
+  assert.throws(() => app.context.deleteInvoiceDraft(paid.id, paid.revision), /unchanged draft/);
+  assert.equal(app.context.getInvoice(paid.id).invoice.lines[0].description, 'Opening video');
+});
+
+test('invoice defaults save independently, detect conflicts and drafts can be deleted without touching tasks', () => {
+  const app = invoiceServer();
+  const settings = { anchor: '2026-11-03', currency: 'PHP', defaultRate: 500, senderName: 'Studio', senderDetails: '', paymentNotes: '' };
+  app.context.saveInvoiceSettings(settings, 0);
+  assert.equal(app.context.getInvoiceWorkspace().settings.defaultRate, 500);
+  assert.throws(() => app.context.saveInvoiceSettings(settings, 0), /changed/);
+  const invoice = app.context.saveInvoice(invoiceDraft()).invoice;
+  app.context.deleteInvoiceDraft(invoice.id, invoice.revision);
+  assert.equal(app.context.getInvoiceWorkspace().invoices.length, 0);
+  assert.equal(app.sheets.has('Task_Master'), false);
+});
+
+test('invoice cycles use anchored calendar fortnights and client totals match server rounding', () => {
+  const app = client();
+  const anchor = app.parseDate('2026-11-03');
+  assert.equal(app.invoicePeriod(anchor, app.parseDate('2026-11-16')).start, '2026-11-03');
+  assert.equal(app.invoicePeriod(anchor, app.parseDate('2026-11-17')).start, '2026-11-17');
+  assert.equal(app.invoicePeriod(anchor, app.parseDate('2026-11-02')).start, '2026-10-20');
+  assert.equal(app.invoiceAmount(3.5, 25), 8750);
+  assert.equal(app.invoiceAmount(0.01, 0.5), 1);
+  assert.equal(app.invoiceAmount(-1, 25), null);
+  assert.equal(app.invoiceCsvCell('=SUM(A1:A2)'), '"\'=SUM(A1:A2)"');
+  assert.equal(app.invoiceCsvCell('Client, "A"'), '"Client, ""A"""');
+  assert.equal(app.invoiceCsvCell('  =HYPERLINK("bad")').startsWith('"\'  ='), true);
+  assert.equal(app.invoiceAmount(true, 25), null);
+  assert.equal(app.invoiceAmount(10001, 25), null);
+});
+
+test('invoice writes reconcile invoice history, not task data, and can operate without a task snapshot', () => {
+  const app = loadingClient();
+  const state = app.getState();
+  state.loaded = false;
+  state.invoices.loaded = true;
+  let invoiceRefreshes = 0;
+  app.mutationRunner().withFailureHandler(() => {})
+    .withReconciliationHandler(() => invoiceRefreshes++)
+    .saveInvoice(invoiceDraft());
+  assert.equal(app.calls[0].method, 'saveInvoice');
+  app.calls[0].failure(new Error('Timed out'));
+  assert.equal(invoiceRefreshes, 1);
+  assert.equal(app.calls.length, 1);
+  assert.equal(state.syncing, true);
+});
+
+test('voiding preserves the snapshot and allows a replacement invoice for the same client period', () => {
+  const app = invoiceServer();
+  const issued = app.context.saveInvoice(invoiceDraft({ status: 'Issued' })).invoice;
+  const voided = app.context.changeInvoiceStatus(issued.id, issued.revision, 'Void').invoice;
+  assert.equal(voided.status, 'Void');
+  assert.equal(voided.lines[0].description, 'Opening video');
+  const replacement = app.context.saveInvoice(invoiceDraft({ id: 'INV-replacement-001', status: 'Issued' })).invoice;
+  assert.equal(replacement.number, 'INV-00002');
+  assert.throws(() => app.context.changeInvoiceStatus(replacement.id, 0, 'Paid'), /changed/);
+  assert.throws(() => app.context.normalizeInvoice_(invoiceDraft({ lines: [{ description: 'Video', hours: true, rate: 25 }] })), /must be a number/);
+});
+
+test('invoice header conflicts write nothing and partial default initialization can be recovered', () => {
+  const app = invoiceServer();
+  app.context.saveInvoice(invoiceDraft());
+  const sheet = app.sheets.get('Invoice_Master');
+  sheet.rows[0][0] = 'Unrelated header';
+  assert.throws(() => app.context.saveInvoice(invoiceDraft({ id: 'INV-another-invoice' })), /headers do not match/);
+  assert.equal(sheet.rows.length, 2);
+  sheet.rows[0][0] = 'Invoice ID';
+  const settings = { anchor: '2026-11-03', currency: 'USD', defaultRate: 30, senderName: 'Studio' };
+  app.context.saveInvoiceSettings(settings, 0);
+  app.sheets.get('Invoice_Settings').rows.pop();
+  assert.equal(app.context.getInvoiceWorkspace().settingsRevision, 0);
+  app.context.saveInvoiceSettings(settings, 0);
+  assert.equal(app.context.getInvoiceWorkspace().settings.defaultRate, 30);
+});
+
+test('refreshing invoice history preserves unsaved billing defaults and their original revision', () => {
+  const app = loadingClient();
+  const workspace = app.getState().invoices;
+  workspace.settingsRevision = 2;
+  workspace.billingDirty = true;
+  workspace.settingsDraft = { senderName: 'Unsaved name' };
+  app.loadInvoiceWorkspace();
+  app.calls[0].success({ success: true, invoices: [], settingsRevision: 3, today: '2026-11-03',
+    settings: { anchor: '2026-11-03', currency: 'USD', defaultRate: 25, senderName: 'Other session' } });
+  assert.equal(workspace.settingsRevision, 2);
+  assert.equal(workspace.settingsDraft.senderName, 'Unsaved name');
+  assert.equal(workspace.settings.senderName, 'Other session');
+});
+
+test('invoice workspace has a recoverable error when the Apps Script bridge is unavailable', () => {
+  const app = client();
+  app.loadInvoiceWorkspace();
+  assert.equal(app.getState().invoices.loading, false);
+  assert.match(app.getState().invoices.error, /Apps Script connection unavailable/);
+});
+
+test('invoice periods support a custom timeline while preserving strict two-week presets', () => {
+  const app = server([]);
+  const custom = app.context.normalizeInvoice_(invoiceDraft({ periodMode: 'custom', periodStart: '2026-11-01', periodEnd: '2026-11-30', videoDateBasis: 'completed', videoScope: 'topLevel' }));
+  assert.equal(custom.periodMode, 'custom');
+  assert.equal(custom.periodEnd, '2026-11-30');
+  assert.equal(custom.videoDateBasis, 'completed');
+  assert.throws(() => app.context.normalizeInvoice_(invoiceDraft({ periodEnd: '2026-11-30' })), /14 calendar days/);
+  assert.throws(() => app.context.normalizeInvoice_(invoiceDraft({ periodMode: 'custom', periodEnd: '2026-11-01' })), /cannot precede/);
+  assert.throws(() => app.context.normalizeInvoice_(invoiceDraft({ periodMode: 'custom', videoDateBasis: 'unknown' })), /valid invoice timeline/);
+});
+
+test('invoice counts match client and timeline, with explicit parent/subtask and completion rules', () => {
+  const app = client();
+  const video = (id, overrides = {}) => listTask(id, '', { category: 'Video editing', clients: ['Acme'], start: app.parseDate('2026-11-01'), end: app.parseDate('2026-11-05'), ...overrides });
+  const tasks = [video('VID-1'), video('VID-2', { parentTaskId: 'VID-1' }), video('VID-3', { clients: ['Other'] }),
+    video('VID-4', { clients: [] }), video('VID-5', { end: app.parseDate('2026-10-31') }), video('VID-6', { category: 'Scheduling' })];
+  const invoice = invoiceDraft({ periodStart: '2026-11-05', periodEnd: '2026-11-18' });
+  assert.deepEqual(Array.from(app.invoiceVideoCandidates(tasks, invoice), task => task.id), ['VID-2']);
+  assert.deepEqual(Array.from(app.invoiceVideoCandidates(tasks, { ...invoice, videoScope: 'topLevel' }), task => task.id), ['VID-1']);
+  assert.deepEqual(Array.from(app.invoiceVideoCandidates(tasks, { ...invoice, includeUnassigned: true }), task => task.id), ['VID-2', 'VID-4']);
+  tasks[1].status = 'Done'; tasks[1].actualEndDate = app.parseDate('2026-11-06');
+  assert.equal(app.invoiceVideoCandidates(tasks, { ...invoice, videoDateBasis: 'completed' }).length, 1);
+  assert.equal(app.invoiceVideoCandidates(tasks, { ...invoice, client: '' }).length, 0);
+});
+
+test('adding all matching invoice videos preserves hours, avoids duplicates and never infers hours from task duration', () => {
+  const app = client();
+  const state = app.getState();
+  state.invoices.editor = invoiceDraft({ lines: [], defaultRate: 30 });
+  state.tasks = [listTask('VID-1', '', { category: 'Video editing', clients: ['Acme'], start: app.parseDate('2026-11-03'), end: app.parseDate('2026-11-16'), duration: 14 })];
+  app.addMatchingInvoiceVideos();
+  assert.equal(state.invoices.editor.lines.length, 1);
+  assert.equal(state.invoices.editor.lines[0].hours, '');
+  assert.equal(state.invoices.editor.lines[0].rate, 30);
+  state.invoices.editor.lines[0].hours = 3.5;
+  app.addMatchingInvoiceVideos();
+  assert.equal(state.invoices.editor.lines.length, 1);
+  assert.equal(app.invoiceTotals(state.invoices.editor).minor, 10500);
+});
+
+test('changing invoice timelines requires confirmation before discarding entered video hours', () => {
+  const app = client();
+  const state = app.getState();
+  state.invoices.editor = invoiceDraft();
+  app.confirm = () => false;
+  app.setInvoiceRange('periodMode', 'custom');
+  assert.equal(state.invoices.editor.lines[0].hours, 3.5);
+  app.setInvoiceRange('periodEnd', '2026-11-30');
+  assert.equal(state.invoices.editor.periodEnd, '2026-11-16');
+  assert.equal(state.invoices.editor.lines.length, 1);
+  app.confirm = () => true;
+  app.setInvoiceRange('periodEnd', '2026-11-30');
+  assert.equal(state.invoices.editor.periodEnd, '2026-11-30');
+  assert.equal(state.invoices.editor.dueDate, '2026-11-30');
+  assert.equal(state.invoices.editor.lines.length, 0);
+  app.setInvoiceRange('periodMode', 'fortnight');
+  assert.equal(state.invoices.editor.periodEnd, '2026-11-16');
+});
+
+test('saved custom invoices retain their selection rules and hourly totals', () => {
+  const app = invoiceServer();
+  const saved = app.context.saveInvoice(invoiceDraft({ periodMode: 'custom', periodStart: '2026-11-01', periodEnd: '2026-11-30', videoDateBasis: 'completed', videoScope: 'topLevel', includeUnassigned: true })).invoice;
+  const reopened = app.context.getInvoice(saved.id).invoice;
+  assert.equal(reopened.periodMode, 'custom');
+  assert.equal(reopened.videoDateBasis, 'completed');
+  assert.equal(reopened.videoScope, 'topLevel');
+  assert.equal(reopened.includeUnassigned, true);
+  assert.equal(reopened.totalMinor, 8750);
+});
+
+test('display dates use readable full and compact English months without changing stored date keys', () => {
+  const app = client();
+  const compact = ['Jan', 'Feb', 'March', 'April', 'May', 'June', 'July', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  compact.forEach((month, index) => {
+    const key = '2026-' + String(index + 1).padStart(2, '0') + '-03';
+    assert.equal(app.formatDisplayDate(key, true), month + ' 3, 2026');
+    assert.equal(app.dateKey(app.parseDate(key)), key);
+  });
+  assert.equal(app.formatDisplayDate('2026-01-03'), 'January 3, 2026');
+  assert.equal(app.formatDisplayDate('2026-11-03'), 'November 3, 2026');
+  assert.equal(app.formatDisplayDate('2024-02-29', true, false), 'Feb 29');
+  assert.equal(app.formatDisplayDate('invalid'), '');
+  assert.match(app.displayDate('2026-11-03'), /datetime="2026-11-03"/);
+  assert.match(app.displayDate('2026-11-03'), /November 3, 2026/);
+  assert.match(app.displayDate('2026-11-03'), /Nov 3, 2026/);
+});
+
+test('invoice preview and client text use named months while invoice dates remain ISO', async () => {
+  const app = client();
+  const invoice = invoiceDraft();
+  app.getState().invoices.editor = invoice;
+  app.updateInvoicePreview();
+  const markup = app.elements.get('invoicePrintable').innerHTML;
+  assert.match(markup, /November 3, 2026/);
+  assert.match(markup, /November 16, 2026/);
+  app.copiedText = '';
+  vm.runInContext('navigator={clipboard:{writeText:async text=>{copiedText=text;}}};showToast=()=>{};', app);
+  await app.copyInvoiceText();
+  assert.match(app.copiedText, /November 3, 2026 - November 16, 2026/);
+  assert.equal(invoice.periodStart, '2026-11-03');
+  assert.equal(invoice.dueDate, '2026-11-16');
 });

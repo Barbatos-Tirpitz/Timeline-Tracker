@@ -277,6 +277,8 @@ function getTasks() {
 
       actualEnd: row[10] instanceof Date
         ? Utilities.formatDate(row[10], timezone, 'MMM d, yyyy') : '',
+      actualEndDate: row[10] instanceof Date
+        ? Utilities.formatDate(row[10], timezone, 'yyyy-MM-dd') : '',
 
       parentTaskId: String(row[13] || ''),
       clients: withClients ? readClients_(row[14], taskId) : [],
@@ -1227,6 +1229,264 @@ function setTaskParent(taskId, newParentTaskId) {
         : taskId + ' is now standalone.'
     };
 
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+const INVOICE_CONFIG = {
+  SHEET: 'Invoice_Master',
+  SETTINGS_SHEET: 'Invoice_Settings',
+  HEADERS: ['Invoice ID', 'Invoice Number', 'Client', 'Period Start', 'Period End', 'Currency', 'Status', 'Total Minor', 'Invoice JSON', 'Updated At', 'Revision'],
+  CURRENCIES: ['USD', 'PHP', 'EUR', 'GBP', 'CAD', 'AUD']
+};
+
+function invoiceDateKey_(date) {
+  return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+}
+
+function invoiceText_(value, label, maximum) {
+  const text = String(value == null ? '' : value).trim();
+  if (text.length > maximum) throw new Error(label + ' is too long.');
+  return text;
+}
+
+function invoiceDecimal_(value, label, maximum) {
+  if (typeof value !== 'number' && typeof value !== 'string') throw new Error(label + ' must be a number.');
+  const number = Number(value);
+  const units = Math.round(number * 100);
+  if (!Number.isFinite(number) || number < 0 || number > maximum || Math.abs(number * 100 - units) > 0.000001) {
+    throw new Error(label + ' must be a nonnegative number with at most two decimal places.');
+  }
+  return units;
+}
+
+function normalizeInvoice_(input) {
+  if (!input || typeof input !== 'object') throw new Error('Invoice details are required.');
+  const id = String(input.id || '');
+  if (!/^INV-[a-zA-Z0-9-]{8,80}$/.test(id)) throw new Error('Invalid invoice ID.');
+  const client = invoiceText_(input.client, 'Client', 100);
+  if (!client) throw new Error('Choose a client for this invoice.');
+  const currency = String(input.currency || '');
+  if (!INVOICE_CONFIG.CURRENCIES.includes(currency)) throw new Error('Choose a supported invoice currency.');
+  const start = parseLocalDate(input.periodStart);
+  const end = parseLocalDate(input.periodEnd);
+  if (!start || !end) throw new Error('Choose valid billing dates.');
+  if (end < start) throw new Error('Billing end date cannot precede start date.');
+  const periodMode = input.periodMode || 'fortnight';
+  const videoDateBasis = input.videoDateBasis || 'planned';
+  const videoScope = input.videoScope || 'leaf';
+  if (!['fortnight', 'custom'].includes(periodMode) || !['planned', 'completed'].includes(videoDateBasis) || !['leaf', 'topLevel', 'all'].includes(videoScope)) {
+    throw new Error('Choose valid invoice timeline and video filters.');
+  }
+  const expectedEnd = new Date(start);
+  expectedEnd.setDate(expectedEnd.getDate() + 13);
+  if (periodMode === 'fortnight' && invoiceDateKey_(expectedEnd) !== input.periodEnd) throw new Error('A two-week billing period must contain exactly 14 calendar days.');
+  const status = input.status || 'Draft';
+  if (!['Draft', 'Issued', 'Paid', 'Void'].includes(status)) throw new Error('Invalid invoice status.');
+  const issueDate = invoiceText_(input.issueDate, 'Issue date', 10);
+  const dueDate = invoiceText_(input.dueDate, 'Due date', 10);
+  if (!parseLocalDate(issueDate) || !parseLocalDate(dueDate)) throw new Error('Choose valid issue and due dates.');
+  const senderName = invoiceText_(input.senderName, 'Your name or business', 200);
+  if (!Array.isArray(input.lines) || input.lines.length > 100) throw new Error('An invoice can contain up to 100 lines.');
+  const seen = new Set();
+  const lines = input.lines.map((line, index) => {
+    if (!line || typeof line !== 'object') throw new Error('Invalid invoice line.');
+    const taskId = invoiceText_(line.taskId, 'Task ID', 100);
+    if (taskId && seen.has(taskId)) throw new Error('The same video appears more than once in this invoice.');
+    if (taskId) seen.add(taskId);
+    const description = invoiceText_(line.description, 'Line description', 200);
+    const hoursUnits = invoiceDecimal_(line.hours, 'Hours on line ' + (index + 1), 10000);
+    const rateMinor = invoiceDecimal_(line.rate, 'Rate on line ' + (index + 1), 1000000);
+    if (!description) throw new Error('Enter a description for every invoice line.');
+    if (status !== 'Draft' && (!hoursUnits || !rateMinor)) throw new Error('Enter positive hours and rates before issuing an invoice.');
+    return { taskId, description, hours: hoursUnits / 100, rate: rateMinor / 100, amountMinor: Math.round(hoursUnits * rateMinor / 100) };
+  });
+  if (status !== 'Draft' && (!senderName || !lines.length)) throw new Error('Add your name or business and at least one line before issuing.');
+  const invoice = {
+    id, number: invoiceText_(input.number, 'Invoice number', 40), client, currency, status,
+    periodStart: input.periodStart, periodEnd: input.periodEnd, issueDate, dueDate,
+    periodMode, videoDateBasis, videoScope, includeUnassigned: input.includeUnassigned === true,
+    senderName, senderDetails: invoiceText_(input.senderDetails, 'Sender details', 1000),
+    clientDetails: invoiceText_(input.clientDetails, 'Client details', 1000),
+    notes: invoiceText_(input.notes, 'Notes', 1500),
+    defaultRate: invoiceDecimal_(input.defaultRate || 0, 'Default rate', 1000000) / 100,
+    lines, totalMinor: lines.reduce((total, line) => total + line.amountMinor, 0),
+    revision: Number(input.revision || 0)
+  };
+  if (!Number.isSafeInteger(invoice.revision) || invoice.revision < 0) throw new Error('Invalid invoice revision.');
+  if (JSON.stringify(invoice).length > 45000) throw new Error('This invoice is too large to save.');
+  return invoice;
+}
+
+function invoiceSheet_(create) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(INVOICE_CONFIG.SHEET);
+  if (!sheet && create) sheet = ss.insertSheet(INVOICE_CONFIG.SHEET);
+  if (!sheet) return null;
+  if (!sheet.getLastRow()) {
+    if (create) sheet.getRange(1, 1, 1, INVOICE_CONFIG.HEADERS.length).setValues([INVOICE_CONFIG.HEADERS]);
+    return sheet;
+  }
+  const headers = sheet.getRange(1, 1, 1, INVOICE_CONFIG.HEADERS.length).getValues()[0];
+  if (headers.join('|') !== INVOICE_CONFIG.HEADERS.join('|')) throw new Error('Invoice_Master headers do not match. No invoice data was changed.');
+  return sheet;
+}
+
+function invoiceRows_() {
+  const sheet = invoiceSheet_(false);
+  return { sheet, rows: !sheet || sheet.getLastRow() < 2 ? [] : sheet.getRange(2, 1, sheet.getLastRow() - 1, INVOICE_CONFIG.HEADERS.length).getValues() };
+}
+
+function readInvoiceRecord_(row) {
+  try {
+    const stored = JSON.parse(String(row[8]));
+    const invoice = normalizeInvoice_(stored);
+    if (invoice.id !== row[0] || invoice.status !== row[6]) throw new Error('Invoice identity or status does not match its stored row.');
+    return { ...invoice, number: String(row[1]), revision: Number(row[10]), updatedAt: stored.updatedAt || '', paidAt: stored.paidAt || '', createdAt: stored.createdAt || '' };
+  } catch (error) {
+    throw new Error('Cannot read invoice ' + row[0] + ': ' + error.message);
+  }
+}
+
+function normalizeBillingSettings_(input) {
+  if (!input || !parseLocalDate(input.anchor)) throw new Error('Choose a valid billing-cycle start date.');
+  if (!INVOICE_CONFIG.CURRENCIES.includes(input.currency)) throw new Error('Choose a supported currency.');
+  return {
+    anchor: input.anchor, currency: input.currency,
+    defaultRate: invoiceDecimal_(input.defaultRate || 0, 'Default hourly rate', 1000000) / 100,
+    senderName: invoiceText_(input.senderName, 'Your name or business', 200),
+    senderDetails: invoiceText_(input.senderDetails, 'Sender details', 1000),
+    paymentNotes: invoiceText_(input.paymentNotes, 'Payment notes', 1500)
+  };
+}
+
+function billingSettings_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const today = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+  const sheet = ss.getSheetByName(INVOICE_CONFIG.SETTINGS_SHEET);
+  const defaults = { settings: { anchor: today, currency: 'USD', defaultRate: 0, senderName: '', senderDetails: '', paymentNotes: '' }, revision: 0, today };
+  if (!sheet || !sheet.getLastRow()) return defaults;
+  if (sheet.getRange(1, 1, 1, 2).getValues()[0].join('|') !== 'Settings JSON|Revision') throw new Error('Invoice_Settings headers do not match.');
+  if (sheet.getLastRow() < 2) return defaults;
+  const row = sheet.getRange(2, 1, 1, 2).getValues()[0];
+  return { settings: normalizeBillingSettings_(JSON.parse(String(row[0]))), revision: Number(row[1]), today };
+}
+
+function getInvoiceWorkspace() {
+  const records = invoiceRows_().rows.filter(row => row[0]).map(readInvoiceRecord_);
+  const settings = billingSettings_();
+  return {
+    success: true, settings: settings.settings, settingsRevision: settings.revision, today: settings.today,
+    invoices: records.map(invoice => ({
+      id: invoice.id, number: invoice.number, client: invoice.client, periodStart: invoice.periodStart, periodEnd: invoice.periodEnd,
+      currency: invoice.currency, status: invoice.status, totalMinor: invoice.totalMinor, defaultRate: invoice.defaultRate,
+      revision: invoice.revision, updatedAt: invoice.updatedAt, lineCount: invoice.lines.length,
+      totalHours: invoice.lines.reduce((total, line) => total + Math.round(line.hours * 100), 0) / 100
+    })).sort((first, second) => second.updatedAt.localeCompare(first.updatedAt))
+  };
+}
+
+function getInvoice(invoiceId) {
+  const row = invoiceRows_().rows.find(values => values[0] === invoiceId);
+  if (!row) throw new Error('Invoice not found. Refresh invoice history.');
+  return { success: true, invoice: readInvoiceRecord_(row) };
+}
+
+function writeInvoice_(sheet, row, invoice) {
+  if (row > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), row - sheet.getMaxRows());
+  sheet.getRange(row, 1, 1, INVOICE_CONFIG.HEADERS.length).setValues([[
+    invoice.id, invoice.number, literalText_(invoice.client), invoice.periodStart, invoice.periodEnd,
+    invoice.currency, invoice.status, invoice.totalMinor, JSON.stringify(invoice), new Date(), invoice.revision
+  ]]);
+}
+
+function saveInvoice(input) {
+  const invoice = normalizeInvoice_(input);
+  if (!['Draft', 'Issued'].includes(invoice.status)) throw new Error('Save a draft or issue it before recording a payment.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const store = invoiceRows_();
+    const index = store.rows.findIndex(row => row[0] === invoice.id);
+    const current = index < 0 ? null : readInvoiceRecord_(store.rows[index]);
+    if (invoice.revision !== (current ? current.revision : 0)) throw new Error('This invoice changed in another session. Reopen the saved invoice before updating it.');
+    if (current && current.status !== 'Draft') throw new Error('Issued, paid and void invoices cannot be edited.');
+    if (invoice.status === 'Issued') {
+      const duplicate = store.rows.filter(row => row[0] && row[0] !== invoice.id).map(readInvoiceRecord_).find(other =>
+        ['Issued', 'Paid'].includes(other.status) && other.client.toLowerCase() === invoice.client.toLowerCase() &&
+        other.periodStart === invoice.periodStart && other.periodEnd === invoice.periodEnd);
+      if (duplicate) throw new Error('An invoice already exists for this client and period: ' + duplicate.number + '.');
+    }
+    let maximum = 0;
+    store.rows.forEach(row => {
+      const match = String(row[1] || '').match(/^INV-(\d+)$/);
+      if (match) maximum = Math.max(maximum, Number(match[1]));
+    });
+    const now = new Date().toISOString();
+    invoice.number = current ? current.number : 'INV-' + String(maximum + 1).padStart(5, '0');
+    invoice.revision = (current ? current.revision : 0) + 1;
+    invoice.createdAt = current ? current.createdAt : now;
+    invoice.updatedAt = now;
+    const sheet = store.sheet || invoiceSheet_(true);
+    writeInvoice_(sheet, index < 0 ? sheet.getLastRow() + 1 : index + 2, invoice);
+    return { success: true, invoice, message: invoice.number + ' saved as ' + invoice.status + '.' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function changeInvoiceStatus(invoiceId, revision, status) {
+  if (!['Paid', 'Void'].includes(status)) throw new Error('Choose Paid or Void.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const store = invoiceRows_();
+    const index = store.rows.findIndex(row => row[0] === invoiceId);
+    if (index < 0) throw new Error('Invoice not found.');
+    const invoice = readInvoiceRecord_(store.rows[index]);
+    if (invoice.revision !== revision) throw new Error('This invoice changed. Reopen it before updating its status.');
+    if (invoice.status !== 'Issued') throw new Error('Only issued invoices can be marked Paid or Void.');
+    invoice.status = status;
+    invoice.revision++;
+    invoice.updatedAt = new Date().toISOString();
+    if (status === 'Paid') invoice.paidAt = invoice.updatedAt;
+    writeInvoice_(store.sheet, index + 2, invoice);
+    return { success: true, invoice, message: invoice.number + ' marked ' + status + '.' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteInvoiceDraft(invoiceId, revision) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const store = invoiceRows_();
+    const index = store.rows.findIndex(row => row[0] === invoiceId);
+    if (index < 0) throw new Error('Invoice not found.');
+    const invoice = readInvoiceRecord_(store.rows[index]);
+    if (invoice.revision !== revision || invoice.status !== 'Draft') throw new Error('Only an unchanged draft can be deleted.');
+    store.sheet.deleteRows(index + 2, 1);
+    return { success: true, message: invoice.number + ' draft deleted.' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function saveInvoiceSettings(input, revision) {
+  const settings = normalizeBillingSettings_(input);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const current = billingSettings_();
+    if (current.revision !== revision) throw new Error('Billing settings changed. Refresh before saving.');
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName(INVOICE_CONFIG.SETTINGS_SHEET);
+    if (!sheet) sheet = ss.insertSheet(INVOICE_CONFIG.SETTINGS_SHEET);
+    if (!sheet.getLastRow()) sheet.getRange(1, 1, 1, 2).setValues([['Settings JSON', 'Revision']]);
+    sheet.getRange(2, 1, 1, 2).setValues([[JSON.stringify(settings), revision + 1]]);
+    return { success: true, settings, revision: revision + 1, message: 'Billing defaults saved.' };
   } finally {
     lock.releaseLock();
   }

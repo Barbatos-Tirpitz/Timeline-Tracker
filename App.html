@@ -157,6 +157,19 @@
     }
 
     .content { padding: 28px; max-width: 1800px; margin: auto; }
+    .content, .invoice-paper { container-name: date-labels; container-type: inline-size; }
+    .date-compact { display: none; }
+    .date-label { overflow-wrap: normal; }
+    .input-date-label { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
+    .input-date-label[hidden] { display: none; }
+    @container date-labels (max-width: 700px) {
+      .date-full { display: none; }
+      .date-compact { display: inline; }
+    }
+    @media print {
+      .date-full { display: inline !important; }
+      .date-compact { display: none !important; }
+    }
 
     .page-heading {
       display: flex;
@@ -187,6 +200,7 @@
     .btn-primary { background: var(--blue); border-color: var(--blue); color: white; }
     .btn-primary:hover { background: #0055cc; }
     .btn:disabled { opacity: .55; cursor: wait; }
+    #taskForm[aria-busy="true"] button { opacity: .55; cursor: wait; }
 
     .stats {
       display: grid;
@@ -560,6 +574,12 @@
     min-width: 0;
     flex: 1;
   }
+  .subtask-client-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 7px; min-width: 0; }
+  .subtask-client-tag { display: inline-block; max-width: min(160px, 100%); padding: 3px 6px; border-radius: 4px; background: #e7f4ed; color: #216e4e; font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .subtask-client-tag.unassigned { background: #f1f2f4; color: var(--muted); }
+  .subtask-client-more { min-width: 0; max-width: 100%; font-size: 11px; color: var(--muted); }
+  .subtask-client-more summary { cursor: pointer; }
+  .subtask-client-more ul { padding-left: 18px; margin: 6px 0 0; overflow-wrap: anywhere; }
 
   .subtask-link {
     border: 0;
@@ -754,6 +774,49 @@
     }
 
     .toast:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+    .stats[hidden] { display: none; }
+    .invoice-band { padding: 18px 0; border-top: 1px solid var(--border); }
+    .invoice-band:first-child { border-top: 0; }
+    .invoice-band h3 { margin: 0 0 14px; font-size: 15px; }
+    .invoice-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+    .invoice-toolbar .spacer { flex: 1; }
+    .invoice-layout { padding: 0 20px; }
+    .invoice-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+    .invoice-fields .form-grid { gap: 14px; }
+    .invoice-fields input, .invoice-fields select, .invoice-fields textarea { min-width: 0; }
+    .invoice-lines input { width: 100%; min-width: 80px; }
+    .invoice-lines .description-input { min-width: 180px; }
+    .invoice-lines td { padding: 8px; vertical-align: top; }
+    .invoice-paper { padding: 28px; border-top: 2px solid var(--text); background: white; overflow-wrap: anywhere; }
+    .invoice-paper-head { display: flex; justify-content: space-between; gap: 18px; flex-wrap: wrap; margin-bottom: 24px; }
+    .invoice-paper h2 { font-size: 24px; margin-bottom: 8px; }
+    .invoice-party { flex: 1; min-width: 180px; white-space: pre-line; line-height: 1.6; }
+    .invoice-paper table { margin: 22px 0; }
+    .invoice-paper table { table-layout: fixed; }
+    .invoice-paper th:first-child { width: 40%; }
+    .invoice-paper th, .invoice-paper td { padding: 10px 6px; }
+    .invoice-paper .amount { text-align: right; white-space: nowrap; }
+    .invoice-total { display: flex; justify-content: flex-end; gap: 30px; font-size: 18px; padding: 15px 0; border-top: 2px solid var(--border); }
+    .invoice-status { font-weight: 700; color: var(--muted); }
+    .invoice-dashboard { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
+    @media (max-width: 560px) {
+      .invoice-layout { padding: 0 12px; }
+      .invoice-paper { padding: 18px 0; }
+      .invoice-paper .amount { white-space: normal; overflow-wrap: anywhere; }
+      .invoice-paper th, .invoice-paper td { font-size: 11px; }
+    }
+    @media print {
+      @page { margin: 16mm; }
+      body { background: white; font-size: 11pt; }
+      .sidebar, .topbar, .page-heading, #stats, #dataNotice, .toast, .modal-backdrop,
+      .view:not(#view-invoices), #invoiceControls, #invoiceMetrics, #invoiceEditor, #invoiceHistory, #invoiceSettings { display: none !important; }
+      .app, .main, #view-invoices { display: block !important; }
+      .content, .invoice-layout, .invoice-paper { padding: 0; max-width: none; margin: 0; }
+      #view-invoices .panel { border: 0; overflow: visible; }
+      .invoice-paper { border: 0; }
+      .invoice-paper tr, .invoice-total { break-inside: avoid; }
+      .invoice-paper th, .invoice-paper td { font-size: 10pt; }
+    }
     .toast.dismissing { animation: toast-out .18s ease forwards; pointer-events: none; }
     @keyframes toast-out { to { opacity: 0; } }
     @media (prefers-reduced-motion: reduce) {
@@ -819,6 +882,9 @@
       </button>
       <button class="nav-item" data-view="dashboard">
         <span class="nav-icon">▦</span><span class="nav-text">Dashboard</span>
+      </button>
+      <button class="nav-item" data-view="invoices" aria-label="Invoices" title="Invoices">
+        <span class="nav-icon" aria-hidden="true">&#36;</span><span class="nav-text">Invoices</span>
       </button>
     </div>
 
@@ -942,6 +1008,9 @@
           </div>
           <div id="dashboardContent" style="padding:22px"></div>
         </div>
+      </section>
+      <section class="view" id="view-invoices">
+        <div class="panel"><div id="invoiceWorkspace" class="invoice-layout"></div></div>
       </section>
     </div>
   </main>
@@ -1084,6 +1153,7 @@
     request: 0,
     writing: false,
     syncing: false,
+    recentCommands: new Map(),
     timelineWindow: null,
     dragging: false,
     centerTimeline: true,
@@ -1093,6 +1163,7 @@
     clientSelections: {},
     spreadsheetToday: '',
     dashboard: { period: 'monthly', anchor: null, client: '' },
+    invoices: { loaded: false, loading: false, error: '', request: 0, records: [], settings: null, settingsRevision: 0, editor: null, dirty: false, historyClient: '', historyPage: 1 },
     subtaskPanel: { parentId: null, page: 1, selected: new Set(), draft: '', quantity: 1, patch: {}, editOpen: false, status: 'To Do' },
     list: {
       page: 1, pageSize: 25, sort: 'id', direction: 1,
@@ -1179,6 +1250,42 @@
     return d ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` : '';
   }
 
+  const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const COMPACT_MONTH_NAMES = ['Jan', 'Feb', 'March', 'April', 'May', 'June', 'July', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  function formatDisplayDate(value, compact = false, includeYear = true) {
+    const date = parseDate(value);
+    if (!date) return '';
+    const month = (compact ? COMPACT_MONTH_NAMES : MONTH_NAMES)[date.getMonth()];
+    return `${month} ${date.getDate()}${includeYear ? ', ' + date.getFullYear() : ''}`;
+  }
+
+  function displayDate(value, compact = false) {
+    const date = parseDate(value);
+    if (!date) return '&mdash;';
+    const text = compact ? esc(formatDisplayDate(date, true))
+      : `<span class="date-full">${esc(formatDisplayDate(date))}</span><span class="date-compact">${esc(formatDisplayDate(date, true))}</span>`;
+    return `<time class="date-label" datetime="${dateKey(date)}" title="${esc(formatDisplayDate(date))}">${text}</time>`;
+  }
+
+  function displayDateRange(start, end, compact = false) {
+    return `${displayDate(start, compact)} - ${displayDate(end, compact)}`;
+  }
+
+  function refreshDateInputLabels() {
+    document.querySelectorAll('input[type="date"]').forEach(input => {
+      let label = input.nextElementSibling;
+      if (!label || !label.classList.contains('input-date-label')) {
+        label = document.createElement('span');
+        label.className = 'input-date-label';
+        label.setAttribute('aria-hidden', 'true');
+        input.insertAdjacentElement('afterend', label);
+      }
+      label.hidden = !parseDate(input.value);
+      label.innerHTML = displayDate(input.value);
+    });
+  }
+
   function addDays(d, n) {
     const result = new Date(d);
     result.setDate(result.getDate() + n);
@@ -1217,6 +1324,7 @@
     status: String(get('status') || 'To Do'),
     start,
     end,
+    actualEndDate: parseDate(get('actualEndDate')),
     description: String(get('description') || ''),
     parentTaskId: String(get('parentTaskId') || '').trim(),
     subtaskCount: Number(get('subtaskCount') || 0),
@@ -1286,6 +1394,9 @@
   function updateDataNotice() {
     const notice = $('dataNotice');
     $('taskModal').inert = state.writing;
+    $('taskForm').inert = state.writing || state.syncing;
+    $('taskForm').setAttribute('aria-busy', String(state.writing || state.syncing));
+    updateInvoiceBusy();
     notice.hidden = !state.loading && !state.error && !state.writing;
     notice.classList.toggle('error', Boolean(state.error));
     notice.innerHTML = state.error
@@ -1294,6 +1405,10 @@
   }
 
   function renderActiveView() {
+    if (state.activeView === 'invoices') {
+      renderInvoices();
+      return;
+    }
     if (!state.loaded) {
       const target = { timeline: 'timelineShell', tasks: 'taskTable', dashboard: 'dashboardContent' }[state.activeView];
       $(target).innerHTML = state.loading ? '<div class="loading">Loading tasks...</div>'
@@ -1313,14 +1428,37 @@
   function mutationRunner() {
     let success = () => {};
     let failure = error => showToast(error.message || String(error));
+    let rejected = () => {};
+    let reconcile = () => loadTasks();
     const runner = new Proxy({}, {
       get(target, method) {
         if (method === 'withSuccessHandler') return callback => { success = callback; return runner; };
         if (method === 'withFailureHandler') return callback => { failure = callback; return runner; };
+        if (method === 'withRejectionHandler') return callback => { rejected = callback; return runner; };
+        if (method === 'withReconciliationHandler') return callback => { reconcile = callback; return runner; };
         return (...args) => {
-          if (state.writing || state.syncing || !state.loaded) {
+          const invoiceCommand = ['saveInvoice', 'saveInvoiceSettings', 'changeInvoiceStatus', 'deleteInvoiceDraft'].includes(method);
+          if (state.writing || state.syncing || (invoiceCommand ? !state.invoices.loaded : !state.loaded)) {
             failure(new Error('Wait for the current operation or refresh to finish.'));
             return;
+          }
+          const now = Date.now();
+          state.recentCommands.forEach((time, key) => {
+            if (now - time >= 700 || now < time) state.recentCommands.delete(key);
+          });
+          const commandKey = JSON.stringify([method, args], (key, value) =>
+            value && typeof value === 'object' && !Array.isArray(value)
+              ? Object.fromEntries(Object.entries(value).sort(([first], [second]) => first.localeCompare(second)))
+              : value);
+          if (state.recentCommands.has(commandKey)) {
+            rejected();
+            showToast('This action was already submitted. Wait a moment before repeating it.');
+            return;
+          }
+          state.recentCommands.set(commandKey, now);
+          if (invoiceCommand) {
+            state.invoices.request++;
+            state.invoices.loading = false;
           }
           state.writing = true;
           state.syncing = true;
@@ -1340,7 +1478,7 @@
           function failed(error) {
             state.writing = false;
             failure(error);
-            loadTasks();
+            reconcile();
           }
         };
       }
@@ -1564,8 +1702,8 @@ filtered.forEach(t => {
   : '38px'
     );
 
-    $('timelineSubtitle').textContent =
-      `${tasks.length} task${tasks.length === 1 ? '' : 's'} · ${start.toLocaleDateString(undefined, {month:'short',day:'numeric',year:'numeric'})} – ${end.toLocaleDateString(undefined, {month:'short',day:'numeric',year:'numeric'})}`;
+    $('timelineSubtitle').innerHTML =
+      `${tasks.length} task${tasks.length === 1 ? '' : 's'} · ${displayDateRange(start, end)}`;
 
     let html = `<div class="timeline zoom-${state.zoom}" style="grid-template-rows:${headerHeight}px">`;
     html += '<div class="timeline-corner">Task / Schedule</div>';
@@ -1588,10 +1726,7 @@ filtered.forEach(t => {
       weekday: 'short'
     });
 
-  bottom = d.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric'
-  });
+  bottom = formatDisplayDate(d, true, false);
 
   } else {
     top = d.toLocaleDateString(undefined, {
@@ -1607,7 +1742,7 @@ filtered.forEach(t => {
     ${weekend ? 'weekend' : ''}
     ${isToday ? 'today' : ''}
     ${monthStart ? 'month-start' : ''}"
-    title="${esc(d.toDateString())}">
+    title="${esc(formatDisplayDate(d))}">
     <span>${top}</span>
     <span class="day-number">${bottom}</span>
   </div>`;
@@ -1706,7 +1841,7 @@ html += `<div class="task-cell"
   bar.style.display = 'block';
 
   bar.title =
-    `${t.name}\n${t.status}\n${dateKey(t.start)} – ${dateKey(t.end)}`;
+    `${t.name}\n${t.status}\n${formatDisplayDate(t.start)} - ${formatDisplayDate(t.end)}`;
 
   const visibleDays = last - first + 1;
 
@@ -1798,7 +1933,7 @@ html += `<div class="task-cell"
 
       mutationRunner()
         .withSuccessHandler(() => {
-          showToast(`Rescheduled ${taskLabel(t)} to ${dateKey(newStart)} - ${dateKey(newEnd)}.`);
+          showToast(`Rescheduled ${taskLabel(t)} to ${formatDisplayDate(newStart, true)} - ${formatDisplayDate(newEnd, true)}.`);
           loadTasks();
           setTimeout(() => suppressClick = false, 100);
         })
@@ -1901,7 +2036,7 @@ html += `<div class="task-cell"
         <td>${esc(task.category)}</td><td class="client-cell">${esc((task.clients || []).join(', ') || 'Unassigned')}</td><td>${esc(task.priority)}</td>
         <td><select class="field-control row-status" aria-label="Status for ${esc(task.name)}" ${busy || contextOnly ? 'disabled' : ''} onchange="changeInlineStatus(${argument},this)">
           ${['To Do', 'In Progress', 'Blocked', 'Done'].map(status => `<option ${task.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select></td>
-        <td>${task.start ? esc(dateKey(task.start)) : '&mdash;'}</td><td>${task.end ? esc(dateKey(task.end)) : '&mdash;'}</td></tr>`;
+        <td>${displayDate(task.start)}</td><td>${displayDate(task.end)}</td></tr>`;
     };
     let rows = '';
     groups.slice((list.page - 1) * list.pageSize, list.page * list.pageSize).forEach(group => {
@@ -1933,6 +2068,7 @@ html += `<div class="task-cell"
       <label>Sort <select class="field-control" aria-label="Sort tasks" onchange="sortTasks(this.value)">${[['id', 'Task ID'], ...columns].map(([key, title]) => `<option value="${key}" ${list.sort === key ? 'selected' : ''}>${title}</option>`).join('')}</select></label>
       <button class="btn" onclick="sortTasks(state.list.sort)" aria-label="Reverse sort direction">${list.direction === 1 ? '&#8593;' : '&#8595;'}</button>`;
     updateSelectionControls();
+    refreshDateInputLabels();
   }
 
   function taskMatches(task, filters) {
@@ -2145,7 +2281,7 @@ html += `<div class="task-cell"
     if (!dashboard.anchor) dashboard.anchor = parseDate(state.spreadsheetToday) || new Date();
     const range = dashboardRange(dashboard.period, dashboard.anchor);
     const tasks = dashboardTasks(state.tasks, range, dashboard.client);
-    const rangeLabel = `${dateKey(range.start)} - ${dateKey(range.end)}`;
+    const rangeLabel = `${formatDisplayDate(range.start, true)} - ${formatDisplayDate(range.end, true)}`;
     renderStats(tasks, rangeLabel);
     const count = s => tasks.filter(t => t.status === s).length;
     const total = tasks.length;
@@ -2162,7 +2298,7 @@ html += `<div class="task-cell"
         <button class="btn" onclick="state.dashboard.anchor=parseDate(state.spreadsheetToday)||new Date();renderDashboard()">Today</button>
         <label>Client <select class="field-control" id="dashboardClient" onchange="state.dashboard.client=this.value;renderDashboard()">${clientFilterOptions(dashboard.client)}</select></label>
       </div>
-      <div class="panel-subtitle" style="margin-bottom:18px">${rangeLabel} · ${total} scheduled tasks${dashboard.client ? ' · ' + esc(dashboard.client === 'unassigned' ? 'Unassigned' : dashboard.client.slice(7)) : ''}</div>
+      <div class="panel-subtitle" style="margin-bottom:18px">${displayDateRange(range.start, range.end)} · ${total} scheduled tasks${dashboard.client ? ' · ' + esc(dashboard.client === 'unassigned' ? 'Unassigned' : dashboard.client.slice(7)) : ''}</div>
       ${total ? '' : '<div class="subtask-empty">No tasks scheduled for this period.</div>'}
       <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px">
         <strong>Overall completion</strong><strong>${pct}%</strong>
@@ -2183,7 +2319,9 @@ html += `<div class="task-cell"
           </div>
         </div>`;
       }).join('')}
+      <div class="invoice-dashboard"><strong>Biweekly invoices</strong><span class="subtitle">14-day billing periods</span><button class="btn" onclick="switchView('invoices')">Open invoices</button></div>
       `;
+    refreshDateInputLabels();
   }
 
   function switchView(view) {
@@ -2196,11 +2334,13 @@ html += `<div class="task-cell"
     const titles = {
       timeline: ['Task Timeline', 'Plan, track, and deliver your video projects.'],
       tasks: ['All tasks', 'View and manage every task in your project.'],
-      dashboard: ['Dashboard', 'See your project progress at a glance.']
+      dashboard: ['Dashboard', 'See your project progress at a glance.'],
+      invoices: ['Invoices', 'Biweekly billing and client copies.']
     };
 
     $('pageTitle').textContent = titles[view][0];
     $('pageSubtitle').textContent = titles[view][1];
+    $('stats').hidden = view === 'invoices';
     if (view !== 'dashboard') renderStats();
     renderActiveView();
   }
@@ -2303,6 +2443,7 @@ html += `<div class="task-cell"
           <div class="task-meta">
             ${esc(child.id)} · ${esc(child.category)}
           </div>
+          ${renderSubtaskClientTags(child)}
         </div>
 
         <span class="pill"
@@ -2421,7 +2562,15 @@ html += `<div class="task-cell"
     if ($('bulkClientsControl')) renderClientPicker('bulkClients', state.clientSelections.bulkClients || [], 'bulkClientsControl');
     updatePanelSelection();
     updateSubtaskDraftCount();
+    refreshDateInputLabels();
 }
+  function renderSubtaskClientTags(task) {
+    const clients = normalizeClientNames(task.clients || []);
+    const visible = clients.slice(0, 2).map(name => `<span class="subtask-client-tag" title="${esc(name)}">${esc(name)}</span>`).join('');
+    const more = clients.length > 2 ? `<details class="subtask-client-more"><summary>${clients.length - 2} more clients</summary><ul>${clients.slice(2).map(name => `<li>${esc(name)}</li>`).join('')}</ul></details>` : '';
+    return `<div class="subtask-client-tags">${clients.length ? visible + more : '<span class="subtask-client-tag unassigned">Unassigned</span>'}</div>`;
+  }
+
 function createSubtask() {
   if (state.writing || state.syncing) return;
   const parent = state.tasks.find(
@@ -2556,6 +2705,7 @@ function createSubtask() {
       if (enabled) input.value = panel.patch[key];
     }
     updateBulkEditSummary();
+    refreshDateInputLabels();
   }
 
   function setSubtaskPatch(key, value) {
@@ -2666,6 +2816,10 @@ function createSubtask() {
   button.textContent = 'Transferring…';
 
   mutationRunner()
+    .withRejectionHandler(() => {
+      button.disabled = false;
+      button.textContent = currentTask.parentTaskId ? 'Transfer task' : 'Convert to subtask';
+    })
     .withSuccessHandler(result => {
       if (!result || !result.success) {
         button.disabled = false;
@@ -2740,6 +2894,7 @@ function createSubtask() {
     $('endDate').value = dateKey(end);
 
     $('taskModal').classList.add('open');
+    refreshDateInputLabels();
     $('taskName').focus();
   }
 
@@ -2787,6 +2942,7 @@ function populateParentTaskOptions() {
      // Display the parent task or its subtasks.
     renderSubtaskPanel(t);
     $('taskModal').classList.add('open');
+    refreshDateInputLabels();
   }
 
   function closeModal() {
@@ -2835,6 +2991,7 @@ function populateParentTaskOptions() {
     $('formError').style.display = 'none';
 
     const runner = mutationRunner()
+      .withRejectionHandler(() => setSaving(false))
       .withSuccessHandler(result => {
         setSaving(false);
         closeModal();
@@ -2863,6 +3020,10 @@ function populateParentTaskOptions() {
     $('editStatusBtn').textContent = 'Updating…';
 
     mutationRunner()
+      .withRejectionHandler(() => {
+        $('editStatusBtn').disabled = false;
+        $('editStatusBtn').textContent = 'Update status';
+      })
       .withSuccessHandler(() => {
         $('editStatusBtn').disabled = false;
         $('editStatusBtn').textContent = 'Update status';
@@ -2904,6 +3065,10 @@ function deleteCurrentTask() {
   button.textContent = 'Deleting…';
 
   mutationRunner()
+    .withRejectionHandler(() => {
+      button.disabled = false;
+      button.textContent = 'Delete task';
+    })
     .withSuccessHandler(result => {
       button.disabled = false;
       button.textContent = 'Delete task';
@@ -3016,6 +3181,484 @@ function deleteCurrentTask() {
     input.focus();
   }
 
+  function loadInvoiceWorkspace(reconcile = false) {
+    const workspace = state.invoices;
+    if (workspace.loading || state.writing) return;
+    const request = ++workspace.request;
+    workspace.loading = true;
+    workspace.error = '';
+    renderInvoices();
+    if (typeof google === 'undefined' || !google.script) {
+      fail(new Error('Apps Script connection unavailable. Use the deployed web app URL.'));
+      return;
+    }
+    google.script.run.withSuccessHandler(response => {
+      if (request !== workspace.request) return;
+      if (!response || !response.success || !Array.isArray(response.invoices) || !response.settings || !parseDate(response.settings.anchor)) {
+        fail(new Error('The server returned unexpected invoice data.'));
+        return;
+      }
+      workspace.records = response.invoices;
+      workspace.settings = response.settings;
+      workspace.today = response.today || state.spreadsheetToday || dateKey(new Date());
+      if (!workspace.billingDirty) {
+        workspace.settingsRevision = response.settingsRevision;
+        workspace.settingsDraft = { ...response.settings };
+      }
+      workspace.loaded = true;
+      workspace.loading = false;
+      if (reconcile) state.syncing = false;
+      if (!workspace.editor) workspace.editor = newInvoiceDocument();
+      updateDataNotice();
+      renderInvoices();
+    }).withFailureHandler(fail).getInvoiceWorkspace();
+    function fail(error) {
+      if (request !== workspace.request) return;
+      workspace.loading = false;
+      workspace.error = String(error.message || error);
+      renderInvoices();
+    }
+  }
+
+  function newInvoiceDocument(client = '', start, end, periodMode = 'fortnight', filters = {}) {
+    const workspace = state.invoices;
+    const settings = workspace.settings;
+    const range = start ? { start, end: end || dateKey(addDays(parseDate(start), 13)) }
+      : invoicePeriod(parseDate(settings.anchor), parseDate(workspace.today) || new Date());
+    const profile = workspace.records.find(record => record.client.toLowerCase() === client.toLowerCase() && record.currency === settings.currency);
+    const token = window.crypto?.randomUUID ? window.crypto.randomUUID() : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+    return {
+      id: 'INV-' + token, number: '', client, currency: settings.currency, status: 'Draft', revision: 0,
+      periodStart: range.start, periodEnd: range.end, issueDate: workspace.today, dueDate: range.end,
+      periodMode, videoDateBasis: filters.videoDateBasis || 'planned', videoScope: filters.videoScope || 'leaf', includeUnassigned: filters.includeUnassigned === true,
+      senderName: settings.senderName, senderDetails: settings.senderDetails, clientDetails: '', notes: settings.paymentNotes,
+      defaultRate: profile ? profile.defaultRate : settings.defaultRate, lines: []
+    };
+  }
+
+  function startNewInvoice(client = '', start, end, periodMode = 'fortnight', filters = {}) {
+    if (state.writing || state.syncing) return;
+    if (state.invoices.dirty && !confirm('Discard the unsaved invoice changes?')) return;
+    state.invoices.editor = newInvoiceDocument(client, start, end, periodMode, filters);
+    state.invoices.dirty = false;
+    state.invoices.error = '';
+    renderInvoices();
+  }
+
+  function moveInvoiceCycle(direction) {
+    const invoice = state.invoices.editor;
+    const days = dayDiff(parseDate(invoice.periodStart), parseDate(invoice.periodEnd)) + 1;
+    startNewInvoice(invoice.client, dateKey(addDays(parseDate(invoice.periodStart), direction * days)),
+      dateKey(addDays(parseDate(invoice.periodEnd), direction * days)), invoice.periodMode || 'fortnight', invoice);
+  }
+
+  function setInvoiceRange(key, value) {
+    const invoice = state.invoices.editor;
+    if (invoice.status !== 'Draft' || state.writing || state.syncing) return;
+    const mode = key === 'periodMode' ? value : invoice.periodMode || 'fortnight';
+    let start = key === 'periodStart' ? value : invoice.periodStart;
+    let end = key === 'periodEnd' ? value : invoice.periodEnd;
+    const parsedStart = parseDate(start);
+    if (!parsedStart || !['fortnight', 'custom'].includes(mode)) { renderInvoices(); return; }
+    if (mode === 'fortnight') end = dateKey(addDays(parsedStart, 13));
+    else if (key === 'periodStart' && end < start) {
+      end = dateKey(addDays(parsedStart, dayDiff(parseDate(invoice.periodStart), parseDate(invoice.periodEnd))));
+    }
+    if (!parseDate(end) || end < start) {
+      showToast('Billing end date must be on or after the start date.');
+      renderInvoices();
+      return;
+    }
+    const changed = start !== invoice.periodStart || end !== invoice.periodEnd;
+    if (changed && invoice.lines.length && !confirm('Changing the billing timeline removes the current invoice lines. Continue?')) {
+      renderInvoices();
+      return;
+    }
+    if (changed) {
+      invoice.lines = [];
+      if (invoice.dueDate === invoice.periodEnd) invoice.dueDate = end;
+    }
+    invoice.periodMode = mode;
+    invoice.periodStart = start;
+    invoice.periodEnd = end;
+    state.invoices.dirty = true;
+    renderInvoices();
+  }
+
+  function setInvoiceVideoFilter(key, value) {
+    const invoice = state.invoices.editor;
+    if (invoice.status !== 'Draft' || state.writing || state.syncing) return;
+    if (invoice.lines.length && !confirm('Changing video filters removes the current invoice lines. Continue?')) { renderInvoices(); return; }
+    invoice[key] = value;
+    invoice.lines = [];
+    state.invoices.dirty = true;
+    renderInvoices();
+  }
+
+  function invoiceVideoCandidates(tasks, invoice) {
+    const start = parseDate(invoice.periodStart);
+    const end = parseDate(invoice.periodEnd);
+    const client = String(invoice.client || '').trim().toLowerCase();
+    if (!client || !start || !end || end < start) return [];
+    const parents = new Set(tasks.map(task => task.parentTaskId).filter(Boolean));
+    const seen = new Set();
+    return tasks.filter(task => {
+      if (!task.id || seen.has(task.id) || task.category !== 'Video editing') return false;
+      const clients = task.clients || [];
+      if (!clients.some(name => name.toLowerCase() === client) && !(invoice.includeUnassigned && !clients.length)) return false;
+      const scope = invoice.videoScope || 'leaf';
+      if ((scope === 'leaf' && parents.has(task.id)) || (scope === 'topLevel' && task.parentTaskId)) return false;
+      if (invoice.videoDateBasis === 'completed') {
+        const completed = parseDate(task.actualEndDate);
+        if (task.status !== 'Done' || !completed || completed < start || completed > end) return false;
+      } else if (!task.start || !task.end || task.end < task.start || task.start > end || task.end < start) return false;
+      seen.add(task.id);
+      return true;
+    });
+  }
+
+  function addMatchingInvoiceVideos() {
+    const invoice = state.invoices.editor;
+    if (invoice.status !== 'Draft' || state.writing || state.syncing) return;
+    const existing = new Set(invoice.lines.map(line => line.taskId).filter(Boolean));
+    const videos = invoiceVideoCandidates(state.tasks, invoice).filter(task => !existing.has(task.id));
+    if (!videos.length) return;
+    if (invoice.lines.length + videos.length > 100) { showToast('The matching videos exceed the 100-line invoice limit. Choose a narrower timeline or add individual videos.'); return; }
+    invoice.lines.push(...videos.map(task => ({ taskId: task.id, description: task.name, hours: '', rate: invoice.defaultRate || '' })));
+    state.invoices.dirty = true;
+    renderInvoices();
+  }
+
+  function setInvoiceClient(value) {
+    const workspace = state.invoices;
+    const invoice = workspace.editor;
+    if (invoice.lines.length && !confirm('Changing the client removes the current invoice lines. Continue?')) {
+      renderInvoices();
+      return;
+    }
+    const known = normalizeClientNames([...state.clientOptions, ...workspace.records.map(record => record.client)]);
+    invoice.client = known.find(client => client.toLowerCase() === value.trim().toLowerCase()) || value.trim();
+    invoice.lines = [];
+    const profile = workspace.records.find(record => record.client.toLowerCase() === invoice.client.toLowerCase() && record.currency === invoice.currency);
+    invoice.defaultRate = profile ? profile.defaultRate : workspace.settings.defaultRate;
+    invoice.clientDetails = '';
+    workspace.dirty = true;
+    renderInvoices();
+  }
+
+  function setInvoiceField(key, value) {
+    state.invoices.editor[key] = value;
+    state.invoices.dirty = true;
+    updateInvoicePreview();
+  }
+
+  function setInvoiceLine(index, key, value) {
+    state.invoices.editor.lines[index][key] = value;
+    state.invoices.dirty = true;
+    const line = state.invoices.editor.lines[index];
+    const amount = invoiceAmount(line.hours, line.rate);
+    $('invoiceLineAmount' + index).textContent = amount === null ? 'Invalid amount' : invoiceMoney(amount, state.invoices.editor.currency);
+    updateInvoicePreview();
+  }
+
+  function addInvoiceLine(taskId = '') {
+    const invoice = state.invoices.editor;
+    if (invoice.lines.length >= 100) { showToast('An invoice can have up to 100 lines.'); return; }
+    if (taskId && invoice.lines.some(line => line.taskId === taskId)) { showToast('This video is already in this invoice.'); return; }
+    const task = state.taskById.get(taskId);
+    invoice.lines.push({ taskId, description: task ? task.name : '', hours: '', rate: invoice.defaultRate || '' });
+    state.invoices.dirty = true;
+    renderInvoices();
+  }
+
+  function removeInvoiceLine(index) {
+    state.invoices.editor.lines.splice(index, 1);
+    state.invoices.dirty = true;
+    renderInvoices();
+  }
+
+  function invoiceTotals(invoice) {
+    return invoice.lines.reduce((totals, line) => {
+      const amount = invoiceAmount(line.hours, line.rate);
+      totals.invalid = totals.invalid || amount === null;
+      totals.minor += amount === null ? 0 : amount;
+      const hours = Number(line.hours);
+      totals.hoursUnits += Number.isFinite(hours) ? Math.round(hours * 100) : 0;
+      return totals;
+    }, { minor: 0, hoursUnits: 0, invalid: false });
+  }
+
+  function updateInvoiceBusy() {
+    const busy = state.writing || state.syncing || state.invoices.loading;
+    const fields = $('invoiceEditorFields');
+    if (fields) fields.disabled = busy || state.invoices.editor?.status !== 'Draft';
+    const settings = $('invoiceSettingsFields');
+    if (settings) settings.disabled = busy;
+    document.querySelectorAll('[data-invoice-command]').forEach(button => { button.disabled = busy; });
+  }
+
+  function renderInvoices() {
+    if (state.activeView !== 'invoices') return;
+    const workspace = state.invoices;
+    if (!workspace.loaded) {
+      $('invoiceWorkspace').innerHTML = workspace.error
+        ? `<div class="data-notice error" role="alert">${esc(workspace.error)} <button class="btn" onclick="loadInvoiceWorkspace(state.syncing)">Retry</button></div>`
+        : '<div class="loading">Loading invoices...</div>';
+      if (!workspace.loading && !workspace.error) loadInvoiceWorkspace();
+      return;
+    }
+    const invoice = workspace.editor;
+    const settings = workspace.settingsDraft;
+    const readonly = invoice.status !== 'Draft';
+    const currencies = ['USD', 'PHP', 'EUR', 'GBP', 'CAD', 'AUD'];
+    const clients = normalizeClientNames([...state.clientOptions, ...workspace.records.map(record => record.client)]);
+    const videos = invoiceVideoCandidates(state.tasks, invoice);
+    const existingVideos = new Set(invoice.lines.map(line => line.taskId).filter(Boolean));
+    const newVideoCount = videos.filter(task => !existingVideos.has(task.id)).length;
+    const outstanding = workspace.records.filter(record => record.status === 'Issued');
+    const paid = workspace.records.filter(record => record.status === 'Paid');
+    const sums = records => currencies.map(currency => {
+      const total = records.filter(record => record.currency === currency).reduce((sum, record) => sum + record.totalMinor, 0);
+      return total ? esc(invoiceMoney(total, currency)) : '';
+    }).filter(Boolean).join('<br>') || '0';
+    $('invoiceWorkspace').innerHTML = `
+      <div id="invoiceControls" class="invoice-band">
+        <div class="invoice-toolbar"><h2>Biweekly invoices</h2><span class="spacer"></span>
+          <button class="btn" data-invoice-command onclick="loadInvoiceWorkspace(state.syncing)">Refresh</button>
+          <button class="btn btn-primary" data-invoice-command onclick="startNewInvoice()">New invoice</button></div>
+        ${workspace.error ? `<div class="data-notice error" role="alert">${esc(workspace.error)} <button class="btn" onclick="loadInvoiceWorkspace(state.syncing)">Retry</button></div>` : ''}
+      </div>
+      <div id="invoiceMetrics" class="stats">
+        <div class="stat"><div class="stat-label">Drafts</div><div class="stat-number">${workspace.records.filter(record => record.status === 'Draft').length}</div></div>
+        <div class="stat"><div class="stat-label">Awaiting payment</div><strong>${sums(outstanding)}</strong></div>
+        <div class="stat"><div class="stat-label">Paid</div><strong>${sums(paid)}</strong></div>
+        <div class="stat"><div class="stat-label">Invoices saved</div><div class="stat-number">${workspace.records.length}</div></div>
+      </div>
+      <details id="invoiceSettings" class="invoice-band" ${!workspace.settings.senderName || workspace.billingDirty ? 'open' : ''}>
+        <summary><strong>Billing defaults</strong></summary>
+        <fieldset id="invoiceSettingsFields" class="invoice-fields"><div class="form-grid" style="margin-top:16px">
+          ${[['anchor', 'Billing cycle starts', 'date'], ['currency', 'Currency', 'currency'], ['defaultRate', 'Default hourly rate', 'number'], ['senderName', 'Your name / business', 'text'], ['senderDetails', 'Your address / contact', 'textarea'], ['paymentNotes', 'Payment details / notes', 'textarea']].map(([key, label, type]) => `<label class="form-field">${label}${type === 'currency' ? `<select class="field-control" id="billing${key}" onchange="state.invoices.settingsDraft.${key}=this.value;state.invoices.billingDirty=true">${currencies.map(currency => `<option ${settings[key] === currency ? 'selected' : ''}>${currency}</option>`).join('')}</select>` : type === 'textarea' ? `<textarea class="field-control" id="billing${key}" oninput="state.invoices.settingsDraft.${key}=this.value;state.invoices.billingDirty=true">${esc(settings[key])}</textarea>` : `<input class="field-control" id="billing${key}" type="${type}" ${type === 'number' ? 'min="0" step="0.01" max="1000000"' : ''} value="${esc(settings[key])}" oninput="state.invoices.settingsDraft.${key}=this.value;state.invoices.billingDirty=true">`}</label>`).join('')}
+        </div><div class="invoice-toolbar" style="margin-top:14px"><button class="btn" onclick="saveBillingDefaults()">Save billing defaults</button><button class="btn" onclick="resetBillingDefaults()">Reload saved defaults</button></div></fieldset>
+      </details>
+      <section id="invoiceEditor" class="invoice-band">
+        <div class="invoice-toolbar"><h3>${esc(invoice.number || 'New draft')}</h3><span class="invoice-status">${esc(invoice.status)}${workspace.dirty ? ' · Unsaved changes' : ''}</span><span class="spacer"></span>
+          <button class="btn" data-invoice-command title="Previous billing period" aria-label="Previous invoice period" onclick="moveInvoiceCycle(-1)">&#8592;</button>
+          <strong>${displayDateRange(invoice.periodStart, invoice.periodEnd)}</strong>
+          <button class="btn" data-invoice-command title="Next billing period" aria-label="Next invoice period" onclick="moveInvoiceCycle(1)">&#8594;</button></div>
+        <fieldset id="invoiceEditorFields" class="invoice-fields" ${readonly ? 'disabled' : ''}>
+          <div class="form-grid">
+            <label class="form-field">Client<input class="field-control" list="invoiceClientNames" value="${esc(invoice.client)}" maxlength="100" onchange="setInvoiceClient(this.value)"><datalist id="invoiceClientNames">${clients.map(client => `<option value="${esc(client)}"></option>`).join('')}</datalist></label>
+            <label class="form-field">Currency<select class="field-control" ${invoice.lines.length ? 'disabled' : ''} onchange="setInvoiceField('currency',this.value);renderInvoices()">${currencies.map(currency => `<option ${invoice.currency === currency ? 'selected' : ''}>${currency}</option>`).join('')}</select></label>
+            <label class="form-field">Billing timeline<select class="field-control" id="invoicePeriodMode" onchange="setInvoiceRange('periodMode',this.value)"><option value="fortnight" ${(invoice.periodMode || 'fortnight') === 'fortnight' ? 'selected' : ''}>Two weeks</option><option value="custom" ${invoice.periodMode === 'custom' ? 'selected' : ''}>Custom dates</option></select></label>
+            <label class="form-field">From<input class="field-control" id="invoicePeriodStart" type="date" value="${esc(invoice.periodStart)}" onchange="setInvoiceRange('periodStart',this.value)"></label>
+            <label class="form-field">Through<input class="field-control" id="invoicePeriodEnd" type="date" value="${esc(invoice.periodEnd)}" ${(invoice.periodMode || 'fortnight') === 'fortnight' ? 'disabled' : ''} onchange="setInvoiceRange('periodEnd',this.value)"></label>
+            <label class="form-field">Count videos by<select class="field-control" id="invoiceVideoDateBasis" onchange="setInvoiceVideoFilter('videoDateBasis',this.value)"><option value="planned" ${invoice.videoDateBasis !== 'completed' ? 'selected' : ''}>Scheduled overlap</option><option value="completed" ${invoice.videoDateBasis === 'completed' ? 'selected' : ''}>Completed in range</option></select></label>
+            <label class="form-field">Video source<select class="field-control" id="invoiceVideoScope" onchange="setInvoiceVideoFilter('videoScope',this.value)"><option value="leaf" ${!invoice.videoScope || invoice.videoScope === 'leaf' ? 'selected' : ''}>Individual tasks (no subtasks)</option><option value="topLevel" ${invoice.videoScope === 'topLevel' ? 'selected' : ''}>Top-level tasks</option><option value="all" ${invoice.videoScope === 'all' ? 'selected' : ''}>All video tasks</option></select></label>
+            ${[['issueDate', 'Issue date', 'date'], ['dueDate', 'Due date', 'date'], ['senderName', 'From', 'text'], ['defaultRate', 'Hourly rate for new lines', 'number']].map(([key, label, type]) => `<label class="form-field">${label}<input class="field-control" type="${type}" ${type === 'number' ? 'min="0" max="1000000" step="0.01"' : 'maxlength="200"'} value="${esc(invoice[key])}" oninput="setInvoiceField('${key}',this.value)"></label>`).join('')}
+            ${[['senderDetails', 'Your address / contact'], ['clientDetails', 'Bill to address / contact'], ['notes', 'Payment details / notes']].map(([key, label]) => `<label class="form-field ${key === 'notes' ? 'full' : ''}">${label}<textarea class="field-control" maxlength="${key === 'notes' ? 1500 : 1000}" oninput="setInvoiceField('${key}',this.value)">${esc(invoice[key])}</textarea></label>`).join('')}
+          </div>
+          <div class="invoice-toolbar" style="margin-top:18px"><output id="invoiceVideoCount" aria-live="polite"><strong>${videos.length} videos found</strong> · ${invoice.lines.length} invoice lines</output><span class="spacer"></span>
+            <label><input id="invoiceIncludeUnassigned" type="checkbox" ${invoice.includeUnassigned ? 'checked' : ''} onchange="setInvoiceVideoFilter('includeUnassigned',this.checked)"> Include unassigned</label>
+            <button class="btn btn-primary" id="addMatchingVideosBtn" ${!newVideoCount ? 'disabled' : ''} onclick="addMatchingInvoiceVideos()">Add ${newVideoCount} matching videos</button></div>
+          <div class="invoice-toolbar"><label>Video <select id="invoiceVideoPicker" class="field-control" style="max-width:260px"><option value="">Choose a matching video</option>${videos.map(task => `<option value="${esc(task.id)}">${esc(task.name)} (${esc(task.id)})${(task.clients || []).length ? '' : ' · Unassigned'}</option>`).join('')}</select></label>
+            <button class="btn" onclick="if($('invoiceVideoPicker').value)addInvoiceLine($('invoiceVideoPicker').value)">Add video</button>
+            <button class="btn" onclick="addInvoiceLine()">Add manual line</button>
+          </div>
+          <div class="table-wrap"><table class="invoice-lines"><thead><tr><th>Video / Description</th><th>Hours</th><th>Hourly rate</th><th>Amount</th><th></th></tr></thead><tbody>
+            ${invoice.lines.map((line, index) => `<tr><td><input class="field-control description-input" aria-label="Description line ${index + 1}" maxlength="200" value="${esc(line.description)}" oninput="setInvoiceLine(${index},'description',this.value)">${line.taskId ? `<div class="task-meta">${esc(line.taskId)}</div>` : ''}</td>
+              <td><input class="field-control" aria-label="Hours line ${index + 1}" type="number" min="0" max="10000" step="0.01" value="${esc(line.hours)}" oninput="setInvoiceLine(${index},'hours',this.value)"></td>
+              <td><input class="field-control" aria-label="Rate line ${index + 1}" type="number" min="0" max="1000000" step="0.01" value="${esc(line.rate)}" oninput="setInvoiceLine(${index},'rate',this.value)"></td>
+              <td><output id="invoiceLineAmount${index}">${invoiceAmount(line.hours, line.rate) === null ? 'Invalid amount' : esc(invoiceMoney(invoiceAmount(line.hours, line.rate), invoice.currency))}</output></td>
+              <td><button class="btn" aria-label="Remove invoice line ${index + 1}" title="Remove line" onclick="removeInvoiceLine(${index})">&#215;</button></td></tr>`).join('') || '<tr><td colspan="5">No invoice lines.</td></tr>'}
+          </tbody></table></div>
+          <div class="invoice-toolbar" style="margin-top:16px"><button class="btn" onclick="saveCurrentInvoice('Draft')">Save draft</button><button class="btn btn-primary" onclick="saveCurrentInvoice('Issued')">Issue invoice</button></div>
+        </fieldset>
+        <div class="invoice-toolbar">
+          ${invoice.status === 'Issued' ? `<button class="btn" data-invoice-command onclick="setSavedInvoiceStatus('Paid')">Mark paid</button><button class="btn" data-invoice-command onclick="setSavedInvoiceStatus('Void')">Void invoice</button>` : ''}
+          ${invoice.status === 'Draft' && invoice.revision ? '<button class="btn" data-invoice-command onclick="deleteCurrentInvoice()">Delete draft</button>' : ''}
+          <span class="spacer"></span><button class="btn" onclick="printCurrentInvoice()">Print / PDF</button><button class="btn" onclick="downloadInvoiceCsv()">Download CSV</button><button class="btn" onclick="copyInvoiceText()">Copy text</button>
+        </div>
+      </section>
+      <article id="invoicePrintable" class="invoice-paper" aria-label="Client invoice preview"></article>
+      <section id="invoiceHistory" class="invoice-band"><div class="invoice-toolbar"><h3>Saved invoices</h3><label>Client <select class="field-control" onchange="state.invoices.historyClient=this.value;state.invoices.historyPage=1;renderInvoices()"><option value="">All clients</option>${clients.map(client => `<option value="${esc(client)}" ${workspace.historyClient === client ? 'selected' : ''}>${esc(client)}</option>`).join('')}</select></label></div><div id="invoiceHistoryTable" class="table-wrap"></div></section>`;
+    renderInvoiceHistory();
+    updateInvoicePreview();
+    updateInvoiceBusy();
+    refreshDateInputLabels();
+  }
+
+  function updateInvoicePreview() {
+    const invoice = state.invoices.editor;
+    if (!invoice || !$('invoicePrintable')) return;
+    const totals = invoiceTotals(invoice);
+    $('invoicePrintable').innerHTML = `<div class="invoice-paper-head"><div><h2>INVOICE</h2><strong>${esc(invoice.number || 'Unsaved draft')}</strong><div class="invoice-status">${esc(invoice.status)}</div></div><div>Issue date: ${displayDate(invoice.issueDate)}<br>Due: ${displayDate(invoice.dueDate)}<br>Period: ${displayDateRange(invoice.periodStart, invoice.periodEnd)}<br>Currency: ${esc(invoice.currency)}</div></div>
+      <div class="invoice-paper-head"><div class="invoice-party"><strong>${esc(invoice.senderName || 'Your name / business')}</strong><br>${esc(invoice.senderDetails)}</div><div class="invoice-party">Bill to<br><strong>${esc(invoice.client || 'Client')}</strong><br>${esc(invoice.clientDetails)}</div></div>
+      <table><thead><tr><th>Description</th><th class="amount">Hours</th><th class="amount">Rate</th><th class="amount">Amount</th></tr></thead><tbody>${invoice.lines.map(line => `<tr><td>${esc(line.description)}</td><td class="amount">${esc(line.hours)}</td><td class="amount">${esc(invoiceMoney(Number(line.rate || 0) * 100, invoice.currency))}</td><td class="amount">${invoiceAmount(line.hours, line.rate) === null ? 'Invalid amount' : esc(invoiceMoney(invoiceAmount(line.hours, line.rate), invoice.currency))}</td></tr>`).join('')}</tbody></table>
+      <div class="invoice-total"><span>${invoice.lines.length} ${invoice.lines.length === 1 ? 'video' : 'videos'} · ${totals.hoursUnits / 100} hours · Total</span><strong>${totals.invalid ? 'Check line amounts' : esc(invoiceMoney(totals.minor, invoice.currency))}</strong></div>
+      ${invoice.notes ? `<div class="invoice-party" style="margin-top:20px">${esc(invoice.notes)}</div>` : ''}`;
+  }
+
+  function renderInvoiceHistory() {
+    const workspace = state.invoices;
+    const records = workspace.records.filter(record => !workspace.historyClient || record.client === workspace.historyClient);
+    const pages = Math.max(1, Math.ceil(records.length / 10));
+    workspace.historyPage = Math.min(pages, Math.max(1, workspace.historyPage));
+    $('invoiceHistoryTable').innerHTML = records.length ? `<table><thead><tr><th>Invoice</th><th>Client</th><th>Period</th><th>Status</th><th>Total</th></tr></thead><tbody>${records.slice((workspace.historyPage - 1) * 10, workspace.historyPage * 10).map(record => `<tr><td><button class="subtask-link" onclick="openSavedInvoice(${esc(JSON.stringify(record.id))})">${esc(record.number)}</button></td><td>${esc(record.client)}</td><td>${displayDateRange(record.periodStart, record.periodEnd, true)}</td><td>${esc(record.status)}</td><td>${esc(invoiceMoney(record.totalMinor, record.currency))}</td></tr>`).join('')}</tbody></table><div class="invoice-toolbar"><button class="btn" ${workspace.historyPage === 1 ? 'disabled' : ''} onclick="state.invoices.historyPage--;renderInvoiceHistory()" aria-label="Previous invoices">&#8592;</button><span>Page ${workspace.historyPage} / ${pages}</span><button class="btn" ${workspace.historyPage === pages ? 'disabled' : ''} onclick="state.invoices.historyPage++;renderInvoiceHistory()" aria-label="Next invoices">&#8594;</button></div>` : '<div class="subtask-empty">No saved invoices.</div>';
+  }
+
+  function invoiceMutation() {
+    return mutationRunner().withReconciliationHandler(() => loadInvoiceWorkspace(true)).withFailureHandler(error => {
+      state.invoices.error = String(error.message || error);
+      showToast('Invoice action failed: ' + state.invoices.error);
+    });
+  }
+
+  function saveCurrentInvoice(status) {
+    if (state.writing || state.syncing) return;
+    if (status === 'Issued' && !confirm('Issue this invoice? Its saved line items will become read-only.')) return;
+    const document = { ...state.invoices.editor, lines: state.invoices.editor.lines.map(line => ({ ...line })), status };
+    invoiceMutation().withSuccessHandler(result => {
+      state.invoices.editor = result.invoice;
+      state.invoices.dirty = false;
+      showToast(result.message);
+      loadInvoiceWorkspace(true);
+    }).saveInvoice(document);
+  }
+
+  function saveBillingDefaults() {
+    if (state.writing || state.syncing) return;
+    invoiceMutation().withSuccessHandler(result => {
+      state.invoices.settings = result.settings;
+      state.invoices.settingsDraft = { ...result.settings };
+      state.invoices.settingsRevision = result.revision;
+      state.invoices.billingDirty = false;
+      if (!state.invoices.dirty && !state.invoices.editor.revision) state.invoices.editor = newInvoiceDocument();
+      showToast(result.message);
+      loadInvoiceWorkspace(true);
+    }).saveInvoiceSettings(state.invoices.settingsDraft, state.invoices.settingsRevision);
+  }
+
+  function resetBillingDefaults() {
+    if (state.writing || state.syncing || state.invoices.loading) return;
+    if (state.invoices.billingDirty && !confirm('Discard unsaved billing-default changes?')) return;
+    state.invoices.billingDirty = false;
+    loadInvoiceWorkspace();
+  }
+
+  function openSavedInvoice(id) {
+    const workspace = state.invoices;
+    if (state.writing || state.syncing || workspace.loading) return;
+    if (workspace.dirty && !confirm('Discard the unsaved invoice changes and open this saved invoice?')) return;
+    const request = ++workspace.request;
+    workspace.loading = true;
+    updateInvoiceBusy();
+    google.script.run.withSuccessHandler(result => {
+      if (request !== workspace.request) return;
+      workspace.editor = result.invoice;
+      workspace.dirty = false;
+      workspace.loading = false;
+      workspace.error = '';
+      renderInvoices();
+    }).withFailureHandler(error => {
+      if (request !== workspace.request) return;
+      workspace.loading = false;
+      workspace.error = String(error.message || error);
+      renderInvoices();
+    }).getInvoice(id);
+  }
+
+  function setSavedInvoiceStatus(status) {
+    if (state.writing || state.syncing) return;
+    const invoice = state.invoices.editor;
+    if (!confirm(`${status === 'Paid' ? 'Record payment for' : 'Void'} ${invoice.number}?`)) return;
+    invoiceMutation().withSuccessHandler(result => {
+      state.invoices.editor = result.invoice;
+      showToast(result.message);
+      loadInvoiceWorkspace(true);
+    }).changeInvoiceStatus(invoice.id, invoice.revision, status);
+  }
+
+  function deleteCurrentInvoice() {
+    const invoice = state.invoices.editor;
+    if (state.writing || state.syncing || !confirm(`Delete draft ${invoice.number}?`)) return;
+    invoiceMutation().withSuccessHandler(result => {
+      state.invoices.editor = newInvoiceDocument();
+      state.invoices.dirty = false;
+      showToast(result.message);
+      loadInvoiceWorkspace(true);
+    }).deleteInvoiceDraft(invoice.id, invoice.revision);
+  }
+
+  function invoiceReadyForCopy() {
+    const invoice = state.invoices.editor;
+    if (!invoice.client.trim() || !invoice.senderName.trim() || !invoice.lines.length || invoice.lines.some(line =>
+      !line.description.trim() || !Number(line.hours) || !Number(line.rate) || invoiceAmount(line.hours, line.rate) === null)) {
+      showToast('Enter client, sender, descriptions, positive hours and rates before creating a client copy.');
+      return false;
+    }
+    return true;
+  }
+
+  function printCurrentInvoice() {
+    if (!invoiceReadyForCopy()) return;
+    updateInvoicePreview();
+    window.print();
+  }
+
+  function downloadInvoiceCsv() {
+    if (!invoiceReadyForCopy()) return;
+    const invoice = state.invoices.editor;
+    const rows = [['Invoice', invoice.number || 'Draft'], ['Client', invoice.client], ['Status', invoice.status], ['Currency', invoice.currency],
+      ['Period start', formatDisplayDate(invoice.periodStart)], ['Period end', formatDisplayDate(invoice.periodEnd)], ['Videos', invoice.lines.length], [], ['Description', 'Hours', 'Hourly rate', 'Amount'],
+      ...invoice.lines.map(line => [line.description, line.hours, line.rate, (invoiceAmount(line.hours, line.rate) / 100).toFixed(2)]),
+      ['Total', '', '', (invoiceTotals(invoice).minor / 100).toFixed(2)]];
+    const text = '\uFEFF' + rows.map(row => row.map(invoiceCsvCell).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = (invoice.number || 'Invoice-Draft') + '.csv';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function copyInvoiceText() {
+    if (!invoiceReadyForCopy()) return;
+    const invoice = state.invoices.editor;
+    const text = [invoice.number || 'Draft invoice', invoice.status, 'From: ' + invoice.senderName, 'Client: ' + invoice.client,
+      formatDisplayDate(invoice.periodStart) + ' - ' + formatDisplayDate(invoice.periodEnd), 'Videos: ' + invoice.lines.length, ...invoice.lines.map(line => `${line.description}: ${line.hours} hours × ${invoiceMoney(Number(line.rate) * 100, invoice.currency)} = ${invoiceMoney(invoiceAmount(line.hours, line.rate), invoice.currency)}`),
+      'Total: ' + invoiceMoney(invoiceTotals(invoice).minor, invoice.currency), 'Due: ' + formatDisplayDate(invoice.dueDate), invoice.notes].join('\n');
+    try { await navigator.clipboard.writeText(text); showToast('Invoice copied for ' + invoice.client + '.'); }
+    catch { showToast('Clipboard access is unavailable. Use Print / PDF or CSV.'); }
+  }
+
+  function invoicePeriod(anchor, reference) {
+    const offset = Math.floor(dayDiff(anchor, reference) / 14) * 14;
+    const start = addDays(anchor, offset);
+    return { start: dateKey(start), end: dateKey(addDays(start, 13)) };
+  }
+
+  function invoiceAmount(hours, rate) {
+    if (!['number', 'string'].includes(typeof hours) || !['number', 'string'].includes(typeof rate)) return null;
+    const numberHours = Number(hours);
+    const numberRate = Number(rate);
+    if (!Number.isFinite(numberHours) || !Number.isFinite(numberRate) || numberHours < 0 || numberHours > 10000 || numberRate < 0 || numberRate > 1000000 ||
+      Math.abs(numberHours * 100 - Math.round(numberHours * 100)) > 0.000001 ||
+      Math.abs(numberRate * 100 - Math.round(numberRate * 100)) > 0.000001) return null;
+    return Math.round(Math.round(numberHours * 100) * Math.round(numberRate * 100) / 100);
+  }
+
+  function invoiceMoney(minor, currency) {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(minor / 100);
+  }
+
+  function invoiceCsvCell(value) {
+    let text = String(value == null ? '' : value);
+    if (/^\s*[=+\-@]|^[\t\r\n]/.test(text)) text = "'" + text;
+    return '"' + text.replace(/"/g, '""') + '"';
+  }
+
   function taskLabel(task) {
     return `"${task.name || 'Untitled task'}"${task.id ? ` (${task.id})` : ''}`;
   }
@@ -3046,6 +3689,14 @@ function deleteCurrentTask() {
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeModal();
+  });
+  document.addEventListener('input', event => {
+    if (event.target.matches('input[type="date"]')) refreshDateInputLabels();
+  });
+  window.addEventListener('beforeunload', event => {
+    if (!state.invoices.dirty && !state.invoices.billingDirty) return;
+    event.preventDefault();
+    event.returnValue = '';
   });
 
   let timelineFrame = null;
