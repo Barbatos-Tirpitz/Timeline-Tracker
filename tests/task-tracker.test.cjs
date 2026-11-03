@@ -276,11 +276,14 @@ function server(records, missingSheet = false, failAfter = Infinity, documentLoc
     insertColumnsAfter(column, count) { maxColumns += count; },
     copyTo() { backups.push(rows.map(row => row.slice())); return { setName() {} }; },
     getRange(row, column, height = 1, width = 1) {
+      if (typeof row === 'string') return { setNumberFormat() { return this; } };
       return {
         getValues: () => Array.from({ length: height }, (_, offset) => Array.from({ length: width }, (_, index) => rows[row - 1 + offset]?.[column - 1 + index] ?? '')),
         getValue: () => rows[row - 1]?.[column - 1] ?? '',
         getDisplayValues: () => rows.slice(row - 1, row - 1 + height).map(values => values.slice(column - 1, column - 1 + width).map(String)),
         setValues(values) {
+          assert.equal(values.length, height);
+          values.forEach(valuesRow => assert.equal(valuesRow.length, width));
           if (writes.length === failAfter) throw new Error('Injected write failure');
           writes.push({ row, column, values });
           values.forEach((valuesRow, offset) => valuesRow.forEach((value, index) => {
@@ -752,7 +755,7 @@ test('duplicate modal submission restores Save without reporting a server failur
   state.loaded = true;
   app.messages = [];
   vm.runInContext('Date.now=()=>1000; showToast=message=>messages.push(message);', app);
-  const payload = { taskName: 'Campaign', category: 'Scheduling', priority: 'Medium', startDate: '2026-11-01', endDate: '2026-11-15', description: '', parentTaskId: '', clients: [] };
+  const payload = { taskName: 'Campaign', category: 'Scheduling', priority: 'Medium', startDate: '2026-11-01', endDate: '2026-11-15', description: '', parentTaskId: '', clients: [], hours: '' };
   app.mutationRunner().withSuccessHandler(() => app.loadTasks()).createTask(payload);
   app.calls[0].success({ success: true });
   app.calls[1].success({ success: true, tasks: [] });
@@ -1015,6 +1018,130 @@ test('saved custom invoices retain their selection rules and hourly totals', () 
   assert.equal(reopened.videoScope, 'topLevel');
   assert.equal(reopened.includeUnassigned, true);
   assert.equal(reopened.totalMinor, 8750);
+});
+
+test('task hours roll up direct children exactly without rewriting dates or formulas', () => {
+  const parent = taskRow('VID-001'); parent[15] = 9;
+  const first = taskRow('VID-002', 'VID-001'); first[15] = 2.25;
+  const second = taskRow('VID-003', 'VID-001'); second[15] = 3.5;
+  const app = server([parent, first, second]);
+  app.context.initializeTaskHeaders_(app.sheet);
+  const writes = app.writes.length;
+  const tasks = app.context.getTasks().tasks;
+  assert.equal(tasks[0].hours, 9);
+  assert.equal(tasks[0].subtaskHours, 5.75);
+  assert.equal(tasks[0].totalHours, 5.75);
+  assert.equal(tasks[1].totalHours, 2.25);
+  assert.equal(app.writes.length, writes);
+  assert.equal(app.rows[1][7], '=G2-F2+1');
+});
+
+test('Hours upgrade safely appends P, rejects occupied P, and legacy reads stay zero', () => {
+  const app = server([taskRow('VID-001')]);
+  assert.equal(app.context.getTasks().tasks[0].hours, 0);
+  assert.equal(app.writes.length, 0);
+  app.context.upgradeTaskDatabase();
+  assert.equal(app.rows[0][15], 'Hours');
+  assert.equal(app.backups.length, 1);
+  const writes = app.writes.length;
+  app.context.upgradeTaskDatabase();
+  assert.equal(app.writes.length, writes);
+  app.rows[0][15] = 'Other';
+  assert.throws(() => app.context.initializeTaskHeaders_(app.sheet), /Column P/);
+  assert.equal(app.writes.length, writes);
+  for (const value of [-1, Infinity, NaN, 1.111, 10001, true]) assert.throws(() => app.context.normalizeTaskHours_(value), /Hours/);
+  assert.equal(app.context.normalizeTaskHours_(''), 0);
+});
+
+test('single and bulk hours-only writes never touch schedule, actual dates or Duration formulas', () => {
+  const parent = taskRow('VID-001');
+  const first = taskRow('VID-002', 'VID-001'); first[5] = new Date(2026, 10, 3); first[6] = new Date(2026, 10, 7);
+  const second = taskRow('VID-003', 'VID-001'); second[5] = new Date(2026, 10, 5); second[6] = new Date(2026, 10, 9);
+  const app = server([parent, first, second]);
+  app.context.initializeTaskHeaders_(app.sheet);
+  app.writes.length = 0;
+  app.context.updateTaskHours('VID-002', 2.25);
+  assert.deepEqual(app.writes.map(write => write.column), [16, 13]);
+  assert.equal(app.context.getTasks().tasks[0].totalHours, 2.25);
+  app.writes.length = 0;
+  app.context.updateSubtasks('VID-001', ['VID-002', 'VID-003'], { hours: 3.5 });
+  assert.deepEqual(app.writes.map(write => write.column), [16, 13]);
+  assert.equal(app.context.getTasks().tasks[0].totalHours, 7);
+  assert.equal(app.rows[2][5], first[5]);
+  assert.equal(app.rows[2][6], first[6]);
+  assert.equal(app.rows[2][7], '=G2-F2+1');
+  const count = app.writes.length;
+  assert.throws(() => app.context.updateTaskHours('VID-001', 10), /calculated from subtasks/);
+  assert.equal(app.writes.length, count);
+  app.context.updateTaskHours('VID-002', 0);
+  assert.equal(app.rows[2][15], 0);
+});
+
+test('normal detail/drag updates preserve omitted hours and new subtasks start at zero', () => {
+  const parent = taskRow('VID-001'); parent[5] = new Date(2026, 10, 1); parent[6] = new Date(2026, 10, 10);
+  const app = server([parent]);
+  app.context.initializeTaskHeaders_(app.sheet);
+  app.context.updateTaskHours('VID-001', 9);
+  app.context.updateTask({ taskId: 'VID-001', taskName: 'Moved', category: 'Video editing', priority: 'High', startDate: '2026-11-02', endDate: '2026-11-11' });
+  assert.equal(app.rows[1][15], 9);
+  app.context.createSubtasks('VID-001', ['Step'], 2);
+  assert.equal(app.rows[2][15], 0);
+  assert.equal(app.rows[3][15], 0);
+  assert.equal(app.context.getTasks().tasks[0].totalHours, 0);
+  assert.equal(app.context.getTasks().tasks[0].hours, 9);
+});
+
+test('hour metrics and progress weight child hours and do not count parent totals twice', () => {
+  const app = client();
+  const tasks = [listTask('VID-1', '', { hours: 9 }), listTask('VID-2', 'VID-1', { hours: 3, status: 'Done' }), listTask('VID-3', 'VID-1', { hours: 2 }), listTask('VID-4', '', { hours: 1.5, status: 'Done' })];
+  app.applyTaskHourRollups(tasks);
+  assert.equal(tasks[0].totalHours, 5);
+  assert.equal(tasks[0].completedHours, 3);
+  const summary = app.taskHourMetrics(tasks, tasks);
+  assert.equal(summary.total, 6.5);
+  assert.equal(summary.completed, 4.5);
+  assert.equal(app.taskHourMetrics([tasks[0]], tasks).total, 0);
+  assert.equal(app.taskHourMetrics([tasks[0], tasks[1]], tasks).total, 3);
+  assert.match(app.renderHoursProgress(3, 5), /value="60"/);
+  assert.match(app.renderHoursProgress(0, 0), /value="0"/);
+  assert.match(app.renderHoursProgress(3, 5), /3 \/ 5 hours/);
+});
+
+test('editing only a subtask hours value routes through the hours-only endpoint', () => {
+  const app = loadingClient();
+  const state = app.getState();
+  const child = listTask('VID-2', 'VID-1', { hours: 2, totalHours: 2, category: 'Video editing', start: app.parseDate('2026-11-03'), end: app.parseDate('2026-11-07') });
+  state.loaded = true;
+  state.editId = child.id;
+  state.taskById.set(child.id, child);
+  state.tasks = [child];
+  for (const [id, value] of Object.entries({ taskName: child.name, category: child.category, priority: child.priority, startDate: '2026-11-03', endDate: '2026-11-07', description: '', parentTaskId: '', taskStatus: child.status, taskHours: '3.5' })) app.elements.set(id, { value });
+  app.elements.set('formError', { style: {} });
+  app.elements.set('saveBtn', {});
+  app.saveTask({ preventDefault() {} });
+  assert.equal(app.calls[0].method, 'updateTaskHours');
+  assert.deepEqual(Array.from(app.calls[0].args), ['VID-2', '3.5']);
+});
+
+test('completed hours and parent totals update on reopening, transfer and deletion without changing planned dates', () => {
+  const first = taskRow('VID-002', 'VID-001', 'Done'); first[15] = 2.25; first[5] = new Date(2026, 10, 3); first[6] = new Date(2026, 10, 7);
+  const second = taskRow('VID-003', 'VID-001', 'To Do'); second[15] = 3.5;
+  const app = server([taskRow('VID-001'), first, second, taskRow('VID-004')]);
+  app.context.initializeTaskHeaders_(app.sheet);
+  assert.equal(app.context.getTasks().tasks[0].completedHours, 2.25);
+  app.context.updateTaskStatus('VID-003', 'Done');
+  assert.equal(app.context.getTasks().tasks[0].completedHours, 5.75);
+  app.context.updateTaskStatus('VID-003', 'To Do');
+  assert.equal(app.context.getTasks().tasks[0].completedHours, 2.25);
+  app.context.setTaskParent('VID-002', 'VID-004');
+  const moved = app.context.getTasks().tasks;
+  assert.equal(moved.find(task => task.taskId === 'VID-001').totalHours, 3.5);
+  assert.equal(moved.find(task => task.taskId === 'VID-004').totalHours, 2.25);
+  assert.equal(app.rows[2][15], 2.25);
+  assert.equal(app.rows[2][5], first[5]);
+  assert.equal(app.rows[2][6], first[6]);
+  app.context.deleteTask('VID-002');
+  assert.equal(app.context.getTasks().tasks.find(task => task.taskId === 'VID-004').totalHours, 0);
 });
 
 test('display dates use readable full and compact English months without changing stored date keys', () => {

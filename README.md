@@ -83,6 +83,20 @@ The application supports a parent-child task structure.
 
 **Current hierarchy depth:** One subtask level.
 
+## Hours and Hours Progress
+
+Each subtask stores its own Hours, separate from planned start/end, actual work dates and the calendar-day Duration formula. Enter 0-10,000 hours with up to two decimals. A standalone task can also store its own hours. New subtasks start at zero rather than copying the parent's accumulated hours.
+
+A parent with children shows a read-only sum of all direct subtask hours, even when children are collapsed or filtered out. Timeline labels/tooltips, task details, subtask rows and the sortable Hours column display this total. An existing standalone hours value is retained if that task becomes a parent, but is excluded from its child rollup; it becomes visible again if the task has no children.
+
+**Hours progress** is the hours on Done subtasks divided by total subtask hours, not the percentage of subtask counts. For example, a Done 3-hour child and an unfinished 2-hour child produce 3 / 5 hours and 60%. Zero total hours produces 0%, never a divide-by-zero value. Reopening a child reduces completed hours without erasing its recorded hours. Accessible progress bars appear in the parent details, frozen timeline labels and Hours logged metric. Existing task-count progress remains separate.
+
+Global and dashboard hour metrics sum leaf-task hours once, never both parent rollups and their children. Dashboard date/client filters apply to the leaf records and use the full hierarchy to avoid double counting context parents. These are stored task totals for the selected schedule range, not dated work-session logs or prorated hours.
+
+Bulk Apply Hours assigns the same chosen value to every selected child, leaving unchecked fields unchanged. Hours-only saves write column P and Updated At only. They never alter timeline bar position/width/height, task dates, Duration formulas or invoice hours. Transfers/deletions change parent rollups on refresh but preserve the hours of remaining tasks. Invoice line hours and saved invoice snapshots stay independently controlled.
+
+Hours is stored in column P, after Clients in O. Existing/blank task hours read as zero without implicit writes. Before recording hours on an existing spreadsheet, run **Task Manager > Upgrade Categories, Clients and Hours (with backup)**. The upgrade rejects occupied P, preserves prior task columns/formulas, and creates a backup before adding the header. Deploy both frontend and backend together and verify the upgrade on a copied spreadsheet first.
+
 ## Categories and Clients
 
 Task categories are exactly **Graphic Design**, **Video editing**, and **Scheduling**. Clients are a separate optional field: a task may have several clients, or none (Unassigned).
@@ -117,7 +131,7 @@ Creation, existing subtasks, bulk editing, and collapsed Parent management have 
 
 The subtask panel displays 25 children per page. Selection persists across its pages, is separate from All tasks selection, and resets when changing the selected task or closing the dialog. Select visible never includes another page automatically.
 
-Selected children support status updates, confirmed deletion, and bulk edits to category, priority, clients, and planned dates. Each edit field has an explicit Apply switch: unchecked fields remain unchanged. Applying Clients replaces assignments; applying an empty selection clears them. A single planned-date edit preserves the other date and is validated against every selected task before writes.
+Selected children support status updates, confirmed deletion, and bulk edits to category, priority, clients, hours per subtask, and planned dates. Each edit field has an explicit Apply switch: unchecked fields remain unchanged. Applying Clients replaces assignments; applying an empty selection clears them. A single planned-date edit preserves the other date and is validated against every selected task before writes.
 
 The server checks that every selected task still belongs directly to the chosen parent under the same lock as the write. Bulk transfer is not included. Spreadsheet runtime failures can still leave partial writes; reconciliation reloads data without retrying a mutation.
 
@@ -198,8 +212,8 @@ Before production deployment, use a copy of the spreadsheet to verify:
 
 Update both [App.html](App.html) and [code.gs](code.gs) in the spreadsheet's bound Apps Script project; keep the HTML filename `App`. Test on a spreadsheet copy first and pause normal writes during the production upgrade.
 
-1. For a fresh spreadsheet, run Initialize Task Database. For existing data, use Task Manager > Upgrade Categories and Clients (with backup) from the spreadsheet menu (reload the spreadsheet to refresh the menu).
-2. Confirm the upgrade. It preflights headers/categories, copies Task_Master to a timestamped backup, adds Clients in column O, and maps Graphics to Graphic Design and the other six known legacy categories to Video editing. Existing new-category values remain unchanged. Unknown/blank categories or occupied column O stop the upgrade before migration writes; resolve them explicitly and retry.
+1. For a fresh spreadsheet, run Initialize Task Database. For existing data, use Task Manager > Upgrade Categories, Clients and Hours (with backup) from the spreadsheet menu (reload the spreadsheet to refresh the menu).
+2. Confirm the upgrade. It preflights headers/categories/clients/hours, copies Task_Master to a timestamped backup, adds Clients in column O and Hours in P, and maps Graphics to Graphic Design and the other six known legacy categories to Video editing. Existing new-category values remain unchanged. Unknown/blank categories, invalid stored hours or occupied O/P stop the upgrade before migration writes; resolve them explicitly and retry.
 3. Check the backup, new headers, migrated categories, formulas, and existing client data. Re-running an already completed upgrade makes no further category changes or backups.
 4. Publish a new web-app deployment version with the updated backend and frontend together, then perform the live checks above.
 

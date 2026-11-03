@@ -16,7 +16,8 @@ const CONFIG = {
   'Created At',
   'Updated At',
   'Parent Task ID',
-  'Clients'
+  'Clients',
+  'Hours'
   ],
   CATEGORIES: [
     'Graphic Design',
@@ -48,7 +49,7 @@ function onOpen() {
     .createMenu('Task Manager')
     .addItem('Build / Refresh Timeline', 'setupTimeline')
     .addItem('Initialize Task Database', 'setupTaskDatabase')
-    .addItem('Upgrade Categories and Clients (with backup)', 'upgradeTaskDatabase')
+    .addItem('Upgrade Categories, Clients and Hours (with backup)', 'upgradeTaskDatabase')
     .addToUi();
 }
 
@@ -93,6 +94,33 @@ function validateTaskHeaders_(sheet) {
     if (parentHeader && parentHeader !== 'Parent Task ID') throw new Error('Column N is already in use. Inspect Task_Master before upgrading.');
   }
   hasClientsColumn_(sheet);
+  hasHoursColumn_(sheet);
+}
+
+function normalizeTaskHours_(value, taskId = '') {
+  if (value === '' || value == null) return 0;
+  const number = Number(value);
+  if (!['number', 'string'].includes(typeof value) || !Number.isFinite(number) || number < 0 || number > 10000 ||
+      Math.abs(number * 100 - Math.round(number * 100)) > 0.000001) {
+    throw new Error('Hours' + (taskId ? ' for ' + taskId : '') + ' must be between 0 and 10000, with at most two decimal places.');
+  }
+  return Math.round(number * 100) / 100;
+}
+
+function hasHoursColumn_(sheet) {
+  if (sheet.getMaxColumns() < 16) return false;
+  const header = sheet.getRange(1, 16).getValue();
+  if (header && header !== 'Hours') throw new Error('Column P is already in use. Inspect Task_Master before upgrading.');
+  if (!header && sheet.getLastRow() > 1 && sheet.getRange(2, 16, sheet.getLastRow() - 1, 1).getValues().some(row => row[0] !== '')) {
+    throw new Error('Column P contains data without an Hours header. Inspect Task_Master before upgrading.');
+  }
+  return header === 'Hours';
+}
+
+function taskReadWidth_(sheet) {
+  const clients = hasClientsColumn_(sheet);
+  const hours = hasHoursColumn_(sheet);
+  return hours ? 16 : clients ? 15 : Math.min(14, sheet.getMaxColumns());
 }
 
 function initializeTaskHeaders_(sheet) {
@@ -111,7 +139,7 @@ function categoryForUpgrade_(category) {
 
 function upgradeTaskDatabase() {
   const ui = SpreadsheetApp.getUi();
-  if (ui.alert('Upgrade task database?', 'Create a backup, add Clients in column O, and migrate task categories?', ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+  if (ui.alert('Upgrade task database?', 'Create a backup, add Clients in column O and Hours in column P, and migrate task categories?', ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
@@ -119,28 +147,31 @@ function upgradeTaskDatabase() {
     const sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
     if (!sheet) throw new Error('Initialize Task_Master first.');
     validateTaskHeaders_(sheet);
-    const width = Math.min(15, sheet.getMaxColumns());
+    const width = taskReadWidth_(sheet);
     const rows = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, width).getValues() : [];
     const changes = [];
     const withClients = hasClientsColumn_(sheet);
+    const withHours = hasHoursColumn_(sheet);
     rows.forEach((values, index) => {
       if (!values[0]) return;
       if (withClients) readClients_(values[14], values[0]);
+      if (withHours) normalizeTaskHours_(values[15], values[0]);
       const category = categoryForUpgrade_(String(values[2] || ''));
       if (category !== values[2]) changes.push({ rowNumber: index + 2, category });
     });
-    if (!changes.length && hasClientsColumn_(sheet)) {
+    if (!changes.length && withClients && withHours) {
       ss.toast('Database is already upgraded.', 'Task Manager', 5);
       return;
     }
     sheet.copyTo(ss).setName('Task_Backup_' + Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyyMMdd_HHmmss_SSS'));
     initializeTaskHeaders_(sheet);
+    sheet.getRange('P:P').setNumberFormat('0.00');
     const now = new Date();
     contiguousRows_(changes).forEach(group => {
       sheet.getRange(group[0].rowNumber, 3, group.length, 1).setValues(group.map(record => [record.category]));
       sheet.getRange(group[0].rowNumber, 13, group.length, 1).setValues(group.map(() => [now]));
     });
-    ss.toast('Categories and Clients upgraded. Backup created.', 'Task Manager', 5);
+    ss.toast('Categories, Clients and Hours upgraded. Backup created.', 'Task Manager', 5);
   } finally {
     lock.releaseLock();
   }
@@ -160,7 +191,7 @@ function setupTaskDatabase() {
   // Apply database formatting.
   sheet.setFrozenRows(1);
 
-  sheet.getRange('A1:O1')
+  sheet.getRange('A1:P1')
     .setFontWeight('bold')
     .setBackground('#1F2937')
     .setFontColor('#FFFFFF');
@@ -168,6 +199,7 @@ function setupTaskDatabase() {
   sheet.getRange('F:G').setNumberFormat('mmm d, yyyy');
   sheet.getRange('J:K').setNumberFormat('mmm d, yyyy');
   sheet.getRange('H:H').setNumberFormat('0');
+  sheet.getRange('P:P').setNumberFormat('0.00');
   sheet.getRange('L:M').setNumberFormat('mmm d, yyyy hh:mm');
 
   sheet.autoResizeColumns(1, CONFIG.HEADERS.length);
@@ -197,6 +229,7 @@ function getTasks() {
   const lastRow = sheet.getLastRow();
   const spreadsheetToday = Utilities.formatDate(new Date(), timezone, 'yyyy-MM-dd');
   const withClients = hasClientsColumn_(sheet);
+  const withHours = hasHoursColumn_(sheet);
 
   // Backend confirms that the database contains no task rows.
   if (lastRow < 2) {
@@ -210,7 +243,7 @@ function getTasks() {
   }
 
   const rows = sheet.getRange(
-    2, 1, lastRow - 1, withClients ? 15 : Math.min(14, sheet.getMaxColumns())
+    2, 1, lastRow - 1, taskReadWidth_(sheet)
   ).getValues();
 
   const taskRows = rows.filter(row =>
@@ -228,7 +261,8 @@ function getTasks() {
   }
 
   // Calculate child counts for every parent.
-  const childStats = {};
+  const childStats = Object.create(null);
+  const ownHours = new Map(taskRows.map(row => [String(row[0]), withHours ? normalizeTaskHours_(row[15], row[0]) : 0]));
 
   taskRows.forEach(row => {
     const parentId = String(row[13] || '').trim();
@@ -238,14 +272,18 @@ function getTasks() {
     if (!childStats[parentId]) {
       childStats[parentId] = {
         total: 0,
-        completed: 0
+        completed: 0,
+        hourUnits: 0,
+        completedHourUnits: 0
       };
     }
 
     childStats[parentId].total++;
+    childStats[parentId].hourUnits += Math.round(ownHours.get(String(row[0])) * 100);
 
     if (String(row[4]) === 'Done') {
       childStats[parentId].completed++;
+      childStats[parentId].completedHourUnits += Math.round(ownHours.get(String(row[0])) * 100);
     }
   });
 
@@ -253,7 +291,9 @@ function getTasks() {
     const taskId = String(row[0]);
     const stats = childStats[taskId] || {
       total: 0,
-      completed: 0
+      completed: 0,
+      hourUnits: 0,
+      completedHourUnits: 0
     };
 
     return {
@@ -282,6 +322,10 @@ function getTasks() {
 
       parentTaskId: String(row[13] || ''),
       clients: withClients ? readClients_(row[14], taskId) : [],
+      hours: ownHours.get(taskId),
+      subtaskHours: stats.hourUnits / 100,
+      totalHours: stats.total ? stats.hourUnits / 100 : ownHours.get(taskId),
+      completedHours: stats.total ? stats.completedHourUnits / 100 : String(row[4]) === 'Done' ? ownHours.get(taskId) : 0,
       subtaskCount: stats.total,
       completedSubtaskCount: stats.completed,
 
@@ -340,6 +384,8 @@ function createTask(formData) {
     const endDate = parseLocalDate(formData.endDate);
     const description = String(formData.description || '').trim();
     const clients = formData.clients === undefined ? inheritedClients : normalizeClients_(formData.clients);
+    const hours = normalizeTaskHours_(formData.hours);
+    if (formData.hours !== undefined && !hasHoursColumn_(sheet)) throw new Error('Run Upgrade Categories, Clients and Hours from the spreadsheet menu first.');
 
     // Required-field validation.
     if (!taskName || !category || !priority ||
@@ -359,7 +405,7 @@ function createTask(formData) {
       );
     }
 
-    const taskId = appendTasks_(sheet, [{ taskName, category, priority, startDate, endDate, description, clients, parentTaskId }])[0];
+    const taskId = appendTasks_(sheet, [{ taskName, category, priority, startDate, endDate, description, clients, parentTaskId, hours }])[0];
 
     return {
       success: true,
@@ -431,6 +477,8 @@ function updateTask(formData) {
 
     const row = findTaskRow(sheet, taskId);
 
+    const hours = formData.hours === undefined ? null : normalizeTaskHours_(formData.hours, taskId);
+    if (hours !== null) assertEditableTaskHours_(sheet, taskId);
     const clients = formData.clients === undefined ? null : normalizeClients_(formData.clients);
     if (clients !== null && !hasClientsColumn_(sheet)) throw new Error('Run Upgrade Categories and Clients from the spreadsheet menu first.');
     let statusValues = null;
@@ -454,6 +502,7 @@ function updateTask(formData) {
     sheet.getRange(row, 9).setValue(description);
     sheet.getRange(row, 13).setValue(new Date());
     if (clients !== null) sheet.getRange(row, 15).setValue(JSON.stringify(clients));
+    if (hours !== null) sheet.getRange(row, 16).setValue(hours);
 
     if (statusValues) {
       writeStatusRows_(sheet, [{ rowNumber: row, values: statusValues }]);
@@ -470,6 +519,31 @@ function updateTask(formData) {
 }
 
 // Updates status and actual work dates.
+function assertEditableTaskHours_(sheet, taskId, rows) {
+  if (!hasHoursColumn_(sheet)) throw new Error('Run Upgrade Categories, Clients and Hours from the spreadsheet menu first.');
+  const parents = rows ? rows.map(values => [values[13]])
+    : sheet.getLastRow() > 1 ? sheet.getRange(2, 14, sheet.getLastRow() - 1, 1).getValues() : [];
+  if (parents.some(values => String(values[0] || '').trim() === taskId)) {
+    throw new Error('Parent hours are calculated from subtasks. Update the subtask hours instead.');
+  }
+}
+
+function updateTaskHours(taskId, value) {
+  const hours = normalizeTaskHours_(value, taskId);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const selection = readTaskSelection_([taskId]);
+    assertEditableTaskHours_(selection.sheet, selection.ids[0], selection.rows);
+    const row = selection.selected[0].rowNumber;
+    selection.sheet.getRange(row, 16).setValue(hours);
+    selection.sheet.getRange(row, 13).setValue(new Date());
+    return { success: true, taskId: selection.ids[0], hours, message: selection.ids[0] + ' hours updated.' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function updateTaskStatus(taskId, newStatus) {
   const result = updateTaskStatuses([taskId], newStatus);
   result.message = taskId + ' status changed to ' + newStatus + '.';
@@ -491,7 +565,7 @@ function readTaskSelection_(taskIds) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET_NAME);
   if (!sheet) throw new Error('Task_Master sheet not found.');
   const lastRow = sheet.getLastRow();
-  const width = hasClientsColumn_(sheet) ? 15 : Math.min(14, sheet.getMaxColumns());
+  const width = taskReadWidth_(sheet);
   const rows = lastRow < 2 ? [] : sheet.getRange(2, 1, lastRow - 1, width).getValues();
   const byId = new Map();
   rows.forEach((values, index) => {
@@ -596,7 +670,10 @@ function appendTasks_(sheet, records, existingRows) {
       record.parentTaskId || '', JSON.stringify(record.clients)];
   });
   if (lastRow + records.length > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), lastRow + records.length - sheet.getMaxRows());
-  sheet.getRange(lastRow + 1, 1, records.length, CONFIG.HEADERS.length).setValues(values);
+  const withHours = hasHoursColumn_(sheet);
+  if (!withHours && records.some(record => normalizeTaskHours_(record.hours) !== 0)) throw new Error('Run Upgrade Categories, Clients and Hours before recording hours.');
+  if (withHours) values.forEach((row, index) => row.push(normalizeTaskHours_(records[index].hours)));
+  sheet.getRange(lastRow + 1, 1, records.length, withHours ? 16 : 15).setValues(values);
   sheet.getRange(lastRow + 1, 6, records.length, 2).setNumberFormat('mmm d, yyyy');
   sheet.getRange(lastRow + 1, 12, records.length, 2).setNumberFormat('mmm d, yyyy hh:mm');
   return ids;
@@ -635,13 +712,14 @@ function createSubtasks(parentTaskId, names, quantity = 1) {
 }
 
 function updateSubtasks(parentTaskId, taskIds, patch) {
-  const allowed = ['category', 'priority', 'clients', 'startDate', 'endDate'];
+  const allowed = ['category', 'priority', 'clients', 'startDate', 'endDate', 'hours'];
   if (!patch || typeof patch !== 'object' || Array.isArray(patch) || !Object.keys(patch).length || Object.keys(patch).some(key => !allowed.includes(key))) {
     throw new Error('Choose at least one supported field to apply.');
   }
   if (patch.category !== undefined) validateCategory_(patch.category);
   if (patch.priority !== undefined && !CONFIG.PRIORITIES.includes(patch.priority)) throw new Error('Invalid task priority.');
   const clients = patch.clients === undefined ? null : normalizeClients_(patch.clients);
+  const hours = patch.hours === undefined ? null : normalizeTaskHours_(patch.hours);
   const start = patch.startDate === undefined ? null : parseLocalDate(patch.startDate);
   const end = patch.endDate === undefined ? null : parseLocalDate(patch.endDate);
   if ((patch.startDate !== undefined && !start) || (patch.endDate !== undefined && !end)) throw new Error('Choose valid planned dates.');
@@ -650,6 +728,11 @@ function updateSubtasks(parentTaskId, taskIds, patch) {
   try {
     const selection = readTaskSelection_(taskIds);
     assertSubtaskSelection_(selection, parentTaskId);
+    if (hours !== null) {
+      if (!hasHoursColumn_(selection.sheet)) throw new Error('Run Upgrade Categories, Clients and Hours from the spreadsheet menu first.');
+      const parents = new Set(selection.rows.map(values => String(values[13] || '').trim()).filter(Boolean));
+      if (selection.selected.some(record => parents.has(String(record.values[0])))) throw new Error('Parent hours are calculated from subtasks. Update the subtask hours instead.');
+    }
     if (clients !== null && !hasClientsColumn_(selection.sheet)) throw new Error('Run Upgrade Categories and Clients first.');
     if (start || end) selection.selected.forEach(record => {
       const mergedStart = start || record.values[5];
@@ -665,6 +748,7 @@ function updateSubtasks(parentTaskId, taskIds, patch) {
     if (start) fields.push([6, start]);
     if (end) fields.push([7, end]);
     if (clients !== null) fields.push([15, JSON.stringify(clients)]);
+    if (hours !== null) fields.push([16, hours]);
     fields.push([13, new Date()]);
     contiguousRows_(selection.selected).forEach(group => fields.forEach(([column, value]) => {
       selection.sheet.getRange(group[0].rowNumber, column, group.length, 1).setValues(group.map(() => [value]));

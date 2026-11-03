@@ -208,6 +208,13 @@
       gap: 14px;
       margin-bottom: 22px;
     }
+    #stats { grid-template-columns: repeat(5, minmax(100px, 1fr)); }
+    @media (max-width: 900px) { #stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .hours-progress { width: 100%; height: 7px; display: block; margin-top: 8px; accent-color: var(--green); }
+    .hours-progress.compact { display: inline-block; width: 45px; height: 5px; margin: 0 4px; vertical-align: middle; }
+    .hours-progress-summary { margin: 12px 0; font-size: 12px; color: var(--muted); }
+    .hours-progress::-webkit-progress-bar { background: #e9edf3; border-radius: 4px; }
+    .hours-progress::-webkit-progress-value { background: var(--green); border-radius: 4px; }
 
     .stat {
       background: white;
@@ -1072,6 +1079,12 @@
       <input id="endDate" type="date" required>
     </div>
 
+    <div class="form-field full">
+      <label for="taskHours" id="taskHoursLabel">Hours</label>
+      <input id="taskHours" type="number" min="0" max="10000" step="0.01" value="0">
+      <div id="taskHoursProgress"></div>
+    </div>
+
     <div class="form-field full" id="taskClientsControl"></div>
 
     <div class="form-field full">
@@ -1327,6 +1340,10 @@
     actualEndDate: parseDate(get('actualEndDate')),
     description: String(get('description') || ''),
     parentTaskId: String(get('parentTaskId') || '').trim(),
+    hours: Number(get('hours') || 0),
+    totalHours: Number(get('totalHours') || get('hours') || 0),
+    subtaskHours: Number(get('subtaskHours') || 0),
+    completedHours: Number(get('completedHours') || 0),
     subtaskCount: Number(get('subtaskCount') || 0),
     completedSubtaskCount: Number(get('completedSubtaskCount') || 0),
     progress: progressValue == null || progressValue === ''
@@ -1361,6 +1378,7 @@
         return;
       }
       state.tasks = response.tasks.map(normalizeTask);
+      applyTaskHourRollups(state.tasks);
       state.spreadsheetToday = response.spreadsheetToday || dateKey(new Date());
       if (!state.dashboard.anchor) state.dashboard.anchor = parseDate(state.spreadsheetToday);
       state.taskById = new Map(state.tasks.map(task => [task.id, task]));
@@ -1517,17 +1535,20 @@
     const count = status => tasks.filter(t => t.status === status).length;
     const total = tasks.length;
     const done = count('Done');
+    const hours = taskHourMetrics(tasks);
 
     $('stats').innerHTML = [
       ['Total tasks', total, scope],
       ['In progress', count('In Progress'), 'Currently being worked on'],
       ['Completed', done, total ? `${Math.round(done / total * 100)}% of these tasks` : 'No tasks yet'],
-      ['Blocked', count('Blocked'), 'Need attention']
-    ].map(s => `
+      ['Blocked', count('Blocked'), 'Need attention'],
+      ['Hours logged', formatHours(hours.total), `${formatHours(hours.completed)} h on completed work · ${hours.percent}%`]
+    ].map((s, index) => `
       <div class="stat">
         <div class="stat-label">${esc(s[0])}</div>
         <div class="stat-number">${s[1]}</div>
         <div class="stat-foot">${esc(s[2])}</div>
+        ${index === 4 ? renderHoursProgress(hours.completed, hours.total, false, false) : ''}
       </div>`).join('');
   }
 
@@ -1780,7 +1801,7 @@ html += `<div class="task-cell"
         
         <div class="task-info">
           <div class="task-title" title="${esc(t.name)}" onclick="openEdit('${esc(t.id)}')">${esc(t.name || 'Untitled task')}</div>
-          <div class="task-meta" title="${esc((t.clients || []).join(', ') || 'Unassigned')}">${esc(t.id)} · ${esc(t.category)} · ${esc((t.clients || []).join(', ') || 'Unassigned')}</div>
+          <div class="task-meta" title="${esc(formatHours(t.completedHours || 0) + ' / ' + formatHours(t.totalHours || 0) + ' h on completed work · ' + ((t.clients || []).join(', ') || 'Unassigned'))}">${esc(t.id)} · ${formatHours(t.totalHours || 0)} h ${renderHoursProgress(t.completedHours || 0, t.totalHours || 0, true)} · ${esc(t.category)} · ${esc((t.clients || []).join(', ') || 'Unassigned')}</div>
         </div>
       </div>`;
 
@@ -2033,7 +2054,7 @@ html += `<div class="task-cell"
           ${childCount ? `<button class="group-toggle" aria-label="${list.collapsed.has(task.id) ? 'Expand' : 'Collapse'} subtasks of ${esc(task.name)}" aria-expanded="${!list.collapsed.has(task.id)}" onclick="toggleListGroup(${argument})">${list.collapsed.has(task.id) ? '&#9654;' : '&#9660;'}</button>` : '<span class="group-toggle"></span>'}
           <div><a href="#" onclick="openEdit(${argument});return false">${esc(task.name || 'Untitled task')}</a>
           <div class="task-meta">${esc(task.id)}${contextOnly ? ' · Parent context' : ''}${!child && task.parentTaskId && !state.taskById.has(task.parentTaskId) ? ' · Parent unavailable' : ''}${childCount ? ` · ${childCount} matching subtasks` : ''}</div></div></div></td>
-        <td>${esc(task.category)}</td><td class="client-cell">${esc((task.clients || []).join(', ') || 'Unassigned')}</td><td>${esc(task.priority)}</td>
+        <td>${esc(task.category)}</td><td class="client-cell">${esc((task.clients || []).join(', ') || 'Unassigned')}</td><td>${esc(task.priority)}</td><td>${formatHours(task.totalHours || 0)} h</td>
         <td><select class="field-control row-status" aria-label="Status for ${esc(task.name)}" ${busy || contextOnly ? 'disabled' : ''} onchange="changeInlineStatus(${argument},this)">
           ${['To Do', 'In Progress', 'Blocked', 'Done'].map(status => `<option ${task.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select></td>
         <td>${displayDate(task.start)}</td><td>${displayDate(task.end)}</td></tr>`;
@@ -2048,13 +2069,13 @@ html += `<div class="task-cell"
       group.children.slice((page - 1) * 25, page * 25).forEach(child => { rows += rowHtml(child, true, false, 0); });
       if (pages > 1) {
         const argument = esc(JSON.stringify(group.root.id));
-        rows += `<tr class="child-pages"><td></td><td colspan="7"><div class="list-controls">
+        rows += `<tr class="child-pages"><td></td><td colspan="8"><div class="list-controls">
           <button class="btn" aria-label="Previous subtasks of ${esc(group.root.name)}" ${page === 1 ? 'disabled' : ''} onclick="changeChildPage(${argument},-1)">&#8592;</button>
           <span>Subtasks ${page} / ${pages}</span>
           <button class="btn" aria-label="Next subtasks of ${esc(group.root.name)}" ${page === pages ? 'disabled' : ''} onclick="changeChildPage(${argument},1)">&#8594;</button></div></td></tr>`;
       }
     });
-    const columns = [['name', 'Task'], ['category', 'Category'], ['clients', 'Clients'], ['priority', 'Priority'], ['status', 'Status'], ['start', 'Start'], ['end', 'End']];
+    const columns = [['name', 'Task'], ['category', 'Category'], ['clients', 'Clients'], ['priority', 'Priority'], ['totalHours', 'Hours'], ['status', 'Status'], ['start', 'Start'], ['end', 'End']];
     const invalidRange = list.filters.from && list.filters.to && list.filters.to < list.filters.from;
     $('taskTable').innerHTML = invalidRange
       ? '<div class="empty" role="alert"><strong>Invalid date range</strong>Through date must be on or after From date.</div>'
@@ -2087,6 +2108,10 @@ html += `<div class="task-cell"
   }
 
   function compareTasks(first, second, key, direction) {
+    if (key === 'totalHours') {
+      const difference = Number(first.totalHours || 0) - Number(second.totalHours || 0);
+      return difference ? difference * direction : first.id.localeCompare(second.id, undefined, { numeric: true });
+    }
     if (key === 'clients') {
       const firstClient = normalizeClientNames(first.clients || [])[0];
       const secondClient = normalizeClientNames(second.clients || [])[0];
@@ -2349,6 +2374,7 @@ html += `<div class="task-cell"
     b.addEventListener('click', () => switchView(b.dataset.view)));
 
   function renderSubtaskPanel(task) {
+    updateTaskHoursControl(task);
     if (state.subtaskPanel.parentId !== task.id) resetSubtaskPanel(task.id);
     const panel = $('subtasksPanel');
     const title = $('subtasksTitle');
@@ -2429,7 +2455,7 @@ html += `<div class="task-cell"
       : 0;
 
     count.textContent = children.length
-      ? `${children.length} subtasks · ${progress}% complete`
+      ? `${children.length} subtasks · ${progress}% complete · ${formatHours(task.totalHours || 0)} hours`
       : 'No subtasks yet';
 
     const childRows = displayedChildren.map(child => `
@@ -2441,7 +2467,7 @@ html += `<div class="task-cell"
             ${esc(child.name)}
           </button>
           <div class="task-meta">
-            ${esc(child.id)} · ${esc(child.category)}
+            ${esc(child.id)} · ${esc(child.category)} · ${formatHours(child.hours || 0)} h
           </div>
           ${renderSubtaskClientTags(child)}
         </div>
@@ -2493,13 +2519,14 @@ html += `<div class="task-cell"
             </div>
             <details class="subtask-edit subtask-section" ${subtaskState.editOpen ? 'open' : ''} ontoggle="state.subtaskPanel.editOpen=this.open"><summary>Bulk edit selected subtasks</summary>
               <div class="form-grid">
-                ${[['category', 'Category'], ['priority', 'Priority'], ['startDate', 'Start date'], ['endDate', 'End date']].map(([key, label]) => {
+                ${[['category', 'Category'], ['priority', 'Priority'], ['hours', 'Hours per subtask'], ['startDate', 'Start date'], ['endDate', 'End date']].map(([key, label]) => {
                   const applied = Object.prototype.hasOwnProperty.call(subtaskState.patch, key);
                   const argument = esc(JSON.stringify(key));
-                  const value = subtaskState.patch[key] || '';
+                  const value = subtaskState.patch[key] ?? '';
                   const choices = key === 'category' ? state.categories : ['Low', 'Medium', 'High'];
                   return `<div class="form-field"><label class="apply-field"><input type="checkbox" ${applied ? 'checked' : ''} onchange="toggleSubtaskField(${argument},this.checked)">Apply ${label}</label>
-                    ${key.endsWith('Date') ? `<input id="bulkValue${key}" type="date" aria-label="Bulk ${label}" value="${esc(value)}" ${applied ? '' : 'disabled'} onchange="setSubtaskPatch(${argument},this.value)">`
+                    ${key === 'hours' ? `<input id="bulkValuehours" type="number" min="0" max="10000" step="0.01" aria-label="Bulk Hours per subtask" value="${esc(value)}" ${applied ? '' : 'disabled'} onchange="setSubtaskPatch('hours',this.value)">`
+                      : key.endsWith('Date') ? `<input id="bulkValue${key}" type="date" aria-label="Bulk ${label}" value="${esc(value)}" ${applied ? '' : 'disabled'} onchange="setSubtaskPatch(${argument},this.value)">`
                       : `<select id="bulkValue${key}" aria-label="Bulk ${label}" ${applied ? '' : 'disabled'} onchange="setSubtaskPatch(${argument},this.value)">${choices.map(choice => `<option ${value === choice ? 'selected' : ''}>${esc(choice)}</option>`).join('')}</select>`}</div>`;
                 }).join('')}
                 <div class="form-field full"><label class="apply-field"><input type="checkbox" ${Object.prototype.hasOwnProperty.call(subtaskState.patch, 'clients') ? 'checked' : ''} onchange="toggleSubtaskField('clients',this.checked)">Apply Clients (replace assignments)</label>
@@ -2650,6 +2677,7 @@ function createSubtask() {
     return $('taskName').value.trim() !== parent.name || $('category').value !== parent.category ||
       $('priority').value !== parent.priority || $('startDate').value !== dateKey(parent.start) ||
       $('endDate').value !== dateKey(parent.end) || $('description').value.trim() !== parent.description ||
+      Number($('taskHours').value || 0) !== Number(parent.totalHours || 0) ||
       $('taskStatus').value !== parent.status || JSON.stringify(normalizeClientNames(state.clientSelections.taskClients || [])) !== JSON.stringify(normalizeClientNames(parent.clients || []));
   }
 
@@ -2697,6 +2725,7 @@ function createSubtask() {
     const parent = state.taskById.get(panel.parentId);
     if (!enabled) delete panel.patch[key];
     else panel.patch[key] = key === 'clients' ? state.clientSelections.bulkClients || []
+      : key === 'hours' ? 0
       : key === 'startDate' ? dateKey(parent.start) : key === 'endDate' ? dateKey(parent.end) : parent[key];
     if (key === 'clients') $('bulkClientsControl').hidden = !enabled;
     else {
@@ -2722,7 +2751,7 @@ function createSubtask() {
   function updateBulkEditSummary() {
     const panel = state.subtaskPanel;
     const fields = Object.keys(panel.patch);
-    const labels = { category: 'Category', priority: 'Priority', startDate: 'Start date', endDate: 'End date', clients: 'Clients (replace)' };
+    const labels = { category: 'Category', priority: 'Priority', hours: 'Hours per subtask', startDate: 'Start date', endDate: 'End date', clients: 'Clients (replace)' };
     if ($('bulkEditSummary')) $('bulkEditSummary').textContent = `${panel.selected.size} selected · ${fields.length} fields${fields.length ? ': ' + fields.map(key => labels[key]).join(', ') : ''}`;
     if ($('bulkApplyBtn')) {
       $('bulkApplyBtn').textContent = `Apply ${fields.length} ${fields.length === 1 ? 'field' : 'fields'} to ${panel.selected.size} ${panel.selected.size === 1 ? 'subtask' : 'subtasks'}`;
@@ -2866,6 +2895,11 @@ function createSubtask() {
     resetSubtaskPanel();
     $('taskForm').reset();
     $('taskContext').hidden = true;
+    $('taskHours').value = '0';
+    $('taskHours').readOnly = false;
+    $('taskHours').max = '10000';
+    $('taskHoursLabel').textContent = 'Hours';
+    $('taskHoursProgress').innerHTML = '';
     $('taskModal').classList.remove('editing-task');
     renderClientPicker('taskClients', [], 'taskClientsControl');
 
@@ -2930,6 +2964,7 @@ function populateParentTaskOptions() {
     $('startDate').value = dateKey(t.start);
     $('endDate').value = dateKey(t.end);
     $('description').value = t.description;
+    updateTaskHoursControl(t, true);
     renderClientPicker('taskClients', t.clients || [], 'taskClientsControl');
     $('taskStatus').value = t.status;
     $('statusField').style.display = 'flex';
@@ -2983,6 +3018,8 @@ function populateParentTaskOptions() {
     if (!data.taskName) return;
 
     const isEdit = Boolean(state.editId);
+    const currentTask = isEdit ? state.taskById.get(state.editId) : null;
+    if (!currentTask || !state.childrenByParent.has(currentTask.id)) data.hours = $('taskHours').value;
     if (isEdit) {
       data.taskId = state.editId;
       data.status = $('taskStatus').value;
@@ -3005,7 +3042,9 @@ function populateParentTaskOptions() {
       });
 
     if (isEdit) {
-      runner.updateTask(data);
+      if (data.hours !== undefined && Number(data.hours || 0) !== Number(currentTask.hours || 0) && taskDetailsMatch(currentTask, data)) {
+        runner.updateTaskHours(data.taskId, data.hours);
+      } else runner.updateTask(data);
     } else {
       runner.createTask(data);
     }
@@ -3097,6 +3136,64 @@ function deleteCurrentTask() {
   function copyParentClients() {
     const parent = state.taskById.get($('parentTaskId').value);
     if (parent) renderClientPicker('taskClients', parent.clients || [], 'taskClientsControl');
+  }
+
+  function updateTaskHoursControl(task, resetValue = false) {
+    const input = $('taskHours');
+    const wasReadOnly = input.readOnly;
+    const hasChildren = state.childrenByParent.has(task.id);
+    input.readOnly = hasChildren;
+    if (resetValue || hasChildren || wasReadOnly) input.value = String(task.totalHours || 0);
+    if (hasChildren) input.removeAttribute('max'); else input.max = '10000';
+    $('taskHoursLabel').textContent = hasChildren ? 'Total subtask hours (calculated)' : 'Hours';
+    $('taskHoursProgress').innerHTML = renderHoursProgress(task.completedHours || 0, task.totalHours || 0);
+  }
+
+  function applyTaskHourRollups(tasks) {
+    const sums = new Map();
+    tasks.forEach(task => {
+      if (!task.parentTaskId) return;
+      if (!sums.has(task.parentTaskId)) sums.set(task.parentTaskId, { units: 0, completed: 0 });
+      const sum = sums.get(task.parentTaskId);
+      const units = Math.round(Number(task.hours || 0) * 100);
+      sum.units += units;
+      if (task.status === 'Done') sum.completed += units;
+    });
+    tasks.forEach(task => {
+      const sum = sums.get(task.id);
+      task.subtaskHours = sum ? sum.units / 100 : 0;
+      task.totalHours = sum ? sum.units / 100 : Number(task.hours || 0);
+      task.completedHours = sum ? sum.completed / 100 : task.status === 'Done' ? Number(task.hours || 0) : 0;
+    });
+  }
+
+  function taskHourMetrics(tasks, hierarchy = state.tasks) {
+    const parents = new Set(hierarchy.map(task => task.parentTaskId).filter(Boolean));
+    let total = 0;
+    let completed = 0;
+    tasks.forEach(task => {
+      if (parents.has(task.id)) return;
+      const units = Math.round(Number(task.hours || 0) * 100);
+      total += units;
+      if (task.status === 'Done') completed += units;
+    });
+    return { total: total / 100, completed: completed / 100, percent: total ? Math.round(completed / total * 100) : 0 };
+  }
+
+  function formatHours(value) {
+    return Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  }
+
+  function renderHoursProgress(completed, total, compact = false, showLabel = true) {
+    const percent = total > 0 ? Math.max(0, Math.min(100, Math.round(completed / total * 100))) : 0;
+    const label = `${formatHours(completed)} / ${formatHours(total)} hours on completed work (${percent}%)`;
+    return `${compact || !showLabel ? '' : `<div class="hours-progress-summary">${label}</div>`}<progress class="hours-progress${compact ? ' compact' : ''}" max="100" value="${percent}" aria-label="${esc(label)}" title="${esc(label)}">${percent}%</progress>`;
+  }
+
+  function taskDetailsMatch(task, data) {
+    return task.name === data.taskName && task.category === data.category && task.priority === data.priority &&
+      dateKey(task.start) === data.startDate && dateKey(task.end) === data.endDate && task.description === data.description &&
+      task.status === data.status && JSON.stringify(normalizeClientNames(task.clients || [])) === JSON.stringify(normalizeClientNames(data.clients || []));
   }
 
   function normalizeClientNames(values) {
