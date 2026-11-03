@@ -101,6 +101,10 @@ Tasks count when their planned dates overlap the selected period, including boun
 
 Inside a parent task, enter one subtask name per line to create 1-100 subtasks together (200 characters per name). Empty lines are ignored; repeated names create distinct IDs. New children copy saved parent category, priority, planned dates, and clients, with To Do status. Save pending parent edits before creating children.
 
+Quantity per name multiplies each entered name: two names at quantity three create six subtasks with distinct IDs. The preview and create button show the exact total; the expanded batch cannot exceed 100. Names and quantity remain after creation so another click appends another batch without replacing existing children. Clear names explicitly clears the draft. The panel opens the last child page after creation and reports the resulting total.
+
+Creation, existing subtasks, bulk editing, and collapsed Parent management have separate sections. Bulk-field toggles preserve the creation draft and field focus; the apply action shows the number of fields and selected subtasks.
+
 The subtask panel displays 25 children per page. Selection persists across its pages, is separate from All tasks selection, and resets when changing the selected task or closing the dialog. Select visible never includes another page automatically.
 
 Selected children support status updates, confirmed deletion, and bulk edits to category, priority, clients, and planned dates. Each edit field has an explicit Apply switch: unchecked fields remain unchanged. Applying Clients replaces assignments; applying an empty selection clears them. A single planned-date edit preserves the other date and is validated against every selected task before writes.
