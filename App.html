@@ -47,7 +47,7 @@
     }
     .task-bar { touch-action: none; }
     .timeline .task-cell, .timeline .day-cell { height: 54px; max-height: 54px; overflow: hidden; }
-    .timeline.zoom-week .task-cell, .timeline.zoom-week .day-cell { height: 70px; max-height: 70px; }
+    .timeline.zoom-week .task-cell, .timeline.zoom-week .day-cell { height: 54px; max-height: 54px; }
     * { box-sizing: border-box; }
 
     body {
@@ -311,20 +311,20 @@
     }
 
     .date-header .day-number { font-size: 13px; color: var(--text); font-weight: 700; }
-    /* Week view: larger, easier-to-read calendar columns */
+    /* Compact week calendar columns */
 .timeline.zoom-week .task-cell,
 .timeline.zoom-week .day-cell {
-  min-height: 70px;
+  min-height: 54px;
 }
 
 .timeline.zoom-week .date-header {
-  min-height: 66px;
-  font-size: 12px;
-  gap: 6px;
+  min-height: 54px;
+  font-size: 10px;
+  gap: 4px;
 }
 
 .timeline.zoom-week .date-header .day-number {
-  font-size: 15px;
+  font-size: 12px;
 }
 
 /* Month view: compact but readable daily columns */
@@ -344,9 +344,9 @@
 }
 
 .timeline.zoom-week .task-bar {
-  top: 23px;
-  height: 24px;
-  line-height: 24px;
+  top: 17px;
+  height: 20px;
+  line-height: 20px;
 }
 
 .timeline.zoom-week .task-bar:hover {
@@ -395,6 +395,19 @@
     }
     .task-title:hover { color: var(--blue); }
     .task-meta { color: var(--muted); font-size: 11px; margin-top: 5px; }
+    .task-cell .task-meta { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .client-picker { margin: 0; border: 1px solid var(--border); padding: 10px; min-width: 0; border-radius: 6px; }
+    .client-picker legend { font-weight: 700; font-size: 12px; }
+    .client-options { display: flex; flex-wrap: wrap; gap: 8px 14px; max-height: 130px; overflow: auto; margin: 10px 0; }
+    .client-options label { display: flex; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+    .client-options input[type="checkbox"] { width: 16px; height: 16px; min-height: 0; padding: 0; }
+    .client-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .client-tags .btn { padding: 5px 8px; font-size: 11px; max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+    .client-input { display: flex; gap: 8px; align-items: center; }
+    .client-input input { min-width: 0; flex: 1; }
+    .client-cell { min-width: 140px; max-width: 260px; overflow-wrap: anywhere; }
+    .subtask-bulk { margin: 14px 0; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .subtask-bulk select { max-width: 100%; }
 
     .day-cell {
       min-height: 54px;
@@ -569,6 +582,12 @@
     border-radius: 5px;
     padding: 9px 10px;
   }
+  .subtask-create textarea { flex: 1; min-width: 0; min-height: 80px; padding: 9px; border: 1px solid #c8d0dc; border-radius: 5px; }
+  .subtask-edit { margin: 14px 0; }
+  .subtask-edit summary { cursor: pointer; font-weight: 700; margin-bottom: 12px; }
+  .subtask-edit .form-grid { gap: 12px; }
+  .subtask-edit .apply-field { display: flex; align-items: center; gap: 6px; }
+  .subtask-edit .apply-field input { width: 16px; min-height: 0; height: 16px; }
 
   .subtask-transfer {
     display: flex;
@@ -690,12 +709,14 @@
 
     .modal-foot {
       display: flex;
+      flex-wrap: wrap;
       justify-content: space-between;
       gap: 10px;
       padding: 15px 23px;
       background: #f7f8fa;
       border-top: 1px solid var(--border);
     }
+    .modal-foot > div:last-child { flex-wrap: wrap; }
 
     .form-error { color: var(--red); margin-top: 12px; display: none; }
     .toast {
@@ -849,6 +870,7 @@
               <select class="field-control" id="categoryFilter" onchange="render()">
                 <option value="">All categories</option>
               </select>
+              <select class="field-control" id="clientFilter" aria-label="Timeline client" onchange="render()"><option value="">All clients</option></select>
             </div>
             <div class="zoom-switch">
               <button class="zoom-btn active" data-zoom="day" onclick="setZoom('day')">Day</button>
@@ -883,6 +905,7 @@
                 <option>To Do</option><option>In Progress</option><option>Blocked</option><option>Done</option>
               </select></label>
               <label>Category<select class="field-control" id="taskCategoryFilter" onchange="changeTaskFilters()"><option value="">All categories</option></select></label>
+              <label>Client<select class="field-control" id="taskClientFilter" onchange="changeTaskFilters()"><option value="">All clients</option></select></label>
               <label>Priority<select class="field-control" id="taskPriorityFilter" onchange="changeTaskFilters()"><option value="">All priorities</option><option>High</option><option>Medium</option><option>Low</option></select></label>
               <label>From<input class="field-control" type="date" id="taskDateFrom" onchange="changeTaskFilters()"></label>
               <label>Through<input class="field-control" type="date" id="taskDateTo" onchange="changeTaskFilters()"></label>
@@ -929,7 +952,7 @@
 
     <div class="form-field full" id="parentTaskField">
       <label for="parentTaskId">Parent task (optional)</label>
-      <select id="parentTaskId">
+      <select id="parentTaskId" onchange="copyParentClients()">
         <option value="">None — create a standalone task</option>
       </select>
     </div>
@@ -937,13 +960,9 @@
     <div class="form-field">
       <label for="category">Category *</label>
       <select id="category" required>
-        <option>Editing</option>
-        <option>Pre-production</option>
-        <option>Post-production</option>
-        <option>Graphics</option>
-        <option>Subtitles</option>
-        <option>Review</option>
-        <option>Delivery</option>
+        <option>Video editing</option>
+        <option>Graphic Design</option>
+        <option>Scheduling</option>
       </select>
     </div>
 
@@ -965,6 +984,8 @@
       <label for="endDate">End date *</label>
       <input id="endDate" type="date" required>
     </div>
+
+    <div class="form-field full" id="taskClientsControl"></div>
 
     <div class="form-field full">
       <label for="description">Description</label>
@@ -1050,14 +1071,18 @@
     centerTimeline: true,
     taskById: new Map(),
     childrenByParent: new Map(),
+    clientOptions: [],
+    clientSelections: {},
+    spreadsheetToday: '',
+    dashboard: { period: 'monthly', anchor: null, client: '' },
+    subtaskPanel: { parentId: null, page: 1, selected: new Set(), draft: '', patch: {}, editOpen: false },
     list: {
       page: 1, pageSize: 25, sort: 'id', direction: 1,
       collapsed: new Set(), childPages: new Map(), selected: new Set(), visibleIds: [],
-      filters: { search: '', status: '', category: '', priority: '', from: '', to: '' }
+      filters: { search: '', status: '', category: '', client: '', priority: '', from: '', to: '' }
     },
     categories: [
-      'Pre-production', 'Editing', 'Post-production',
-      'Graphics', 'Subtitles', 'Review', 'Delivery'
+      'Graphic Design', 'Video editing', 'Scheduling'
     ]
   };
 
@@ -1168,7 +1193,8 @@
   return {
     id: String(get('taskId', 'id', 'taskID', 'task_id') ?? ''),
     name: String(get('taskName', 'name', 'title', 'task_name') ?? ''),
-    category: String(get('category') || 'Editing'),
+    category: String(get('category') || ''),
+    clients: normalizeClientNames(Array.isArray(t.clients) ? t.clients : []),
     priority: String(get('priority') || 'Medium'),
     status: String(get('status') || 'To Do'),
     start,
@@ -1209,10 +1235,12 @@
         return;
       }
       state.tasks = response.tasks.map(normalizeTask);
+      state.spreadsheetToday = response.spreadsheetToday || dateKey(new Date());
+      if (!state.dashboard.anchor) state.dashboard.anchor = parseDate(state.spreadsheetToday);
       state.taskById = new Map(state.tasks.map(task => [task.id, task]));
       state.childrenByParent = new Map();
       state.tasks.forEach(task => {
-        task.searchText = `${task.id} ${task.name} ${task.category} ${task.description}`.toLowerCase();
+        task.searchText = `${task.id} ${task.name} ${task.category} ${task.description} ${task.clients.join(' ')}`.toLowerCase();
         if (!task.parentTaskId) return;
         if (!state.childrenByParent.has(task.parentTaskId)) state.childrenByParent.set(task.parentTaskId, []);
         state.childrenByParent.get(task.parentTaskId).push(task);
@@ -1225,9 +1253,14 @@
       state.loading = false;
       state.syncing = false;
       updateCategories();
+      updateClientOptions();
       renderStats();
       updateDataNotice();
       renderActiveView();
+      if (state.editId && $('taskModal').classList.contains('open')) {
+        const selectedTask = state.taskById.get(state.editId);
+        if (selectedTask) renderSubtaskPanel(selectedTask);
+      }
       if (typeof onLoaded === 'function') onLoaded();
     }).withFailureHandler(fail).getTasks();
   }
@@ -1299,10 +1332,7 @@
 
   function updateCategories() {
     const current = $('categoryFilter').value;
-    const found = [...new Set([
-      ...state.categories,
-      ...state.tasks.map(t => t.category).filter(Boolean)
-    ])];
+    const found = state.categories;
 
     $('categoryFilter').innerHTML =
       '<option value="">All categories</option>' +
@@ -1318,24 +1348,24 @@
     const search = $('search').value.trim().toLowerCase();
     const status = $('statusFilter').value;
     const category = $('categoryFilter').value;
+    const client = $('clientFilter').value;
 
     return state.tasks.filter(t =>
-      (!search || `${t.id} ${t.name} ${t.description}`.toLowerCase().includes(search)) &&
+      (!search || (t.searchText || `${t.id} ${t.name} ${t.description}`).toLowerCase().includes(search)) &&
       (!status || t.status === status) &&
-      (!category || t.category === category)
+      (!category || t.category === category) && clientMatches(t, client)
     );
   }
 
-  function renderStats() {
-    const tasks = state.tasks;
+  function renderStats(tasks = state.tasks, scope = 'Across all categories') {
     const count = status => tasks.filter(t => t.status === status).length;
     const total = tasks.length;
     const done = count('Done');
 
     $('stats').innerHTML = [
-      ['Total tasks', total, 'Across all categories'],
+      ['Total tasks', total, scope],
       ['In progress', count('In Progress'), 'Currently being worked on'],
-      ['Completed', done, total ? `${Math.round(done / total * 100)}% of all tasks` : 'No tasks yet'],
+      ['Completed', done, total ? `${Math.round(done / total * 100)}% of these tasks` : 'No tasks yet'],
       ['Blocked', count('Blocked'), 'Need attention']
     ].map(s => `
       <div class="stat">
@@ -1499,8 +1529,8 @@ filtered.forEach(t => {
           (t.start <= end && t.end >= start)
         );
 
-      const rowHeight = state.zoom === 'week' ? 70 : 54;
-      const headerHeight = state.zoom === 'week' ? 66 : state.zoom === 'month' ? 54 : 59;
+      const rowHeight = 54;
+    const headerHeight = state.zoom === 'day' ? 59 : 54;
       const window = timelineWindow(tasks.length, scrollTop, shell.clientHeight || 500, rowHeight, headerHeight);
       if (scrolling && state.timelineWindow && window.start === state.timelineWindow.start && window.end === state.timelineWindow.end) return;
       state.timelineWindow = window;
@@ -1512,7 +1542,7 @@ filtered.forEach(t => {
     document.documentElement.style.setProperty(
       '--day-width',
       state.zoom === 'day' ? '38px'
-  : state.zoom === 'week' ? '104px'
+  : state.zoom === 'week' ? '72px'
   : '38px'
     );
 
@@ -1597,7 +1627,7 @@ html += `<div class="task-cell"
         
         <div class="task-info">
           <div class="task-title" title="${esc(t.name)}" onclick="openEdit('${esc(t.id)}')">${esc(t.name || 'Untitled task')}</div>
-          <div class="task-meta">${esc(t.id)} · ${esc(t.category)}</div>
+          <div class="task-meta" title="${esc((t.clients || []).join(', ') || 'Unassigned')}">${esc(t.id)} · ${esc(t.category)} · ${esc((t.clients || []).join(', ') || 'Unassigned')}</div>
         </div>
       </div>`;
 
@@ -1653,7 +1683,7 @@ html += `<div class="task-cell"
     `${Math.max(4, lastRect.right - firstRect.left - 6)}px`;
 
   bar.style.top =
-    `${rowRect.top - gridRect.top + (rowRect.height - (state.zoom === 'week' ? 24 : 20)) / 2}px`;
+    `${rowRect.top - gridRect.top + (rowRect.height - 20) / 2}px`;
 
   bar.style.display = 'block';
 
@@ -1850,7 +1880,7 @@ html += `<div class="task-cell"
           ${childCount ? `<button class="group-toggle" aria-label="${list.collapsed.has(task.id) ? 'Expand' : 'Collapse'} subtasks of ${esc(task.name)}" aria-expanded="${!list.collapsed.has(task.id)}" onclick="toggleListGroup(${argument})">${list.collapsed.has(task.id) ? '&#9654;' : '&#9660;'}</button>` : '<span class="group-toggle"></span>'}
           <div><a href="#" onclick="openEdit(${argument});return false">${esc(task.name || 'Untitled task')}</a>
           <div class="task-meta">${esc(task.id)}${contextOnly ? ' · Parent context' : ''}${!child && task.parentTaskId && !state.taskById.has(task.parentTaskId) ? ' · Parent unavailable' : ''}${childCount ? ` · ${childCount} matching subtasks` : ''}</div></div></div></td>
-        <td>${esc(task.category)}</td><td>${esc(task.priority)}</td>
+        <td>${esc(task.category)}</td><td class="client-cell">${esc((task.clients || []).join(', ') || 'Unassigned')}</td><td>${esc(task.priority)}</td>
         <td><select class="field-control row-status" aria-label="Status for ${esc(task.name)}" ${busy || contextOnly ? 'disabled' : ''} onchange="changeInlineStatus(${argument},this)">
           ${['To Do', 'In Progress', 'Blocked', 'Done'].map(status => `<option ${task.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select></td>
         <td>${task.start ? esc(dateKey(task.start)) : '&mdash;'}</td><td>${task.end ? esc(dateKey(task.end)) : '&mdash;'}</td></tr>`;
@@ -1865,13 +1895,13 @@ html += `<div class="task-cell"
       group.children.slice((page - 1) * 25, page * 25).forEach(child => { rows += rowHtml(child, true, false, 0); });
       if (pages > 1) {
         const argument = esc(JSON.stringify(group.root.id));
-        rows += `<tr class="child-pages"><td></td><td colspan="6"><div class="list-controls">
+        rows += `<tr class="child-pages"><td></td><td colspan="7"><div class="list-controls">
           <button class="btn" aria-label="Previous subtasks of ${esc(group.root.name)}" ${page === 1 ? 'disabled' : ''} onclick="changeChildPage(${argument},-1)">&#8592;</button>
           <span>Subtasks ${page} / ${pages}</span>
           <button class="btn" aria-label="Next subtasks of ${esc(group.root.name)}" ${page === pages ? 'disabled' : ''} onclick="changeChildPage(${argument},1)">&#8594;</button></div></td></tr>`;
       }
     });
-    const columns = [['name', 'Task'], ['category', 'Category'], ['priority', 'Priority'], ['status', 'Status'], ['start', 'Start'], ['end', 'End']];
+    const columns = [['name', 'Task'], ['category', 'Category'], ['clients', 'Clients'], ['priority', 'Priority'], ['status', 'Status'], ['start', 'Start'], ['end', 'End']];
     const invalidRange = list.filters.from && list.filters.to && list.filters.to < list.filters.from;
     $('taskTable').innerHTML = invalidRange
       ? '<div class="empty" role="alert"><strong>Invalid date range</strong>Through date must be on or after From date.</div>'
@@ -1892,6 +1922,7 @@ html += `<div class="task-cell"
     if (filters.search && !(task.searchText || `${task.id} ${task.name} ${task.category} ${task.description}`.toLowerCase()).includes(filters.search)) return false;
     if (filters.status && task.status !== filters.status) return false;
     if (filters.category && task.category !== filters.category) return false;
+    if (!clientMatches(task, filters.client)) return false;
     if (filters.priority && task.priority !== filters.priority) return false;
     if (filters.from || filters.to) {
       if (!task.start || !task.end || task.end < task.start) return false;
@@ -1902,6 +1933,13 @@ html += `<div class="task-cell"
   }
 
   function compareTasks(first, second, key, direction) {
+    if (key === 'clients') {
+      const firstClient = normalizeClientNames(first.clients || [])[0];
+      const secondClient = normalizeClientNames(second.clients || [])[0];
+      if (Boolean(firstClient) !== Boolean(secondClient)) return firstClient ? -1 : 1;
+      const order = (firstClient || '').localeCompare(secondClient || '', undefined, { numeric: true, sensitivity: 'base' });
+      return order ? order * direction : first.id.localeCompare(second.id, undefined, { numeric: true });
+    }
     const firstValue = first[key];
     const secondValue = second[key];
     if (key === 'start' || key === 'end') {
@@ -1938,6 +1976,7 @@ html += `<div class="task-cell"
     list.filters = {
       search: $('taskSearch').value.trim().toLowerCase(), status: $('taskStatusFilter').value,
       category: $('taskCategoryFilter').value, priority: $('taskPriorityFilter').value,
+      client: $('taskClientFilter').value,
       from: $('taskDateFrom').value, to: $('taskDateTo').value
     };
     list.page = 1;
@@ -1947,7 +1986,7 @@ html += `<div class="task-cell"
   }
 
   function resetTaskFilters() {
-    ['taskSearch', 'taskStatusFilter', 'taskCategoryFilter', 'taskPriorityFilter', 'taskDateFrom', 'taskDateTo'].forEach(id => { $(id).value = ''; });
+    ['taskSearch', 'taskStatusFilter', 'taskCategoryFilter', 'taskClientFilter', 'taskPriorityFilter', 'taskDateFrom', 'taskDateTo'].forEach(id => { $(id).value = ''; });
     changeTaskFilters();
   }
 
@@ -2045,13 +2084,68 @@ html += `<div class="task-cell"
       .deleteTasks(ids);
   }
 
+  function dashboardRange(period, anchor) {
+    const reference = new Date(anchor);
+    reference.setHours(0, 0, 0, 0);
+    let start = reference;
+    let end = reference;
+    if (period === 'weekly') {
+      start = addDays(reference, -((reference.getDay() + 6) % 7));
+      end = addDays(start, 6);
+    } else if (period === 'monthly') {
+      start = new Date(reference.getFullYear(), reference.getMonth(), 1);
+      end = new Date(reference.getFullYear(), reference.getMonth() + 1, 0);
+    } else if (period === 'yearly') {
+      start = new Date(reference.getFullYear(), 0, 1);
+      end = new Date(reference.getFullYear(), 11, 31);
+    }
+    return { start, end };
+  }
+
+  function dashboardTasks(tasks, range, client) {
+    return tasks.filter(task => task.start && task.end && task.end >= task.start &&
+      task.start <= range.end && task.end >= range.start && clientMatches(task, client));
+  }
+
+  function setDashboardPeriod(period) {
+    state.dashboard.period = period;
+    renderDashboard();
+  }
+
+  function moveDashboardPeriod(direction) {
+    const dashboard = state.dashboard;
+    const { start } = dashboardRange(dashboard.period, dashboard.anchor);
+    dashboard.anchor = dashboard.period === 'monthly' ? new Date(start.getFullYear(), start.getMonth() + direction, 1)
+      : dashboard.period === 'yearly' ? new Date(start.getFullYear() + direction, 0, 1)
+      : addDays(start, direction * (dashboard.period === 'weekly' ? 7 : 1));
+    renderDashboard();
+  }
+
   function renderDashboard() {
-    const tasks = state.tasks;
+    if (state.activeView !== 'dashboard' || !state.loaded) return;
+    const dashboard = state.dashboard;
+    if (!dashboard.anchor) dashboard.anchor = parseDate(state.spreadsheetToday) || new Date();
+    const range = dashboardRange(dashboard.period, dashboard.anchor);
+    const tasks = dashboardTasks(state.tasks, range, dashboard.client);
+    const rangeLabel = `${dateKey(range.start)} - ${dateKey(range.end)}`;
+    renderStats(tasks, rangeLabel);
     const count = s => tasks.filter(t => t.status === s).length;
     const total = tasks.length;
     const pct = total ? Math.round(count('Done') / total * 100) : 0;
 
     $('dashboardContent').innerHTML = `
+      <div class="filters" style="margin-bottom:18px">
+        <div class="zoom-switch" role="group" aria-label="Dashboard period">
+          ${['daily', 'weekly', 'monthly', 'yearly'].map(period => `<button type="button" class="zoom-btn ${dashboard.period === period ? 'active' : ''}" aria-pressed="${dashboard.period === period}" onclick="setDashboardPeriod('${period}')">${period[0].toUpperCase() + period.slice(1)}</button>`).join('')}
+        </div>
+        <button class="btn" aria-label="Previous dashboard period" title="Previous period" onclick="moveDashboardPeriod(-1)">&#8592;</button>
+        <label>Date <input class="field-control" id="dashboardAnchor" type="date" value="${dateKey(dashboard.anchor)}" onchange="if(parseDate(this.value)){state.dashboard.anchor=parseDate(this.value);renderDashboard()}"></label>
+        <button class="btn" aria-label="Next dashboard period" title="Next period" onclick="moveDashboardPeriod(1)">&#8594;</button>
+        <button class="btn" onclick="state.dashboard.anchor=parseDate(state.spreadsheetToday)||new Date();renderDashboard()">Today</button>
+        <label>Client <select class="field-control" id="dashboardClient" onchange="state.dashboard.client=this.value;renderDashboard()">${clientFilterOptions(dashboard.client)}</select></label>
+      </div>
+      <div class="panel-subtitle" style="margin-bottom:18px">${rangeLabel} · ${total} scheduled tasks${dashboard.client ? ' · ' + esc(dashboard.client === 'unassigned' ? 'Unassigned' : dashboard.client.slice(7)) : ''}</div>
+      ${total ? '' : '<div class="subtask-empty">No tasks scheduled for this period.</div>'}
       <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px">
         <strong>Overall completion</strong><strong>${pct}%</strong>
       </div>
@@ -2071,9 +2165,7 @@ html += `<div class="task-cell"
           </div>
         </div>`;
       }).join('')}
-      <div style="color:#6b778c;margin-top:25px;font-size:12px">
-        Dashboard metrics are calculated from the tasks currently stored in Task_Master.
-      </div>`;
+      `;
   }
 
   function switchView(view) {
@@ -2091,6 +2183,7 @@ html += `<div class="task-cell"
 
     $('pageTitle').textContent = titles[view][0];
     $('pageSubtitle').textContent = titles[view][1];
+    if (view !== 'dashboard') renderStats();
     renderActiveView();
   }
 
@@ -2098,6 +2191,7 @@ html += `<div class="task-cell"
     b.addEventListener('click', () => switchView(b.dataset.view)));
 
   function renderSubtaskPanel(task) {
+    if (state.subtaskPanel.parentId !== task.id) resetSubtaskPanel(task.id);
     const panel = $('subtasksPanel');
     const title = $('subtasksTitle');
     const count = $('subtasksCount');
@@ -2163,6 +2257,12 @@ html += `<div class="task-cell"
     const children = state.tasks.filter(
       t => t.parentTaskId === task.id
     );
+    const subtaskState = state.subtaskPanel;
+    const childIds = new Set(children.map(child => child.id));
+    subtaskState.selected.forEach(id => { if (!childIds.has(id)) subtaskState.selected.delete(id); });
+    const pages = Math.max(1, Math.ceil(children.length / 25));
+    subtaskState.page = Math.max(1, Math.min(pages, subtaskState.page));
+    const displayedChildren = children.slice((subtaskState.page - 1) * 25, subtaskState.page * 25);
 
     title.textContent = 'Subtasks';
 
@@ -2174,8 +2274,9 @@ html += `<div class="task-cell"
       ? `${children.length} subtasks · ${progress}% complete`
       : 'No subtasks yet';
 
-    const childRows = children.map(child => `
+    const childRows = displayedChildren.map(child => `
       <div class="subtask-row">
+      <input type="checkbox" data-child-id="${esc(child.id)}" aria-label="Select subtask ${esc(child.name)}" ${subtaskState.selected.has(child.id) ? 'checked' : ''} onchange="selectPanelSubtask(${esc(JSON.stringify(child.id))},this.checked)">
         <div class="subtask-info">
           <button type="button" class="subtask-link"
             onclick="openEdit('${esc(child.id)}')">
@@ -2200,23 +2301,48 @@ html += `<div class="task-cell"
     content.innerHTML = `
       ${
         children.length
-          ? `<div class="subtask-list">${childRows}</div>`
+          ? `<div class="subtask-bulk">
+              <label><input id="selectPanelPage" type="checkbox" onchange="selectPanelPage(this.checked)"> Select visible</label>
+              <strong id="panelSelectionCount"></strong>
+              <select id="panelBulkStatus" class="field-control" aria-label="Selected subtask status"><option>To Do</option><option>In Progress</option><option>Blocked</option><option>Done</option></select>
+              <button type="button" class="btn" data-child-action onclick="runPanelSubtaskAction('status')">Update status</button>
+              <button type="button" class="btn" data-child-action onclick="runPanelSubtaskAction('delete')">Delete selected</button>
+              <button type="button" class="btn" data-child-action onclick="state.subtaskPanel.selected.clear();renderSubtaskPanel(state.taskById.get(state.editId))">Clear selection</button>
+            </div><div class="subtask-list">${childRows}</div>
+            <div class="subtask-bulk">
+              <button type="button" class="btn" aria-label="Previous subtask page" ${subtaskState.page === 1 ? 'disabled' : ''} onclick="changePanelPage(-1)">&#8592;</button>
+              <span>Subtasks page ${subtaskState.page} / ${pages}</span>
+              <button type="button" class="btn" aria-label="Next subtask page" ${subtaskState.page === pages ? 'disabled' : ''} onclick="changePanelPage(1)">&#8594;</button>
+            </div>
+            <details class="subtask-edit" ${subtaskState.editOpen ? 'open' : ''} ontoggle="state.subtaskPanel.editOpen=this.open"><summary>Bulk edit selected subtasks</summary>
+              <div class="form-grid">
+                ${[['category', 'Category'], ['priority', 'Priority'], ['startDate', 'Start date'], ['endDate', 'End date']].map(([key, label]) => {
+                  const applied = Object.prototype.hasOwnProperty.call(subtaskState.patch, key);
+                  const argument = esc(JSON.stringify(key));
+                  const value = subtaskState.patch[key] || '';
+                  const choices = key === 'category' ? state.categories : ['Low', 'Medium', 'High'];
+                  return `<div class="form-field"><label class="apply-field"><input type="checkbox" ${applied ? 'checked' : ''} onchange="toggleSubtaskField(${argument},this.checked)">Apply ${label}</label>
+                    ${key.endsWith('Date') ? `<input type="date" aria-label="Bulk ${label}" value="${esc(value)}" ${applied ? '' : 'disabled'} onchange="state.subtaskPanel.patch[${argument}]=this.value">`
+                      : `<select aria-label="Bulk ${label}" ${applied ? '' : 'disabled'} onchange="state.subtaskPanel.patch[${argument}]=this.value">${choices.map(choice => `<option ${value === choice ? 'selected' : ''}>${esc(choice)}</option>`).join('')}</select>`}</div>`;
+                }).join('')}
+                <div class="form-field full"><label class="apply-field"><input type="checkbox" ${Object.prototype.hasOwnProperty.call(subtaskState.patch, 'clients') ? 'checked' : ''} onchange="toggleSubtaskField('clients',this.checked)">Apply Clients (replace assignments)</label>
+                  <div id="bulkClientsControl" ${Object.prototype.hasOwnProperty.call(subtaskState.patch, 'clients') ? '' : 'hidden'}></div></div>
+              </div><button type="button" class="btn btn-primary" data-child-action onclick="runPanelSubtaskAction('edit')" style="margin-top:12px">Apply selected fields</button>
+            </details>`
           : `<div class="subtask-empty">
               No subtasks yet. Add the individual steps needed to complete this task.
             </div>`
       }
 
       <div class="subtask-create">
-        <input id="newSubtaskName"
-          maxlength="200"
-          placeholder="Enter a subtask name..."
-          onkeydown="if(event.key==='Enter'){event.preventDefault();createSubtask()}">
+        <textarea id="newSubtaskName" aria-label="Subtask names, one per line" placeholder="Subtask names, one per line" oninput="state.subtaskPanel.draft=this.value;updateSubtaskDraftCount()">${esc(subtaskState.draft)}</textarea>
 
         <button type="button" class="btn btn-primary"
           onclick="createSubtask()">
-          ＋ Add
+          Add subtasks
         </button>
       </div>
+      <div class="task-meta" id="subtaskDraftCount"></div>
       <div class="subtask-transfer">
     <strong>Convert this task into a subtask</strong>
 
@@ -2258,6 +2384,9 @@ html += `<div class="task-cell"
     </div>
   ` : ''}
     `;
+    if ($('bulkClientsControl')) renderClientPicker('bulkClients', state.clientSelections.bulkClients || [], 'bulkClientsControl');
+    updatePanelSelection();
+    updateSubtaskDraftCount();
 }
 function createSubtask() {
   if (state.writing || state.syncing) return;
@@ -2270,61 +2399,117 @@ function createSubtask() {
     return;
   }
 
-  const input = $('newSubtaskName');
-  const taskName = input.value.trim();
-
-  if (!taskName) {
-    input.focus();
+  const names = subtaskNames($('newSubtaskName').value);
+  if (!names.length || names.length > 100 || names.some(name => name.length > 200)) {
+    showPanelError('Enter 1-100 subtask names, at most 200 characters each.');
     return;
   }
-
-  const today = new Date();
-
-  const startDate = parent.start
-    ? dateKey(parent.start)
-    : dateKey(today);
-
-  const endDate = parent.end
-    ? dateKey(parent.end)
-    : dateKey(addDays(today, 1));
-
-  const button = input.parentElement.querySelector('button');
-
-  button.disabled = true;
-  button.textContent = 'Adding…';
-
-  mutationRunner()
-    .withSuccessHandler(result => {
-      showToast(`Created subtask ${taskLabel({ name: taskName, id: result.taskId })} under ${taskLabel(parent)}.`);
-
-      loadTasks(() => {
-        const updatedParent = state.tasks.find(
-          t => t.id === parent.id
-        );
-
-        if (updatedParent && state.editId === parent.id) {
-          renderSubtaskPanel(updatedParent);
-        }
-      });
-    })
-    .withFailureHandler(err => {
-      button.disabled = false;
-      button.textContent = '＋ Add';
-
-      showToast(
-        `Unable to create subtask "${taskName}": ` + (err.message || err)
-      );
-    })
-    .createTask({
-      taskName: taskName,
-      category: parent.category,
-      priority: parent.priority,
-      startDate: startDate,
-      endDate: endDate,
-      description: '',
-      parentTaskId: parent.id
-    });
+  if (parentHasUnsavedChanges(parent)) {
+    showPanelError('Save your parent task changes before creating subtasks.');
+    return;
+  }
+  mutationRunner().withSuccessHandler(result => {
+    state.subtaskPanel.draft = '';
+    showToast(`Created ${result.created} subtasks under ${taskLabel(parent)}.`);
+    loadTasks();
+  }).withFailureHandler(error => showPanelError('Unable to create subtasks: ' + (error.message || error)))
+    .createSubtasks(parent.id, names);
 }
+
+  function subtaskNames(value) {
+    return value.split(/\r?\n/).map(name => name.trim()).filter(Boolean);
+  }
+
+  function resetSubtaskPanel(parentId = null) {
+    state.subtaskPanel = { parentId, page: 1, selected: new Set(), draft: '', patch: {}, editOpen: false };
+    state.clientSelections.bulkClients = [];
+  }
+
+  function updateSubtaskDraftCount() {
+    $('subtaskDraftCount').textContent = `${subtaskNames(state.subtaskPanel.draft).length} / 100 subtasks`;
+  }
+
+  function showPanelError(message) {
+    $('formError').textContent = message;
+    $('formError').style.display = 'block';
+    showToast(message);
+  }
+
+  function parentHasUnsavedChanges(parent) {
+    return $('taskName').value.trim() !== parent.name || $('category').value !== parent.category ||
+      $('priority').value !== parent.priority || $('startDate').value !== dateKey(parent.start) ||
+      $('endDate').value !== dateKey(parent.end) || $('description').value.trim() !== parent.description ||
+      $('taskStatus').value !== parent.status || JSON.stringify(normalizeClientNames(state.clientSelections.taskClients || [])) !== JSON.stringify(normalizeClientNames(parent.clients || []));
+  }
+
+  function updatePanelSelection() {
+    const panel = state.subtaskPanel;
+    const children = state.tasks.filter(task => task.parentTaskId === panel.parentId);
+    const visible = children.slice((panel.page - 1) * 25, panel.page * 25);
+    const count = visible.filter(child => panel.selected.has(child.id)).length;
+    const header = $('selectPanelPage');
+    if (header) {
+      header.checked = visible.length > 0 && count === visible.length;
+      header.indeterminate = count > 0 && count < visible.length;
+    }
+    if ($('panelSelectionCount')) $('panelSelectionCount').textContent = `${panel.selected.size} selected`;
+    document.querySelectorAll('[data-child-action]').forEach(button => { button.disabled = !panel.selected.size || state.writing || state.syncing; });
+  }
+
+  function selectPanelSubtask(id, checked) {
+    if (state.writing || state.syncing) return;
+    if (checked) state.subtaskPanel.selected.add(id); else state.subtaskPanel.selected.delete(id);
+    updatePanelSelection();
+  }
+
+  function selectPanelPage(checked) {
+    if (state.writing || state.syncing) return;
+    const panel = state.subtaskPanel;
+    state.tasks.filter(task => task.parentTaskId === panel.parentId).slice((panel.page - 1) * 25, panel.page * 25).forEach(task => {
+      if (checked) panel.selected.add(task.id); else panel.selected.delete(task.id);
+    });
+    document.querySelectorAll('[data-child-id]').forEach(input => { input.checked = panel.selected.has(input.dataset.childId); });
+    updatePanelSelection();
+  }
+
+  function changePanelPage(direction) {
+    state.subtaskPanel.page += direction;
+    renderSubtaskPanel(state.taskById.get(state.editId));
+  }
+
+  function toggleSubtaskField(key, enabled) {
+    const panel = state.subtaskPanel;
+    const parent = state.taskById.get(panel.parentId);
+    if (!enabled) delete panel.patch[key];
+    else panel.patch[key] = key === 'clients' ? state.clientSelections.bulkClients || []
+      : key === 'startDate' ? dateKey(parent.start) : key === 'endDate' ? dateKey(parent.end) : parent[key];
+    renderSubtaskPanel(parent);
+  }
+
+  function runPanelSubtaskAction(action) {
+    if (state.writing || state.syncing) return;
+    const panel = state.subtaskPanel;
+    const parent = state.taskById.get(panel.parentId);
+    const ids = [...panel.selected];
+    if (!parent || !ids.length) return;
+    const summary = taskSummary(ids.map(id => state.taskById.get(id) || { id }));
+    if (action === 'delete' && !confirm(`Delete ${ids.length} subtasks of ${parent.name}?\n\n${summary}\n\nThis cannot be undone.`)) return;
+    const patch = { ...panel.patch };
+    if (Object.prototype.hasOwnProperty.call(patch, 'clients')) patch.clients = state.clientSelections.bulkClients || [];
+    if (action === 'edit' && !Object.keys(patch).length) {
+      showPanelError('Choose at least one field to apply.');
+      return;
+    }
+    const status = $('panelBulkStatus').value;
+    const runner = mutationRunner().withSuccessHandler(() => {
+      if (action === 'delete') ids.forEach(id => panel.selected.delete(id));
+      showToast(`${action === 'delete' ? 'Deleted' : action === 'status' ? 'Status set to ' + status + ' for' : 'Updated'} ${summary} under ${taskLabel(parent)}.`);
+      loadTasks();
+    }).withFailureHandler(error => showPanelError('Subtask update failed: ' + (error.message || error)));
+    if (action === 'delete') runner.deleteTasks(ids, parent.id);
+    else if (action === 'status') runner.updateTaskStatuses(ids, status, parent.id);
+    else runner.updateSubtasks(parent.id, ids, patch);
+  }
   
  function transferCurrentSubtask() {
   if (state.writing || state.syncing) return;
@@ -2419,7 +2604,9 @@ function createSubtask() {
     }
     state.editId = null;
 
+    resetSubtaskPanel();
     $('taskForm').reset();
+    renderClientPicker('taskClients', [], 'taskClientsControl');
 
     populateParentTaskOptions();
 
@@ -2477,6 +2664,7 @@ function populateParentTaskOptions() {
     $('startDate').value = dateKey(t.start);
     $('endDate').value = dateKey(t.end);
     $('description').value = t.description;
+    renderClientPicker('taskClients', t.clients || [], 'taskClientsControl');
     $('taskStatus').value = t.status;
     $('statusField').style.display = 'flex';
     $('editStatusBtn').style.display = 'inline-flex';
@@ -2494,6 +2682,7 @@ function populateParentTaskOptions() {
     if (state.writing) return;
     $('taskModal').classList.remove('open');
     state.editId = null;
+    resetSubtaskPanel();
   }
 
   function setSaving(saving) {
@@ -2520,7 +2709,8 @@ function populateParentTaskOptions() {
       startDate: start,
       endDate: end,
       description: $('description').value.trim(),
-      parentTaskId: $('parentTaskId').value
+      parentTaskId: $('parentTaskId').value,
+      clients: state.clientSelections.taskClients || []
     };
 
     if (!data.taskName) return;
@@ -2627,6 +2817,93 @@ function deleteCurrentTask() {
     })
     .deleteTask(id);
 }
+
+  function copyParentClients() {
+    const parent = state.taskById.get($('parentTaskId').value);
+    if (parent) renderClientPicker('taskClients', parent.clients || [], 'taskClientsControl');
+  }
+
+  function normalizeClientNames(values) {
+    const names = new Map();
+    values.forEach(value => {
+      const name = String(value).trim();
+      if (name && !names.has(name.toLowerCase())) names.set(name.toLowerCase(), name);
+    });
+    return [...names.values()].sort((first, second) => first.localeCompare(second, undefined, { sensitivity: 'base', numeric: true }));
+  }
+
+  function clientMatches(task, filter) {
+    const clients = task.clients || [];
+    if (!filter) return true;
+    if (filter === 'unassigned') return !clients.length;
+    return clients.some(name => name.toLowerCase() === filter.slice(7).toLowerCase());
+  }
+
+  function clientFilterOptions(selected) {
+    return '<option value="">All clients</option><option value="unassigned"' + (selected === 'unassigned' ? ' selected' : '') + '>Unassigned</option>' +
+      state.clientOptions.map(name => `<option value="client:${esc(name)}" ${selected === 'client:' + name ? 'selected' : ''}>${esc(name)}</option>`).join('');
+  }
+
+  function updateClientOptions() {
+    state.clientOptions = normalizeClientNames(state.tasks.flatMap(task => task.clients || []));
+    ['clientFilter', 'taskClientFilter'].forEach(id => {
+      const select = $(id);
+      const current = select.value;
+      const selected = current === 'unassigned' || state.clientOptions.some(name => 'client:' + name === current) ? current : '';
+      select.innerHTML = clientFilterOptions(selected);
+      select.value = selected;
+    });
+    state.list.filters.client = $('taskClientFilter').value;
+    if (state.dashboard.client !== 'unassigned' && !state.clientOptions.some(name => 'client:' + name === state.dashboard.client)) state.dashboard.client = '';
+  }
+
+  function renderClientPicker(prefix, values, container) {
+    state.clientSelections[prefix] = normalizeClientNames(values);
+    $(container).innerHTML = `<fieldset class="client-picker"><legend>Clients</legend>
+      <div class="client-tags" id="${prefix}Tags"></div>
+      <div class="client-input"><input id="${prefix}Input" aria-label="Search or add client" maxlength="100" placeholder="Client name" oninput="renderClientChoices('${prefix}',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();addClientName('${prefix}')}">
+      <button type="button" class="btn" onclick="addClientName('${prefix}')">Add client</button></div>
+      <div class="client-options" id="${prefix}Options"></div><output id="${prefix}Error" class="form-error"></output></fieldset>`;
+    renderClientChoices(prefix);
+  }
+
+  function renderClientChoices(prefix, search = '') {
+    const selected = state.clientSelections[prefix] || [];
+    const options = normalizeClientNames([...state.clientOptions, ...selected]).filter(name => name.toLowerCase().includes(search.trim().toLowerCase()));
+    $(prefix + 'Tags').innerHTML = selected.map(name => `<button type="button" class="btn" title="Remove ${esc(name)}" aria-label="Remove client ${esc(name)}" onclick="toggleClientName('${prefix}',${esc(JSON.stringify(name))},false)">${esc(name)} &#215;</button>`).join('');
+    $(prefix + 'Options').innerHTML = options.map(name => `<label><input type="checkbox" ${selected.some(value => value.toLowerCase() === name.toLowerCase()) ? 'checked' : ''} onchange="toggleClientName('${prefix}',${esc(JSON.stringify(name))},this.checked)">${esc(name)}</label>`).join('');
+  }
+
+  function toggleClientName(prefix, name, checked) {
+    const selected = state.clientSelections[prefix] || [];
+    const updated = checked ? normalizeClientNames([...selected, name]) : selected.filter(value => value.toLowerCase() !== name.toLowerCase());
+    if (updated.length > 50) {
+      $(prefix + 'Error').textContent = 'A task can have at most 50 clients.';
+      $(prefix + 'Error').style.display = 'block';
+      renderClientChoices(prefix, $(prefix + 'Input').value);
+      return;
+    }
+    state.clientSelections[prefix] = updated;
+    $(prefix + 'Error').style.display = 'none';
+    renderClientChoices(prefix, $(prefix + 'Input').value);
+  }
+
+  function addClientName(prefix) {
+    const input = $(prefix + 'Input');
+    const name = input.value.trim();
+    if (!name) return;
+    if (name.length > 100 || (state.clientSelections[prefix] || []).length >= 50) {
+      $(prefix + 'Error').textContent = 'Use at most 50 clients, 100 characters per name.';
+      $(prefix + 'Error').style.display = 'block';
+      return;
+    }
+    const canonical = state.clientOptions.find(value => value.toLowerCase() === name.toLowerCase()) || name;
+    state.clientSelections[prefix] = normalizeClientNames([...(state.clientSelections[prefix] || []), canonical]);
+    $(prefix + 'Error').style.display = 'none';
+    input.value = '';
+    renderClientChoices(prefix);
+    input.focus();
+  }
 
   function taskLabel(task) {
     return `"${task.name || 'Untitled task'}"${task.id ? ` (${task.id})` : ''}`;
