@@ -57,6 +57,8 @@ Work in Progress!!
 | Feature | Description |
 |---|---|
 | Task Management | Create, edit, update, and delete tasks |
+| Grouped Task List | Sort and paginate parent groups, with separate pages for large child lists |
+| Bulk Actions | Update selected statuses or explicitly selected tasks together |
 | Gantt Timeline | Visualize tasks against a calendar |
 | Drag Scheduling | Reschedule individual tasks through drag-and-drop |
 | Task Hierarchy | Organize work using parent tasks and subtasks |
@@ -71,11 +73,60 @@ The application supports a parent-child task structure.
 
 - Root tasks have no parent identifier.
 - Subtasks reference their parent using the Parent Task ID.
-- Parent schedules are derived from the earliest child start date and latest child end date.
+- Parent and subtask schedules are independent; changing a child does not change its parent's dates.
 - Parent progress is calculated using the proportion of completed subtasks.
 - Subtasks can be collapsed or expanded in the timeline.
 
 **Current hierarchy depth:** One subtask level.
+
+## All Tasks
+
+- Search by task ID, name, category, or description. Filter by status, category, priority, and date range.
+- Date filters include tasks overlapping the range, including boundary dates. Undated tasks are excluded only when a date filter is active.
+- Sort by task ID, name, category, priority, status, start, or end date. Undated tasks sort last in either direction.
+- Pages contain 25 parent groups by default (25/50/100 options). Each expanded parent shows up to 25 matching children, with its own child-page controls.
+- A matching child keeps its parent visible as context without including nonmatching siblings. Context-only parents cannot be selected or updated inline.
+- Parent checkboxes select only that task. The header checkbox selects only the matching rows currently displayed, never collapsed children or other pages.
+- Selection persists across pages and collapse changes, clears when filters change, and removes deleted IDs after refresh. The selected count includes selections on other pages.
+- Inline status changes and bulk status updates do not cascade through the hierarchy.
+- Bulk deletion requires explicit selection of every existing subtask before selecting a parent for deletion. No children are automatically included. The server rechecks this rule before writing, and deletion requires confirmation.
+
+## Loading and Performance
+
+The frontend shares one task snapshot and renders only the active view. Searches are debounced by 200 ms; filtering, sorting, paging, and switching views do not fetch tasks. The timeline mounts only viewport rows plus an eight-row buffer on each side, and batches geometry reads before inserting bars.
+
+Saving task details and status uses one write request. Each action performs at most one follow-up task refresh. Mutations are serialized in the browser, and stale responses from earlier reads are ignored. Server mutations use a document lock, with a script-lock fallback when no document lock is available.
+
+A failed refresh keeps the last loaded data and displays Retry. After a write failure, a reconciliation read runs without automatically retrying the write. Further writes remain blocked until that read succeeds or Retry reconnects. A request may have partially succeeded before its failure was reported: Google Sheets does not provide transactional rollback, and locks do not prevent manual spreadsheet edits.
+
+The target workload is 200-1,000 tasks. Local browser checks with 1,000 synthetic tasks mounted 21-29 timeline rows rather than all 1,000. Ten desktop runs at 1440 x 1000 measured timeline rendering at 14 ms median / 27 ms slowest, and task-list rendering at 17 ms / 23 ms. These are local mock-data observations, not before/after benchmarks or live Apps Script latency guarantees.
+
+## Verification
+
+Run the dependency-free Node regression suite from the repository root:
+
+```sh
+node --test tests/task-tracker.test.cjs
+```
+
+Tests cover grouping, overlap filters, sorting, pagination, explicit selection, stale responses, write serialization, bulk validation, status dates, lock release/fallback, formula preservation, and injected partial-write failures. Browser checks use a synthetic Apps Script bridge; they do not prove Google Sheets service behavior.
+
+Before production deployment, use a copy of the spreadsheet to verify:
+
+1. Initial load, failed refresh, Retry, and 200/1,000-task timings against real Apps Script executions.
+2. Inline/bulk status updates, parent-plus-children deletion, missing IDs, and concurrent updates from two sessions.
+3. Duration formulas and actual start/end dates after saves, reopening, and deletion.
+4. Day/week/month alignment, scrolling, dragging/cancellation, collapse, resize, and keyboard controls at desktop and mobile widths.
+
+## Deployment
+
+Update both `App.html` and `code.gs` in the spreadsheet's bound Apps Script project. Keep the existing HTML filename `App`, initialize the task database if needed, then publish a new web-app deployment version. No new sheet columns or third-party packages are required. Do not upload the Node tests to Apps Script or populate production with synthetic test tasks.
+
+The HTML requires the deployed Apps Script web app for real task data. Opening it directly shows a connection error rather than providing a standalone backend.
+
+## Later Releases
+
+Broader hierarchy validation, enhanced timeline navigation, Kanban, activity history, and dependencies/milestones remain outside this release.
 
 ## Technology Stack
 

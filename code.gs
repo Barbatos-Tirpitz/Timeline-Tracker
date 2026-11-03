@@ -215,7 +215,7 @@ function getTasks() {
 
 // Creates a new task.
 function createTask(formData) {
-  const lock = LockService.getDocumentLock();
+  const lock = LockService.getDocumentLock() || LockService.getScriptLock();
   lock.waitLock(10000);
 
   try {
@@ -353,7 +353,7 @@ function findTaskRow(sheet, taskId) {
 // Updates task details without changing its status.
 // Updates task details without changing its status.
 function updateTask(formData) {
-  const lock = LockService.getDocumentLock();
+  const lock = LockService.getDocumentLock() || LockService.getScriptLock();
   lock.waitLock(10000);
 
   try {
@@ -391,6 +391,16 @@ function updateTask(formData) {
 
     const row = findTaskRow(sheet, taskId);
 
+    let statusValues = null;
+    if (formData.status !== undefined) {
+      validateStatus_(formData.status);
+      statusValues = nextStatusValues_(
+        sheet.getRange(row, 1, 1, 14).getValues()[0],
+        formData.status,
+        new Date()
+      );
+    }
+
     sheet.getRange(row, 2, 1, 3).setValues([[
       taskName, category, priority
     ]]);
@@ -401,6 +411,10 @@ function updateTask(formData) {
 
     sheet.getRange(row, 9).setValue(description);
     sheet.getRange(row, 13).setValue(new Date());
+
+    if (statusValues) {
+      writeStatusRows_(sheet, [{ rowNumber: row, values: statusValues }]);
+    }
 
     return {
       success: true,
@@ -414,55 +428,93 @@ function updateTask(formData) {
 
 // Updates status and actual work dates.
 function updateTaskStatus(taskId, newStatus) {
-  const lock = LockService.getDocumentLock();
+  const result = updateTaskStatuses([taskId], newStatus);
+  result.message = taskId + ' status changed to ' + newStatus + '.';
+  return result;
+}
+
+function validateStatus_(status) {
+  if (!['To Do', 'In Progress', 'Blocked', 'Done'].includes(status)) {
+    throw new Error('Invalid status.');
+  }
+}
+
+function readTaskSelection_(taskIds) {
+  if (!Array.isArray(taskIds) || !taskIds.length) {
+    throw new Error('Select at least one task.');
+  }
+  const ids = [...new Set(taskIds.map(id => String(id || '').trim()))];
+  if (ids.some(id => !id)) throw new Error('Task ID is required.');
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET_NAME);
+  if (!sheet) throw new Error('Task_Master sheet not found.');
+  const lastRow = sheet.getLastRow();
+  const rows = lastRow < 2 ? [] : sheet.getRange(2, 1, lastRow - 1, 14).getValues();
+  const byId = new Map();
+  rows.forEach((values, index) => {
+    const id = String(values[0] || '').trim();
+    if (!id) return;
+    if (byId.has(id)) throw new Error('Duplicate task ID: ' + id);
+    byId.set(id, { rowNumber: index + 2, values });
+  });
+  ids.forEach(id => {
+    if (!byId.has(id)) throw new Error('Task ID not found: ' + id);
+  });
+  return { sheet, rows, ids, selected: ids.map(id => byId.get(id)) };
+}
+
+function nextStatusValues_(values, status, now) {
+  if (values[4] === status) return null;
+  return {
+    status,
+    actualStart: values[9] || (status === 'In Progress' || status === 'Done' ? now : ''),
+    actualEnd: status === 'Done' ? now : values[4] === 'Done' ? '' : values[10],
+    updatedAt: now
+  };
+}
+
+function contiguousRows_(records) {
+  const groups = [];
+  records.slice().sort((first, second) => first.rowNumber - second.rowNumber).forEach(record => {
+    const previous = groups[groups.length - 1];
+    if (previous && previous[previous.length - 1].rowNumber + 1 === record.rowNumber) {
+      previous.push(record);
+    } else {
+      groups.push([record]);
+    }
+  });
+  return groups;
+}
+
+function writeStatusRows_(sheet, records) {
+  contiguousRows_(records).forEach(group => {
+    const row = group[0].rowNumber;
+    sheet.getRange(row, 5, group.length, 1).setValues(group.map(record => [record.values.status]));
+    sheet.getRange(row, 10, group.length, 2).setValues(
+      group.map(record => [record.values.actualStart, record.values.actualEnd])
+    );
+    sheet.getRange(row, 13, group.length, 1).setValues(group.map(record => [record.values.updatedAt]));
+  });
+}
+
+function updateTaskStatuses(taskIds, newStatus) {
+  const lock = LockService.getDocumentLock() || LockService.getScriptLock();
   lock.waitLock(10000);
 
   try {
-    const allowedStatuses = [
-      'To Do',
-      'In Progress',
-      'Blocked',
-      'Done'
-    ];
-
-    if (!allowedStatuses.includes(newStatus)) {
-      throw new Error('Invalid status.');
-    }
-
-    const sheet = SpreadsheetApp.getActiveSpreadsheet()
-      .getSheetByName(CONFIG.SHEET_NAME);
-
-    const row = findTaskRow(sheet, taskId);
-    const currentStatus = sheet.getRange(row, 5).getValue();
-
+    validateStatus_(newStatus);
+    const selection = readTaskSelection_(taskIds);
     const now = new Date();
-
-    // Record the first day work actually begins.
-    const actualStart = sheet.getRange(row, 10).getValue();
-
-    if (
-      !actualStart &&
-      (newStatus === 'In Progress' || newStatus === 'Done')
-    ) {
-      sheet.getRange(row, 10).setValue(now);
-    }
-
-    // Record completion date.
-    if (newStatus === 'Done') {
-      sheet.getRange(row, 11).setValue(now);
-    } else if (currentStatus === 'Done') {
-      // Reopened task: remove previous completion date.
-      sheet.getRange(row, 11).clearContent();
-    }
-
-    sheet.getRange(row, 5).setValue(newStatus);
-    sheet.getRange(row, 13).setValue(now);
-
+    const changes = selection.selected.map(record => ({
+      rowNumber: record.rowNumber,
+      values: nextStatusValues_(record.values, newStatus, now)
+    })).filter(record => record.values);
+    writeStatusRows_(selection.sheet, changes);
     return {
       success: true,
-      message: taskId + ' status changed to ' + newStatus + '.'
+      taskIds: selection.ids,
+      changed: changes.length,
+      message: changes.length + ' task statuses updated.'
     };
-
   } finally {
     lock.releaseLock();
   }
@@ -894,61 +946,41 @@ function doGet() {
 }
 // Deletes a task without changing its former parent's schedule.
 function deleteTask(taskId) {
-  const lock = LockService.getDocumentLock();
+  const result = deleteTasks([taskId]);
+  result.message = taskId + ' deleted successfully.';
+  return result;
+}
+
+function deleteTasks(taskIds) {
+  const lock = LockService.getDocumentLock() || LockService.getScriptLock();
   lock.waitLock(10000);
 
   try {
-    taskId = String(taskId || '').trim();
-
-    if (!taskId) {
-      throw new Error('Task ID is required.');
-    }
-
-    const sheet = SpreadsheetApp
-      .getActiveSpreadsheet()
-      .getSheetByName(CONFIG.SHEET_NAME);
-
-    if (!sheet) {
-      throw new Error('Task_Master sheet not found.');
-    }
-
-    const row = findTaskRow(sheet, taskId);
-
-    // Prevent deleting a parent with existing subtasks.
-    const lastRow = sheet.getLastRow();
-
-    if (lastRow >= 2) {
-      const records = sheet
-        .getRange(2, 1, lastRow - 1, 14)
-        .getValues();
-
-      const hasChildren = records.some(record =>
-        String(record[13] || '').trim() === taskId
-      );
-
-      if (hasChildren) {
-        throw new Error(
-          'This task has subtasks. Delete or transfer its subtasks first.'
-        );
+    const selection = readTaskSelection_(taskIds);
+    const selectedIds = new Set(selection.ids);
+    selection.rows.forEach(values => {
+      const parentId = String(values[13] || '').trim();
+      if (parentId && selectedIds.has(parentId) && !selectedIds.has(String(values[0] || '').trim())) {
+        throw new Error('Select every subtask of ' + parentId + ' before deleting the parent.');
       }
-    }
-
-    sheet.deleteRow(row);
-
+    });
+    contiguousRows_(selection.selected).reverse().forEach(group => {
+      selection.sheet.deleteRows(group[0].rowNumber, group.length);
+    });
     SpreadsheetApp.flush();
-
     return {
       success: true,
-      message: taskId + ' deleted successfully.'
+      taskIds: selection.ids,
+      deleted: selection.ids.length,
+      message: selection.ids.length + ' tasks deleted.'
     };
-
   } finally {
     lock.releaseLock();
   }
 }
 // Changes a task's parent without recreating the task.
 function setTaskParent(taskId, newParentTaskId) {
-  const lock = LockService.getDocumentLock();
+  const lock = LockService.getDocumentLock() || LockService.getScriptLock();
   lock.waitLock(10000);
 
   try {

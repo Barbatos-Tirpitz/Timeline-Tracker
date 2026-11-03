@@ -40,12 +40,14 @@
 }
     .task-bar:hover {
       box-shadow: 0 3px 8px #091e4233;
-      z-index: 5;
     }
 
     .task-bar:active {
       cursor: grabbing;
     }
+    .task-bar { touch-action: none; }
+    .timeline .task-cell, .timeline .day-cell { height: 54px; max-height: 54px; overflow: hidden; }
+    .timeline.zoom-week .task-cell, .timeline.zoom-week .day-cell { height: 70px; max-height: 70px; }
     * { box-sizing: border-box; }
 
     body {
@@ -348,8 +350,7 @@
 }
 
 .timeline.zoom-week .task-bar:hover {
-  top: 21px;
-  height: 28px;
+  filter: brightness(.92);
 }
 
 /* Make month boundaries easier to recognize */
@@ -425,7 +426,7 @@
       transition: filter .15s, height .15s;
     }
 
-    .task-bar:hover { filter: brightness(.92); height: 24px; top: 15px; }
+    .task-bar:hover { filter: brightness(.92); }
     .status-todo { background: #8590a2; }
     .status-progress { background: #0c66e4; }
     .status-blocked { background: #c9372c; }
@@ -457,6 +458,23 @@
     .view.active { display: block; }
 
     .table-wrap { overflow: auto; }
+    .list-filters { align-items: end; }
+    .list-filters label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; }
+    .list-filters .field-control { max-width: 220px; }
+    .list-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 12px 16px; }
+    .list-controls .page-summary { margin-right: auto; }
+    .sort-button { border: 0; background: transparent; padding: 0; color: inherit; font-weight: 700; white-space: nowrap; }
+    .group-toggle { width: 26px; height: 26px; border: 0; background: transparent; flex-shrink: 0; }
+    .list-task { display: flex; align-items: center; gap: 5px; min-width: 220px; }
+    .list-task.child { padding-left: 31px; }
+    .list-task a { color: var(--blue); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+    .context-row td { background: #f7f8fa; color: var(--muted); }
+    .row-status { min-width: 115px; }
+    .child-pages td { padding: 6px 15px; }
+    .data-notice { padding: 10px 14px; margin-bottom: 14px; border-left: 3px solid var(--blue); background: #e9f2ff; overflow-wrap: anywhere; }
+    .data-notice.error { border-color: var(--red); background: #fff0ed; }
+    .data-notice:not([hidden]) { display: block; }
+    .timeline-spacer { grid-column: 1 / -1; pointer-events: none; }
     table { border-collapse: collapse; width: 100%; }
     th, td { text-align: left; padding: 13px 15px; border-bottom: 1px solid var(--border); }
     th { background: #f7f8fa; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .4px; }
@@ -691,7 +709,17 @@
       padding: 13px 17px;
       box-shadow: 0 5px 20px #091e4233;
       display: none;
-      max-width: 360px;
+      max-width: min(360px, calc(100vw - 48px));
+      overflow-wrap: anywhere;
+      border: 0;
+      text-align: left;
+    }
+
+    .toast:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+    .toast.dismissing { animation: toast-out .18s ease forwards; pointer-events: none; }
+    @keyframes toast-out { to { opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) {
+      .toast.dismissing { animation-duration: 1ms; }
     }
 
     .loading { padding: 60px 20px; text-align: center; color: var(--muted); }
@@ -779,6 +807,7 @@
     </header>
 
     <div class="content">
+      <output id="dataNotice" class="data-notice" hidden></output>
       <section class="page-heading">
         <div>
           <h1 id="pageTitle">Task Timeline</h1>
@@ -809,7 +838,7 @@
 
           <div class="toolbar">
             <div class="filters">
-              <input class="field-control search" id="search" placeholder="⌕  Search tasks..." oninput="render()">
+              <input class="field-control search" id="search" placeholder="⌕  Search tasks..." oninput="scheduleSearch('timeline')">
               <select class="field-control" id="statusFilter" onchange="render()">
                 <option value="">All statuses</option>
                 <option>To Do</option>
@@ -847,15 +876,22 @@
             <div><h2>All tasks</h2><div class="panel-subtitle">Manage every task in one place.</div></div>
           </div>
           <div class="toolbar">
-            <div class="filters">
-              <input class="field-control search" placeholder="⌕  Search tasks..." id="taskSearch" oninput="renderTaskTable()">
-              <select class="field-control" id="taskStatusFilter" onchange="renderTaskTable()">
+            <div class="filters list-filters">
+              <label>Search<input class="field-control search" placeholder="Search tasks..." id="taskSearch" oninput="scheduleSearch('tasks')"></label>
+              <label>Status<select class="field-control" id="taskStatusFilter" onchange="changeTaskFilters()">
                 <option value="">All statuses</option>
                 <option>To Do</option><option>In Progress</option><option>Blocked</option><option>Done</option>
-              </select>
+              </select></label>
+              <label>Category<select class="field-control" id="taskCategoryFilter" onchange="changeTaskFilters()"><option value="">All categories</option></select></label>
+              <label>Priority<select class="field-control" id="taskPriorityFilter" onchange="changeTaskFilters()"><option value="">All priorities</option><option>High</option><option>Medium</option><option>Low</option></select></label>
+              <label>From<input class="field-control" type="date" id="taskDateFrom" onchange="changeTaskFilters()"></label>
+              <label>Through<input class="field-control" type="date" id="taskDateTo" onchange="changeTaskFilters()"></label>
+              <button class="btn" onclick="resetTaskFilters()">Reset</button>
             </div>
           </div>
+          <div class="list-controls" id="bulkControls"></div>
           <div class="table-wrap" id="taskTable"></div>
+          <div class="list-controls" id="taskPagination"></div>
         </div>
       </section>
 
@@ -991,7 +1027,9 @@
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<button type="button" class="toast" id="toast" onclick="dismissToast()" onanimationend="finishToastDismiss(event)" aria-label="Dismiss notification" aria-describedby="toastMessage" title="Dismiss notification">
+  <output id="toastMessage" aria-live="polite" aria-atomic="true"></output>
+</button>
 
 <script>
   const state = {
@@ -1000,6 +1038,23 @@
     zoom: 'day',
     anchor: null,
     editId: null,
+    activeView: 'timeline',
+    loaded: false,
+    loading: false,
+    error: '',
+    request: 0,
+    writing: false,
+    syncing: false,
+    timelineWindow: null,
+    dragging: false,
+    centerTimeline: true,
+    taskById: new Map(),
+    childrenByParent: new Map(),
+    list: {
+      page: 1, pageSize: 25, sort: 'id', direction: 1,
+      collapsed: new Set(), childPages: new Map(), selected: new Set(), visibleIds: [],
+      filters: { search: '', status: '', category: '', priority: '', from: '', to: '' }
+    },
     categories: [
       'Pre-production', 'Editing', 'Post-production',
       'Graphics', 'Subtitles', 'Review', 'Delivery'
@@ -1130,80 +1185,117 @@
 }
 
   function loadTasks(onLoaded) {
-  $('timelineShell').innerHTML =
-    '<div class="loading">Loading your tasks...</div>';
-
-  google.script.run
-    .withSuccessHandler(response => {
-
-      if (
-        !response ||
-        response.success !== true ||
-        !Array.isArray(response.tasks)
-      ) {
-        state.tasks = [];
-        state.hasBackendTasks = false;
-
-        $('timelineShell').innerHTML = `
-          <div class="empty">
-            <strong>Unable to read task data</strong>
-            The server returned an unexpected response.
-          </div>
-        `;
-
-        renderStats();
-        renderTaskTable();
-        renderDashboard();
+    if (state.writing || state.loading) return;
+    const request = ++state.request;
+    state.loading = true;
+    state.error = '';
+    updateDataNotice();
+    if (!state.loaded) renderActiveView();
+    const fail = error => {
+      if (request !== state.request) return;
+      state.loading = false;
+      state.error = String(error.message || error);
+      updateDataNotice();
+      renderActiveView();
+    };
+    if (typeof google === 'undefined' || !google.script) {
+      fail(new Error('Apps Script connection unavailable. Use the deployed web app URL.'));
+      return;
+    }
+    google.script.run.withSuccessHandler(response => {
+      if (request !== state.request) return;
+      if (!response || response.success !== true || !Array.isArray(response.tasks)) {
+        fail(new Error('The server returned an unexpected response.'));
         return;
       }
-
-      // Read the backend's confirmed task state.
-      state.hasBackendTasks =
-        response.hasTasks === true && response.total > 0;
-
       state.tasks = response.tasks.map(normalizeTask);
-      // Outputs the response for debugging.
-      console.log('Backend total:', response.total);
-      console.log('Frontend task count:', state.tasks.length);
-      console.table(state.tasks.map(t => ({
-        id: t.id,
-        name: t.name,
-        status: t.status,
-        parentTaskId: t.parentTaskId
-      })));
-
+      state.taskById = new Map(state.tasks.map(task => [task.id, task]));
+      state.childrenByParent = new Map();
+      state.tasks.forEach(task => {
+        task.searchText = `${task.id} ${task.name} ${task.category} ${task.description}`.toLowerCase();
+        if (!task.parentTaskId) return;
+        if (!state.childrenByParent.has(task.parentTaskId)) state.childrenByParent.set(task.parentTaskId, []);
+        state.childrenByParent.get(task.parentTaskId).push(task);
+      });
+      state.list.selected.forEach(id => {
+        if (!state.taskById.has(id)) state.list.selected.delete(id);
+      });
+      state.hasBackendTasks = state.tasks.length > 0;
+      state.loaded = true;
+      state.loading = false;
+      state.syncing = false;
       updateCategories();
-      render();
-      renderTaskTable();
-      renderDashboard();
-
-      // Preserve existing callback behavior.
-      if (typeof onLoaded === 'function') {
-        onLoaded();
-      }
-    })
-    .withFailureHandler(err => {
-
-      state.tasks = [];
-      state.hasBackendTasks = false;
-
-      $('timelineShell').innerHTML = `
-        <div class="empty">
-          <strong>Couldn't load tasks</strong>
-          ${esc(err.message || err)}
-        </div>
-      `;
-
       renderStats();
-      renderTaskTable();
-      renderDashboard();
+      updateDataNotice();
+      renderActiveView();
+      if (typeof onLoaded === 'function') onLoaded();
+    }).withFailureHandler(fail).getTasks();
+  }
 
-      showToast(
-        'Unable to load tasks. Check the Apps Script execution.'
-      );
-    })
-    .getTasks();
-}
+  function updateDataNotice() {
+    const notice = $('dataNotice');
+    $('taskModal').inert = state.writing;
+    notice.hidden = !state.loading && !state.error && !state.writing;
+    notice.classList.toggle('error', Boolean(state.error));
+    notice.innerHTML = state.error
+      ? `${state.loaded ? 'Showing the last loaded data. ' : ''}${esc(state.error)} <button class="btn" onclick="loadTasks()">Retry</button>`
+      : state.writing ? 'Saving changes...' : 'Refreshing tasks...';
+  }
+
+  function renderActiveView() {
+    if (!state.loaded) {
+      const target = { timeline: 'timelineShell', tasks: 'taskTable', dashboard: 'dashboardContent' }[state.activeView];
+      $(target).innerHTML = state.loading ? '<div class="loading">Loading tasks...</div>'
+        : '<div class="empty"><strong>Tasks could not be loaded</strong>Use Retry to reconnect.</div>';
+      return;
+    }
+    if (state.activeView === 'timeline') render();
+    else if (state.activeView === 'tasks') renderTaskTable();
+    else renderDashboard();
+  }
+
+  function scheduleSearch(view) {
+    clearTimeout(scheduleSearch[view]);
+    scheduleSearch[view] = setTimeout(() => view === 'tasks' ? changeTaskFilters() : render(), 200);
+  }
+
+  function mutationRunner() {
+    let success = () => {};
+    let failure = error => showToast(error.message || String(error));
+    const runner = new Proxy({}, {
+      get(target, method) {
+        if (method === 'withSuccessHandler') return callback => { success = callback; return runner; };
+        if (method === 'withFailureHandler') return callback => { failure = callback; return runner; };
+        return (...args) => {
+          if (state.writing || state.syncing || !state.loaded) {
+            failure(new Error('Wait for the current operation or refresh to finish.'));
+            return;
+          }
+          state.writing = true;
+          state.syncing = true;
+          ++state.request;
+          state.loading = false;
+          updateDataNotice();
+          if (state.activeView === 'tasks') renderTaskTable();
+          google.script.run.withSuccessHandler(result => {
+            state.writing = false;
+            if (!result || result.success !== true) {
+              failed(new Error(result?.message || 'The server did not confirm the change.'));
+              return;
+            }
+            updateDataNotice();
+            success(result);
+          }).withFailureHandler(failed)[method](...args);
+          function failed(error) {
+            state.writing = false;
+            failure(error);
+            loadTasks();
+          }
+        };
+      }
+    });
+    return runner;
+  }
 
   function updateCategories() {
     const current = $('categoryFilter').value;
@@ -1217,6 +1309,9 @@
       found.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
 
     $('categoryFilter').value = found.includes(current) ? current : '';
+    $('taskCategoryFilter').innerHTML = '<option value="">All categories</option>' +
+      found.map(category => `<option value="${esc(category)}">${esc(category)}</option>`).join('');
+    $('taskCategoryFilter').value = state.list.filters.category;
   }
 
   function filteredTasks() {
@@ -1318,8 +1413,16 @@
   return { start, end, today };
 }
 
-function render() {
-  renderStats();
+function timelineWindow(total, scrollTop, viewportHeight, rowHeight, headerHeight) {
+  const first = Math.min(Math.max(0, total - 1), Math.max(0, Math.floor((scrollTop - headerHeight) / rowHeight)));
+  return { start: Math.max(0, first - 8), end: Math.min(total, first + Math.ceil(viewportHeight / rowHeight) + 8) };
+}
+
+function render(scrolling = false) {
+  if (state.activeView !== 'timeline' || !state.loaded || state.dragging) return;
+  const shell = $('timelineShell');
+  const scrollTop = shell.scrollTop;
+  const scrollLeft = shell.scrollLeft;
 
   // Backend confirms whether the database contains tasks.
   if (!state.hasBackendTasks) {
@@ -1396,6 +1499,13 @@ filtered.forEach(t => {
           (t.start <= end && t.end >= start)
         );
 
+      const rowHeight = state.zoom === 'week' ? 70 : 54;
+      const headerHeight = state.zoom === 'week' ? 66 : state.zoom === 'month' ? 54 : 59;
+      const window = timelineWindow(tasks.length, scrollTop, shell.clientHeight || 500, rowHeight, headerHeight);
+      if (scrolling && state.timelineWindow && window.start === state.timelineWindow.start && window.end === state.timelineWindow.end) return;
+      state.timelineWindow = window;
+      const mountedTasks = tasks.slice(window.start, window.end);
+
   const dayCount = dayDiff(start, end) + 1;
 
     document.documentElement.style.setProperty('--day-count', dayCount);
@@ -1409,7 +1519,7 @@ filtered.forEach(t => {
     $('timelineSubtitle').textContent =
       `${tasks.length} task${tasks.length === 1 ? '' : 's'} · ${start.toLocaleDateString(undefined, {month:'short',day:'numeric',year:'numeric'})} – ${end.toLocaleDateString(undefined, {month:'short',day:'numeric',year:'numeric'})}`;
 
-    let html = `<div class="timeline zoom-${state.zoom}">`;
+    let html = `<div class="timeline zoom-${state.zoom}" style="grid-template-rows:${headerHeight}px">`;
     html += '<div class="timeline-corner">Task / Schedule</div>';
 
     for (let i = 0; i < dayCount; i++) {
@@ -1462,10 +1572,9 @@ filtered.forEach(t => {
       return;
     }
 
-    for (const t of tasks) {
-  const hasChildren = allTasks.some(
-  child => child.parentTaskId === t.id
-);
+    html += `<div class="timeline-spacer" style="height:${window.start * rowHeight}px"></div>`;
+    for (const t of mountedTasks) {
+  const hasChildren = childrenByParent.has(t.id);
 
 const isCollapsed = collapsedTaskIds.has(t.id);
 
@@ -1477,6 +1586,7 @@ html += `<div class="task-cell"
             type="button"
             title="${isCollapsed ? 'Expand subtasks' : 'Collapse subtasks'}"
             aria-label="${isCollapsed ? 'Expand subtasks' : 'Collapse subtasks'}"
+            aria-expanded="${!isCollapsed}"
             onclick="toggleTaskCollapse('${esc(t.id)}')"
             style="border:0;background:transparent;cursor:pointer;padding:2px;width:18px;flex-shrink:0;color:#6b778c">
             ${isCollapsed ? '▶' : '▼'}
@@ -1504,40 +1614,31 @@ html += `<div class="task-cell"
         }
       }
 
-    html += '</div>';
+    html += `<div class="timeline-spacer" style="height:${(tasks.length - window.end) * rowHeight}px"></div></div>`;
     $('timelineShell').innerHTML = html;
+    shell.scrollTop = scrollTop;
+    shell.scrollLeft = scrollLeft;
 
     const grid = $('timelineShell').querySelector('.timeline');
   const rows = grid.querySelectorAll('.task-cell');
   const dayCells = grid.querySelectorAll('.day-cell');
 
-  tasks.forEach((t, index) => {
-
-  // A task needs valid start and end dates.
-  if (!t.start || !t.end) return;
-
-  const left = dayDiff(start, t.start);
-  const right = dayDiff(start, t.end);
-
-  // Task is outside the visible calendar period.
-  if (right < 0 || left >= dayCount) return;
-
-  const first = Math.max(0, left);
-  const last = Math.min(dayCount - 1, right);
-
-  // Find the actual calendar cells occupied by this task.
-  const firstCell = dayCells[index * dayCount + first];
-  const lastCell = dayCells[index * dayCount + last];
-
-  if (!firstCell || !lastCell || !rows[index]) {
-    console.warn('Unable to locate calendar cells for:', t.id);
-    return;
-  }
-
   const gridRect = grid.getBoundingClientRect();
-  const firstRect = firstCell.getBoundingClientRect();
-  const lastRect = lastCell.getBoundingClientRect();
-  const rowRect = rows[index].getBoundingClientRect();
+  const geometry = mountedTasks.map((task, index) => {
+    if (!task.start || !task.end || task.end < task.start) return null;
+    const first = Math.max(0, dayDiff(start, task.start));
+    const last = Math.min(dayCount - 1, dayDiff(start, task.end));
+    if (first > last) return null;
+    const firstRect = dayCells[index * dayCount + first].getBoundingClientRect();
+    const lastRect = dayCells[index * dayCount + last].getBoundingClientRect();
+    const rowRect = rows[index].getBoundingClientRect();
+    return { first, last, firstRect, lastRect, rowRect };
+  });
+  const bars = document.createDocumentFragment();
+  mountedTasks.forEach((t, index) => {
+
+  if (!geometry[index]) return;
+  const { first, last, firstRect, lastRect, rowRect } = geometry[index];
 
   const bar = document.createElement('div');
 
@@ -1552,7 +1653,7 @@ html += `<div class="task-cell"
     `${Math.max(4, lastRect.right - firstRect.left - 6)}px`;
 
   bar.style.top =
-    `${rowRect.top - gridRect.top + (rowRect.height - 20) / 2}px`;
+    `${rowRect.top - gridRect.top + (rowRect.height - (state.zoom === 'week' ? 24 : 20)) / 2}px`;
 
   bar.style.display = 'block';
 
@@ -1576,19 +1677,17 @@ html += `<div class="task-cell"
 
   // Preserve drag-to-reschedule functionality.
   bar.addEventListener('pointerdown', event => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || state.writing || state.syncing) return;
 
     event.preventDefault();
 
     const initialX = event.clientX;
 
-    const dayWidth = parseFloat(
-      getComputedStyle(document.documentElement)
-        .getPropertyValue('--day-width')
-    ) || 38;
+    const dayWidth = firstRect.width;
 
     let moved = false;
 
+    state.dragging = true;
     bar.setPointerCapture(event.pointerId);
     bar.style.cursor = 'grabbing';
 
@@ -1602,12 +1701,25 @@ html += `<div class="task-cell"
       }
     };
 
-    const onUp = upEvent => {
+    const cleanup = () => {
       bar.removeEventListener('pointermove', onMove);
       bar.removeEventListener('pointerup', onUp);
-
+      bar.removeEventListener('pointercancel', onCancel);
+      bar.removeEventListener('lostpointercapture', onCancel);
+      if (bar.hasPointerCapture(event.pointerId)) bar.releasePointerCapture(event.pointerId);
+      state.dragging = false;
       bar.style.cursor = 'grab';
       bar.style.transform = '';
+    };
+    const onCancel = () => {
+      cleanup();
+      suppressClick = true;
+      setTimeout(() => suppressClick = false, 100);
+      requestAnimationFrame(() => render(true));
+    };
+    const onUp = upEvent => {
+      cleanup();
+      requestAnimationFrame(() => render());
 
       if (!moved) return;
 
@@ -1636,16 +1748,16 @@ html += `<div class="task-cell"
 
       bar.style.opacity = '0.5';
 
-      google.script.run
+      mutationRunner()
         .withSuccessHandler(() => {
-          showToast(`Rescheduled: ${t.name}`);
+          showToast(`Rescheduled ${taskLabel(t)} to ${dateKey(newStart)} - ${dateKey(newEnd)}.`);
           loadTasks();
           setTimeout(() => suppressClick = false, 100);
         })
         .withFailureHandler(error => {
           bar.style.opacity = '1';
           showToast(
-            'Unable to reschedule: ' +
+            `Unable to reschedule ${taskLabel(t)}: ` +
             (error.message || error)
           );
           setTimeout(() => suppressClick = false, 100);
@@ -1655,12 +1767,16 @@ html += `<div class="task-cell"
 
     bar.addEventListener('pointermove', onMove);
     bar.addEventListener('pointerup', onUp);
+    bar.addEventListener('pointercancel', onCancel);
+    bar.addEventListener('lostpointercapture', onCancel);
   });
 
-  grid.appendChild(bar);
+  bars.appendChild(bar);
   });
+  grid.appendChild(bars);
 
-    if (!state.anchor) {
+    if (state.centerTimeline) {
+      state.centerTimeline = false;
       const offset = dayDiff(start, today);
       if (offset >= 0 && offset < dayCount) {
         $('timelineShell').scrollLeft =
@@ -1679,14 +1795,18 @@ html += `<div class="task-cell"
   }
 
   function setZoom(zoom) {
+    if (state.dragging) return;
     state.zoom = zoom;
     state.anchor = null;
+    state.centerTimeline = true;
+    $('timelineShell').scrollTop = 0;
     document.querySelectorAll('.zoom-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.zoom === zoom));
     render();
   }
 
   function moveRange(direction) {
+  if (state.dragging) return;
   const { start } = visibleRange(filteredTasks());
 
   if (state.zoom === 'day') {
@@ -1707,34 +1827,222 @@ html += `<div class="task-cell"
   }
 
   function goToday() {
+    if (state.dragging) return;
     state.anchor = null;
+    state.centerTimeline = true;
     render();
   }
 
   function renderTaskTable() {
-    const search = ($('taskSearch')?.value || '').toLowerCase();
-    const status = $('taskStatusFilter')?.value || '';
-    const tasks = state.tasks.filter(t =>
-      (!search || `${t.id} ${t.name} ${t.category}`.toLowerCase().includes(search)) &&
-      (!status || t.status === status)
-    );
+    if (state.activeView !== 'tasks' || !state.loaded) return;
+    const list = state.list;
+    const { groups, matchingCount } = taskGroups(state.tasks, list.filters, list.sort, list.direction);
+    const pageCount = Math.max(1, Math.ceil(groups.length / list.pageSize));
+    list.page = Math.min(pageCount, Math.max(1, list.page));
+    list.visibleIds = [];
+    const busy = state.writing || state.syncing;
+    const rowHtml = (task, child, contextOnly, childCount) => {
+      if (!contextOnly) list.visibleIds.push(task.id);
+      const argument = esc(JSON.stringify(task.id));
+      return `<tr class="${contextOnly ? 'context-row' : ''}">
+        <td><input type="checkbox" data-select-id="${esc(task.id)}" aria-label="Select ${esc(task.name)}" ${contextOnly || busy ? 'disabled' : ''} ${list.selected.has(task.id) && !contextOnly ? 'checked' : ''} onchange="selectTask(${argument},this.checked)"></td>
+        <td><div class="list-task ${child ? 'child' : ''}">
+          ${childCount ? `<button class="group-toggle" aria-label="${list.collapsed.has(task.id) ? 'Expand' : 'Collapse'} subtasks of ${esc(task.name)}" aria-expanded="${!list.collapsed.has(task.id)}" onclick="toggleListGroup(${argument})">${list.collapsed.has(task.id) ? '&#9654;' : '&#9660;'}</button>` : '<span class="group-toggle"></span>'}
+          <div><a href="#" onclick="openEdit(${argument});return false">${esc(task.name || 'Untitled task')}</a>
+          <div class="task-meta">${esc(task.id)}${contextOnly ? ' · Parent context' : ''}${!child && task.parentTaskId && !state.taskById.has(task.parentTaskId) ? ' · Parent unavailable' : ''}${childCount ? ` · ${childCount} matching subtasks` : ''}</div></div></div></td>
+        <td>${esc(task.category)}</td><td>${esc(task.priority)}</td>
+        <td><select class="field-control row-status" aria-label="Status for ${esc(task.name)}" ${busy || contextOnly ? 'disabled' : ''} onchange="changeInlineStatus(${argument},this)">
+          ${['To Do', 'In Progress', 'Blocked', 'Done'].map(status => `<option ${task.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select></td>
+        <td>${task.start ? esc(dateKey(task.start)) : '&mdash;'}</td><td>${task.end ? esc(dateKey(task.end)) : '&mdash;'}</td></tr>`;
+    };
+    let rows = '';
+    groups.slice((list.page - 1) * list.pageSize, list.page * list.pageSize).forEach(group => {
+      rows += rowHtml(group.root, false, group.contextOnly, group.children.length);
+      if (list.collapsed.has(group.root.id)) return;
+      const pages = Math.max(1, Math.ceil(group.children.length / 25));
+      const page = Math.min(pages, Math.max(1, list.childPages.get(group.root.id) || 1));
+      list.childPages.set(group.root.id, page);
+      group.children.slice((page - 1) * 25, page * 25).forEach(child => { rows += rowHtml(child, true, false, 0); });
+      if (pages > 1) {
+        const argument = esc(JSON.stringify(group.root.id));
+        rows += `<tr class="child-pages"><td></td><td colspan="6"><div class="list-controls">
+          <button class="btn" aria-label="Previous subtasks of ${esc(group.root.name)}" ${page === 1 ? 'disabled' : ''} onclick="changeChildPage(${argument},-1)">&#8592;</button>
+          <span>Subtasks ${page} / ${pages}</span>
+          <button class="btn" aria-label="Next subtasks of ${esc(group.root.name)}" ${page === pages ? 'disabled' : ''} onclick="changeChildPage(${argument},1)">&#8594;</button></div></td></tr>`;
+      }
+    });
+    const columns = [['name', 'Task'], ['category', 'Category'], ['priority', 'Priority'], ['status', 'Status'], ['start', 'Start'], ['end', 'End']];
+    const invalidRange = list.filters.from && list.filters.to && list.filters.to < list.filters.from;
+    $('taskTable').innerHTML = invalidRange
+      ? '<div class="empty" role="alert"><strong>Invalid date range</strong>Through date must be on or after From date.</div>'
+      : rows ? `<table><thead><tr><th><input type="checkbox" id="selectVisible" aria-label="Select visible matching tasks" onchange="selectVisibleTasks(this.checked)" ${busy ? 'disabled' : ''}></th>
+        ${columns.map(([key, title]) => `<th aria-sort="${list.sort === key ? list.direction === 1 ? 'ascending' : 'descending' : 'none'}"><button class="sort-button" onclick="sortTasks('${key}')">${title}${list.sort === key ? list.direction === 1 ? ' &#8593;' : ' &#8595;' : ''}</button></th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>`
+      : '<div class="empty"><strong>No tasks found</strong>Create a task or change the filters.</div>';
+    $('taskPagination').innerHTML = `<span class="page-summary">${matchingCount} matching tasks · ${groups.length} groups · Page ${list.page} / ${pageCount}</span>
+      <label>Groups per page <select class="field-control" aria-label="Groups per page" onchange="state.list.pageSize=Number(this.value);state.list.page=1;renderTaskTable()">${[25, 50, 100].map(size => `<option ${size === list.pageSize ? 'selected' : ''}>${size}</option>`).join('')}</select></label>
+      <button class="btn" aria-label="Previous task groups" ${list.page === 1 ? 'disabled' : ''} onclick="state.list.page--;renderTaskTable()">&#8592;</button>
+      <button class="btn" aria-label="Next task groups" ${list.page === pageCount ? 'disabled' : ''} onclick="state.list.page++;renderTaskTable()">&#8594;</button>
+      <label>Sort <select class="field-control" aria-label="Sort tasks" onchange="sortTasks(this.value)">${[['id', 'Task ID'], ...columns].map(([key, title]) => `<option value="${key}" ${list.sort === key ? 'selected' : ''}>${title}</option>`).join('')}</select></label>
+      <button class="btn" onclick="sortTasks(state.list.sort)" aria-label="Reverse sort direction">${list.direction === 1 ? '&#8593;' : '&#8595;'}</button>`;
+    updateSelectionControls();
+  }
 
-    if (!tasks.length) {
-      $('taskTable').innerHTML = '<div class="empty"><strong>No tasks found</strong>Create a task or change the filters.</div>';
-      return;
+  function taskMatches(task, filters) {
+    if (filters.from && filters.to && filters.to < filters.from) return false;
+    if (filters.search && !(task.searchText || `${task.id} ${task.name} ${task.category} ${task.description}`.toLowerCase()).includes(filters.search)) return false;
+    if (filters.status && task.status !== filters.status) return false;
+    if (filters.category && task.category !== filters.category) return false;
+    if (filters.priority && task.priority !== filters.priority) return false;
+    if (filters.from || filters.to) {
+      if (!task.start || !task.end || task.end < task.start) return false;
+      if (filters.from && dateKey(task.end) < filters.from) return false;
+      if (filters.to && dateKey(task.start) > filters.to) return false;
     }
+    return true;
+  }
 
-    $('taskTable').innerHTML = `<table>
-      <thead><tr><th>Task</th><th>Category</th><th>Priority</th><th>Status</th><th>Start</th><th>End</th></tr></thead>
-      <tbody>${tasks.map(t => `<tr>
-        <td><a href="#" onclick="openEdit('${esc(t.id)}');return false" style="color:#0c66e4;font-weight:600;text-decoration:none">${esc(t.name)}</a><div class="task-meta">${esc(t.id)}</div></td>
-        <td>${esc(t.category)}</td>
-        <td>${esc(t.priority)}</td>
-        <td><span class="pill" style="background-color:${barColor(t.status)};color:#fff">${esc(t.status)}</span></td>
-        <td>${t.start ? esc(dateKey(t.start)) : '—'}</td>
-        <td>${t.end ? esc(dateKey(t.end)) : '—'}</td>
-      </tr>`).join('')}</tbody>
-    </table>`;
+  function compareTasks(first, second, key, direction) {
+    const firstValue = first[key];
+    const secondValue = second[key];
+    if (key === 'start' || key === 'end') {
+      if (!firstValue || !secondValue) {
+        if (Boolean(firstValue) !== Boolean(secondValue)) return firstValue ? -1 : 1;
+      } else if (firstValue.getTime() !== secondValue.getTime()) return (firstValue - secondValue) * direction;
+    } else {
+      const ranks = key === 'priority' ? ['Low', 'Medium', 'High'] : key === 'status' ? ['To Do', 'In Progress', 'Blocked', 'Done'] : null;
+      const order = ranks ? ranks.indexOf(firstValue) - ranks.indexOf(secondValue)
+        : String(firstValue).localeCompare(String(secondValue), undefined, { numeric: true, sensitivity: 'base' });
+      if (order) return order * direction;
+    }
+    return first.id.localeCompare(second.id, undefined, { numeric: true });
+  }
+
+  function taskGroups(tasks, filters, sort, direction) {
+    const byId = new Map(tasks.map(task => [task.id, task]));
+    const groups = new Map();
+    const matched = tasks.filter(task => taskMatches(task, filters));
+    matched.forEach(task => {
+      const parent = task.parentTaskId ? byId.get(task.parentTaskId) : null;
+      const root = parent || task;
+      if (!groups.has(root.id)) groups.set(root.id, { root, children: [], contextOnly: !taskMatches(root, filters) });
+      if (parent) groups.get(root.id).children.push(task);
+    });
+    const compare = (first, second) => compareTasks(first, second, sort, direction);
+    const ordered = [...groups.values()].sort((first, second) => compare(first.root, second.root));
+    ordered.forEach(group => group.children.sort(compare));
+    return { groups: ordered, matchingCount: matched.length };
+  }
+
+  function changeTaskFilters() {
+    const list = state.list;
+    list.filters = {
+      search: $('taskSearch').value.trim().toLowerCase(), status: $('taskStatusFilter').value,
+      category: $('taskCategoryFilter').value, priority: $('taskPriorityFilter').value,
+      from: $('taskDateFrom').value, to: $('taskDateTo').value
+    };
+    list.page = 1;
+    list.childPages.clear();
+    list.selected.clear();
+    renderTaskTable();
+  }
+
+  function resetTaskFilters() {
+    ['taskSearch', 'taskStatusFilter', 'taskCategoryFilter', 'taskPriorityFilter', 'taskDateFrom', 'taskDateTo'].forEach(id => { $(id).value = ''; });
+    changeTaskFilters();
+  }
+
+  function sortTasks(key) {
+    state.list.direction = state.list.sort === key ? -state.list.direction : 1;
+    state.list.sort = key;
+    state.list.page = 1;
+    state.list.childPages.clear();
+    renderTaskTable();
+  }
+
+  function toggleListGroup(id) {
+    const collapsed = state.list.collapsed;
+    if (collapsed.has(id)) collapsed.delete(id); else collapsed.add(id);
+    renderTaskTable();
+  }
+
+  function changeChildPage(id, direction) {
+    state.list.childPages.set(id, (state.list.childPages.get(id) || 1) + direction);
+    renderTaskTable();
+  }
+
+  function selectTask(id, selected) {
+    if (state.writing || state.syncing) return;
+    if (selected) state.list.selected.add(id); else state.list.selected.delete(id);
+    updateSelectionControls();
+  }
+
+  function selectVisibleTasks(selected) {
+    if (state.writing || state.syncing) return;
+    state.list.visibleIds.forEach(id => {
+      if (selected) state.list.selected.add(id); else state.list.selected.delete(id);
+    });
+    document.querySelectorAll('[data-select-id]').forEach(input => { input.checked = state.list.selected.has(input.dataset.selectId); });
+    updateSelectionControls();
+  }
+
+  function deletionBlocker(ids, tasks) {
+    const selected = new Set(ids);
+    return tasks.find(task => selected.has(task.parentTaskId) && !selected.has(task.id));
+  }
+
+  function updateSelectionControls() {
+    const list = state.list;
+    const selectedVisible = list.visibleIds.filter(id => list.selected.has(id)).length;
+    const header = $('selectVisible');
+    if (header) {
+      header.checked = list.visibleIds.length > 0 && selectedVisible === list.visibleIds.length;
+      header.indeterminate = selectedVisible > 0 && selectedVisible < list.visibleIds.length;
+    }
+    const busy = state.writing || state.syncing;
+    const blocker = deletionBlocker([...list.selected], state.tasks);
+    const previousStatus = $('bulkStatus')?.value || 'To Do';
+    $('bulkControls').innerHTML = `<strong class="page-summary">${list.selected.size} selected</strong>
+      <label>Status <select class="field-control" id="bulkStatus" ${busy ? 'disabled' : ''}>${['To Do', 'In Progress', 'Blocked', 'Done'].map(status => `<option ${status === previousStatus ? 'selected' : ''}>${status}</option>`).join('')}</select></label>
+      <button class="btn" onclick="applyBulkStatus()" ${busy || !list.selected.size ? 'disabled' : ''}>Update selected</button>
+      <span title="${blocker ? 'Select every subtask before deleting a parent.' : 'Delete selected tasks'}"><button class="btn" onclick="deleteSelectedTasks()" ${busy || !list.selected.size || blocker ? 'disabled' : ''}>Delete selected</button></span>
+      <button class="btn" onclick="state.list.selected.clear();selectVisibleTasks(false)" ${busy || !list.selected.size ? 'disabled' : ''}>Clear selection</button>`;
+  }
+
+  function changeInlineStatus(id, select) {
+    const status = select.value;
+    select.value = state.taskById.get(id).status;
+    if (status === select.value) return;
+    updateSelectedStatuses([id], status);
+  }
+
+  function applyBulkStatus() {
+    updateSelectedStatuses([...state.list.selected], $('bulkStatus').value);
+  }
+
+  function updateSelectedStatuses(ids, status) {
+    const summary = taskSummary(ids.map(id => state.taskById.get(id) || { id }));
+    mutationRunner().withSuccessHandler(result => {
+      showToast(result.changed === 0
+        ? `No status changes: ${summary} already ${status}.`
+        : `Status set to ${status}: ${summary}.`);
+      loadTasks();
+    }).withFailureHandler(error => showToast(`Status update failed for ${summary}: ` + (error.message || error)))
+      .updateTaskStatuses(ids, status);
+  }
+
+  function deleteSelectedTasks() {
+    const ids = [...state.list.selected];
+    if (!ids.length || deletionBlocker(ids, state.tasks)) return;
+    const parents = ids.filter(id => state.childrenByParent.has(id)).length;
+    const children = ids.filter(id => state.taskById.get(id)?.parentTaskId).length;
+    const summary = taskSummary(ids.map(id => state.taskById.get(id) || { id }));
+    if (!confirm(`Delete ${ids.length} selected tasks permanently?\n\nIncludes ${parents} parents with subtasks and ${children} subtasks. Only explicitly selected tasks will be deleted.\n\nThis cannot be undone.`)) return;
+    mutationRunner().withSuccessHandler(result => {
+      ids.forEach(id => state.list.selected.delete(id));
+      showToast(`Deleted ${summary}.`);
+      loadTasks();
+    }).withFailureHandler(error => showToast(`Delete failed for ${summary}: ` + (error.message || error)))
+      .deleteTasks(ids);
   }
 
   function renderDashboard() {
@@ -1769,6 +2077,7 @@ html += `<div class="task-cell"
   }
 
   function switchView(view) {
+    state.activeView = view;
     document.querySelectorAll('.nav-item[data-view]').forEach(b =>
       b.classList.toggle('active', b.dataset.view === view));
     document.querySelectorAll('.view').forEach(v =>
@@ -1782,6 +2091,7 @@ html += `<div class="task-cell"
 
     $('pageTitle').textContent = titles[view][0];
     $('pageSubtitle').textContent = titles[view][1];
+    renderActiveView();
   }
 
   document.querySelectorAll('.nav-item[data-view]').forEach(b =>
@@ -1950,6 +2260,7 @@ html += `<div class="task-cell"
     `;
 }
 function createSubtask() {
+  if (state.writing || state.syncing) return;
   const parent = state.tasks.find(
     t => t.id === state.editId
   );
@@ -1982,16 +2293,16 @@ function createSubtask() {
   button.disabled = true;
   button.textContent = 'Adding…';
 
-  google.script.run
+  mutationRunner()
     .withSuccessHandler(result => {
-      showToast(result.message || 'Subtask created.');
+      showToast(`Created subtask ${taskLabel({ name: taskName, id: result.taskId })} under ${taskLabel(parent)}.`);
 
       loadTasks(() => {
         const updatedParent = state.tasks.find(
           t => t.id === parent.id
         );
 
-        if (updatedParent) {
+        if (updatedParent && state.editId === parent.id) {
           renderSubtaskPanel(updatedParent);
         }
       });
@@ -2001,7 +2312,7 @@ function createSubtask() {
       button.textContent = '＋ Add';
 
       showToast(
-        'Unable to create subtask: ' + (err.message || err)
+        `Unable to create subtask "${taskName}": ` + (err.message || err)
       );
     })
     .createTask({
@@ -2016,6 +2327,7 @@ function createSubtask() {
 }
   
  function transferCurrentSubtask() {
+  if (state.writing || state.syncing) return;
   const taskId = state.editId;
   const select = $('transferParentSelect');
 
@@ -2028,6 +2340,10 @@ function createSubtask() {
   if (!currentTask) return;
 
   const newParentId = String(select.value || '').trim();
+  const taskName = taskLabel(currentTask);
+  const parentName = newParentId
+    ? taskLabel(state.taskById.get(newParentId) || { id: newParentId })
+    : '';
 
   // A top-level task must choose a destination.
   if (!currentTask.parentTaskId && !newParentId) {
@@ -2059,7 +2375,7 @@ function createSubtask() {
   button.disabled = true;
   button.textContent = 'Transferring…';
 
-  google.script.run
+  mutationRunner()
     .withSuccessHandler(result => {
       if (!result || !result.success) {
         button.disabled = false;
@@ -2068,23 +2384,21 @@ function createSubtask() {
         return;
       }
 
+      showToast(newParentId
+        ? `Moved ${taskName} under ${parentName}.${result.childrenMoved ? ` Also moved ${result.childrenMoved} subtasks.` : ''}`
+        : `Made ${taskName} standalone.`);
       loadTasks(() => {
         const updatedTask = state.tasks.find(
           t => t.id === taskId
         );
 
         if (!updatedTask) {
-          showToast('Task transferred, but refresh failed.');
+          showToast(`Transferred ${taskName}, but it was not found after refresh.`);
           return;
         }
 
-        openEdit(taskId);
+        if (state.editId === taskId) openEdit(taskId);
 
-        showToast(
-          newParentId
-            ? 'Task converted into a subtask.'
-            : 'Task is now standalone.'
-        );
       });
     })
     .withFailureHandler(err => {
@@ -2092,13 +2406,17 @@ function createSubtask() {
       button.textContent = 'Convert to subtask';
 
       showToast(
-        'Unable to transfer task: ' + (err.message || err)
+        `Unable to transfer ${taskName}: ` + (err.message || err)
       );
     })
     .setTaskParent(taskId, newParentId);
 }
 
   function openCreate() {
+    if (state.writing || state.syncing || !state.loaded) {
+      showToast('Wait for tasks to finish loading.');
+      return;
+    }
     state.editId = null;
 
     $('taskForm').reset();
@@ -2143,6 +2461,7 @@ function populateParentTaskOptions() {
     ).join('');
 }
   function openEdit(id) {
+    if (state.writing || state.syncing) return;
     const t = state.tasks.find(t => t.id === id);
     if (!t) return;
 
@@ -2151,6 +2470,7 @@ function populateParentTaskOptions() {
     $('parentTaskField').style.display = 'none';
     $('modalTitle').textContent = 'Edit task';
     $('saveBtn').textContent = 'Save changes';
+    $('saveBtn').disabled = false;
     $('taskName').value = t.name;
     $('category').value = t.category;
     $('priority').value = t.priority;
@@ -2171,6 +2491,7 @@ function populateParentTaskOptions() {
   }
 
   function closeModal() {
+    if (state.writing) return;
     $('taskModal').classList.remove('open');
     state.editId = null;
   }
@@ -2182,6 +2503,7 @@ function populateParentTaskOptions() {
 
   function saveTask(event) {
     event.preventDefault();
+    if (state.writing || state.syncing) return;
     const start = $('startDate').value;
     const end = $('endDate').value;
 
@@ -2204,34 +2526,19 @@ function populateParentTaskOptions() {
     if (!data.taskName) return;
 
     const isEdit = Boolean(state.editId);
+    if (isEdit) {
+      data.taskId = state.editId;
+      data.status = $('taskStatus').value;
+    }
     setSaving(true);
     $('formError').style.display = 'none';
 
-    const runner = google.script.run
-      .withSuccessHandler(() => {
-        const oldId = state.editId;
-        const status = $('taskStatus').value;
+    const runner = mutationRunner()
+      .withSuccessHandler(result => {
         setSaving(false);
         closeModal();
-
-        const afterSave = () => {
-          if (isEdit && status) {
-            google.script.run
-              .withSuccessHandler(() => {
-                showToast('Task saved successfully.');
-                loadTasks();
-              })
-              .withFailureHandler(err => {
-                showToast('Task saved, but status update failed: ' + (err.message || err));
-                loadTasks();
-              })
-              .updateTaskStatus(oldId, status);
-          } else {
-            showToast(isEdit ? 'Task updated successfully.' : 'Task created successfully.');
-            loadTasks();
-          }
-        };
-        afterSave();
+        showToast(`${isEdit ? 'Updated' : 'Created'} ${taskLabel({ name: data.taskName, id: data.taskId || result.taskId })}.`);
+        loadTasks();
       })
       .withFailureHandler(err => {
         setSaving(false);
@@ -2240,7 +2547,6 @@ function populateParentTaskOptions() {
       });
 
     if (isEdit) {
-      data.taskId = state.editId;
       runner.updateTask(data);
     } else {
       runner.createTask(data);
@@ -2248,18 +2554,19 @@ function populateParentTaskOptions() {
   }
 
   function saveStatusOnly() {
-    if (!state.editId) return;
+    if (!state.editId || state.writing || state.syncing) return;
     const id = state.editId;
     const status = $('taskStatus').value;
+    const taskName = taskLabel(state.taskById.get(id) || { id });
     $('editStatusBtn').disabled = true;
     $('editStatusBtn').textContent = 'Updating…';
 
-    google.script.run
+    mutationRunner()
       .withSuccessHandler(() => {
         $('editStatusBtn').disabled = false;
         $('editStatusBtn').textContent = 'Update status';
         closeModal();
-        showToast('Task status updated.');
+        showToast(`Status set to ${status}: ${taskName}.`);
         loadTasks();
       })
       .withFailureHandler(err => {
@@ -2272,6 +2579,7 @@ function populateParentTaskOptions() {
   }
 
 function deleteCurrentTask() {
+  if (state.writing || state.syncing) return;
   const id = state.editId;
 
   if (!id) {
@@ -2294,7 +2602,7 @@ function deleteCurrentTask() {
   button.disabled = true;
   button.textContent = 'Deleting…';
 
-  google.script.run
+  mutationRunner()
     .withSuccessHandler(result => {
       button.disabled = false;
       button.textContent = 'Delete task';
@@ -2305,7 +2613,7 @@ function deleteCurrentTask() {
       }
 
       closeModal();
-      showToast(result?.message || 'Task deleted successfully.');
+      showToast(`Deleted ${taskLabel(task)}.`);
       loadTasks();
     })
     .withFailureHandler(error => {
@@ -2315,20 +2623,53 @@ function deleteCurrentTask() {
       const message = error.message || String(error);
       $('formError').textContent = 'Unable to delete task: ' + message;
       $('formError').style.display = 'block';
-      showToast('Delete failed: ' + message);
+      showToast(`Delete failed for ${taskLabel(task)}: ` + message);
     })
     .deleteTask(id);
 }
 
+  function taskLabel(task) {
+    return `"${task.name || 'Untitled task'}"${task.id ? ` (${task.id})` : ''}`;
+  }
+
+  function taskSummary(tasks) {
+    if (tasks.length === 1) return taskLabel(tasks[0]);
+    const names = tasks.slice(0, 2).map(taskLabel).join(', ');
+    return `${tasks.length} tasks: ${names}${tasks.length > 2 ? ` and ${tasks.length - 2} more` : ''}`;
+  }
+
   function showToast(message) {
-    $('toast').textContent = message;
-    $('toast').style.display = 'block';
-    clearTimeout(showToast.timer);
-    showToast.timer = setTimeout(() => $('toast').style.display = 'none', 3500);
+    const toast = $('toast');
+    toast.classList.remove('dismissing');
+    $('toastMessage').textContent = message;
+    toast.style.display = 'block';
+  }
+
+  function dismissToast() {
+    $('toast').classList.add('dismissing');
+  }
+
+  function finishToastDismiss(event) {
+    const toast = $('toast');
+    if (event.animationName !== 'toast-out' || !toast.classList.contains('dismissing')) return;
+    toast.style.display = 'none';
+    toast.classList.remove('dismissing');
   }
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeModal();
+  });
+
+  let timelineFrame = null;
+  $('timelineShell').addEventListener('scroll', () => {
+    if (timelineFrame !== null || state.dragging) return;
+    timelineFrame = requestAnimationFrame(() => {
+      timelineFrame = null;
+      render(true);
+    });
+  }, { passive: true });
+  window.addEventListener('resize', () => {
+    if (state.activeView === 'timeline') render();
   });
 
   loadTasks();
