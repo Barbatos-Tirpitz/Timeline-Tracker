@@ -99,7 +99,7 @@ Hours is stored in column P, after Clients in O. Existing/blank task hours read 
 
 ## Categories and Clients
 
-Task categories are exactly **Graphic Design**, **Video editing**, and **Scheduling**. Clients are a separate optional field: a task may have several clients, or none (Unassigned).
+Task categories are **Graphic Design**, **Video editing**, **Scheduling**, and **Revision**. Clients are a separate optional field: a task may have several clients, or none (Unassigned). Revision is available on create/edit and bulk edits; adding it does not reclassify old tasks automatically.
 
 The Clients control offers reusable suggestions and an Add client action. Client names are trimmed and deduplicated case-insensitively; commas and quotes are valid parts of a name. Each task allows up to 50 client names of up to 100 characters. Suggestions come from current tasks, not a separate client registry.
 
@@ -111,7 +111,9 @@ Subtask rows display their own client assignments as compact tags, independently
 
 ## Dashboard Periods
 
-The dashboard defaults to Monthly and offers Daily, Weekly, Monthly, and Yearly modes, date selection, previous/next period, Today, and a client filter. Weeks run Monday-Sunday; months and years use calendar boundaries. The default/reset date comes from the spreadsheet timezone.
+The dashboard defaults to Monthly and offers Daily, Weekly, Fortnightly, Monthly, and Yearly modes, date selection, previous/next period, Today, and a client filter. All tasks also offers Weekly/Fortnightly/Monthly date presets, a reference date, previous/next period, All dates, and Custom dates. Timeline offers Weekly, Fortnightly, and Monthly alongside Day. These are date-window filters; task-field sorting remains available separately.
+
+Fortnightly explicitly means 14 days (the requested bi-monthly mode is interpreted as every two weeks, matching the payment cycle), not twice per month or every two months. Weekly and fortnightly views start on Monday of the reference week; navigation advances 7 or 14 days respectively. Months and years use calendar boundaries. The default/reset date comes from the spreadsheet timezone. Manual All tasks From/Through edits switch its period to Custom dates. Period changes do not modify task dates, tracked hours or schedules.
 
 Tasks count when their planned dates overlap the selected period, including boundaries. Invalid or missing planned dates are excluded. Parents and subtasks count individually; a task assigned to several clients counts once. Completion reflects the tasks' current statuses, not a historical status snapshot or work completed during that period. The top summary tiles use the same period/client scope while Dashboard is active and return to global totals in other views.
 
@@ -145,7 +147,9 @@ Open **Invoices** in the sidebar or **Open invoices** on Dashboard. The invoice 
 2. Save the defaults. Initial defaults are USD, a zero hourly rate, and today's spreadsheet date as the cycle anchor; these are placeholders, not an assumed billing agreement.
 3. Create a new invoice and choose/type one client. Billing timeline offers Two weeks (start date plus 13 days, inclusive) or Custom dates (your own start/end). The period arrows move by the selected range's length. The default fortnight is anchored to Billing cycle starts, not twice per calendar month.
 4. The app counts matching videos for the client and timeline. Choose Scheduled overlap or Completed in range, select the video source, then Add matching videos to load them together. Enter hours and an hourly rate for each video; the total is the sum of each video's hours multiplied by its hourly rate. Rates default from the most recent saved invoice for that client/currency, or the global default; every line can be overridden. Use up to two decimals for hours and rates. A task may have several clients, but each invoice is explicitly for one client; hours are not automatically allocated, duplicated, or inferred from task dates/status.
-5. Save draft, review the client preview, then Issue invoice when ready. The preview always shows Draft until issued. Print / PDF opens browser printing, where Save as PDF creates a client copy; Download CSV and Copy text are also available. Positive hours/rates and sender/client details are required for client copies and issuance.
+5. Set an optional Invoice number and Invoice name, save draft, review the client preview, then Issue invoice when ready. A blank number is allocated automatically. Custom numbers are unique across saved invoices (case-insensitive) and editable while Draft; issued copies remain immutable. Names appear in the client preview, generated PDF, CSV/text copies and export filenames. Positive hours/rates and sender/client details are required for client copies and issuance.
+
+Use **Download PDF** for a client copy without a script link. The PDF is generated directly from invoice data, with page numbering but no app URL or browser header/footer. The app lazily loads integrity-pinned jsPDF 3.0.4 over HTTPS from cdnjs; invoice data is processed locally, not uploaded to that CDN. If loading fails, use Print instead. The separate **Print** command still uses the browser dialog: turn off its **Headers and footers** option to suppress browser-added dates/URLs. Page CSS cannot reliably disable that browser setting. Download CSV and Copy text remain available. Verify the resulting file in your deployed browser before sending it.
 
 The video count/picker uses Video editing tasks for the selected client and timeline. Scheduled overlap includes boundary dates; Completed in range requires Done status and an actual completion date within the range. Unassigned videos are excluded unless Include unassigned is checked. The default source is individual tasks without subtasks, avoiding counting a container parent and its children together; Top-level tasks and All video tasks are explicit alternatives when your records represent videos differently.
 
@@ -217,7 +221,7 @@ Update both [App.html](App.html) and [code.gs](code.gs) in the spreadsheet's bou
 3. Check the backup, new headers, migrated categories, formulas, and existing client data. Re-running an already completed upgrade makes no further category changes or backups.
 4. Publish a new web-app deployment version with the updated backend and frontend together, then perform the live checks above.
 
-No third-party packages are required. Do not upload the Node tests to Apps Script or populate production with synthetic test tasks. Existing clients remain empty until assigned; no client names are inferred from old task categories.
+No build-tool packages are required. Generated PDF export uses the lazy-loaded jsPDF CDN dependency described above; task tracking and other exports do not require it. Do not upload the Node tests to Apps Script or populate production with synthetic test tasks. Existing clients remain empty until assigned; no client names are inferred from old task categories.
 
 The HTML requires the deployed Apps Script web app for real task data. Opening it directly shows a connection error rather than providing a standalone backend.
 
