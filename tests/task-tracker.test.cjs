@@ -575,3 +575,47 @@ test('active category validation and errors only list the new categories; legacy
   assert.throws(() => app.context.categoryForUpgrade_('__proto__'), /Unknown category/);
   assert.equal(app.writes.length, 0);
 });
+
+test('quantity multiplier previews the exact total and rejects invalid or oversized batches', () => {
+  const app = client();
+  const batch = app.subtaskBatch('Edit video\nSchedule review', 3);
+  assert.equal(batch.total, 6);
+  assert.equal(batch.error, '');
+  for (const quantity of [0, -1, 1.5, NaN, 101]) assert.match(app.subtaskBatch('Task', quantity).error, /whole number/);
+  assert.match(app.subtaskBatch('One\nTwo', 51).error, /100-subtask limit/);
+  assert.match(app.subtaskBatch('', 1).error, /at least one/);
+});
+
+test('server applies quantity multiplier with distinct IDs and validates the expanded total before writes', () => {
+  const parent = taskRow('VID-001');
+  parent[5] = new Date(2026, 10, 1); parent[6] = new Date(2026, 10, 10);
+  const app = server([parent]);
+  const result = app.context.createSubtasks('VID-001', ['Edit', 'Schedule'], 3);
+  assert.equal(result.created, 6);
+  assert.equal(new Set(result.taskIds).size, 6);
+  assert.deepEqual(app.rows.slice(2).map(row => row[1]), ['Edit', 'Edit', 'Edit', 'Schedule', 'Schedule', 'Schedule']);
+  const count = app.writes.length;
+  assert.throws(() => app.context.createSubtasks('VID-001', ['One', 'Two'], 51), /1-100/);
+  assert.throws(() => app.context.createSubtasks('VID-001', ['One'], 1.5), /whole number/);
+  assert.equal(app.writes.length, count);
+});
+
+test('bulk edit field toggles preserve the panel and draft while making selected changes explicit', () => {
+  const app = client();
+  const state = app.getState();
+  const parent = listTask('VID-1', '', { category: 'Scheduling' });
+  state.taskById.set(parent.id, parent);
+  app.resetSubtaskPanel(parent.id);
+  state.subtaskPanel.draft = 'Draft task';
+  state.subtaskPanel.quantity = 3;
+  state.subtaskPanel.selected.add('VID-2');
+  app.toggleSubtaskField('category', true);
+  assert.equal(state.subtaskPanel.patch.category, 'Scheduling');
+  assert.equal(app.elements.get('bulkValuecategory').disabled, false);
+  assert.equal(app.elements.get('bulkApplyBtn').textContent, 'Apply 1 fields to 1 subtasks');
+  app.setSubtaskPatch('category', 'Graphic Design');
+  app.toggleSubtaskField('category', false);
+  assert.equal(state.subtaskPanel.draft, 'Draft task');
+  assert.equal(state.subtaskPanel.quantity, 3);
+  assert.equal(app.elements.get('bulkApplyBtn').disabled, true);
+});

@@ -549,6 +549,12 @@
   .subtask-row:hover {
     background: #f7f8fa;
   }
+  .subtask-row.is-selected { background: #e9f2ff; border-color: #85b8ff; }
+  .subtask-link { overflow-wrap: anywhere; }
+  .edit-context { padding-bottom: 16px; margin-bottom: 18px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+  .modal-backdrop.editing-task .modal { max-width: 720px; }
+  .bulk-edit-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; }
+  .bulk-edit-footer output { flex-basis: 100%; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 
   .subtask-info {
     min-width: 0;
@@ -583,6 +589,11 @@
     padding: 9px 10px;
   }
   .subtask-create textarea { flex: 1; min-width: 0; min-height: 80px; padding: 9px; border: 1px solid #c8d0dc; border-radius: 5px; }
+  .subtask-create { flex-direction: column; }
+  .subtask-create-actions { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+  .subtask-quantity { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 700; }
+  .subtask-quantity input { width: 96px; min-height: 36px; }
+  .subtask-create-actions output { flex: 1; min-width: 120px; padding-bottom: 10px; }
   .subtask-edit { margin: 14px 0; }
   .subtask-edit summary { cursor: pointer; font-weight: 700; margin-bottom: 12px; }
   .subtask-edit .form-grid { gap: 12px; }
@@ -938,6 +949,7 @@
     </div>
     <form id="taskForm" onsubmit="saveTask(event)">
       <div class="modal-body">
+  <div class="edit-context" id="taskContext" hidden></div>
 
   <div class="form-grid">
 
@@ -1075,7 +1087,7 @@
     clientSelections: {},
     spreadsheetToday: '',
     dashboard: { period: 'monthly', anchor: null, client: '' },
-    subtaskPanel: { parentId: null, page: 1, selected: new Set(), draft: '', patch: {}, editOpen: false },
+    subtaskPanel: { parentId: null, page: 1, selected: new Set(), draft: '', quantity: 1, patch: {}, editOpen: false, status: 'To Do' },
     list: {
       page: 1, pageSize: 25, sort: 'id', direction: 1,
       collapsed: new Set(), childPages: new Map(), selected: new Set(), visibleIds: [],
@@ -2275,7 +2287,7 @@ html += `<div class="task-cell"
       : 'No subtasks yet';
 
     const childRows = displayedChildren.map(child => `
-      <div class="subtask-row">
+      <div class="subtask-row ${subtaskState.selected.has(child.id) ? 'is-selected' : ''}">
       <input type="checkbox" data-child-id="${esc(child.id)}" aria-label="Select subtask ${esc(child.name)}" ${subtaskState.selected.has(child.id) ? 'checked' : ''} onchange="selectPanelSubtask(${esc(JSON.stringify(child.id))},this.checked)">
         <div class="subtask-info">
           <button type="button" class="subtask-link"
@@ -2304,7 +2316,7 @@ html += `<div class="task-cell"
           ? `<div class="subtask-bulk">
               <label><input id="selectPanelPage" type="checkbox" onchange="selectPanelPage(this.checked)"> Select visible</label>
               <strong id="panelSelectionCount"></strong>
-              <select id="panelBulkStatus" class="field-control" aria-label="Selected subtask status"><option>To Do</option><option>In Progress</option><option>Blocked</option><option>Done</option></select>
+              <select id="panelBulkStatus" class="field-control" aria-label="Selected subtask status" onchange="state.subtaskPanel.status=this.value">${['To Do', 'In Progress', 'Blocked', 'Done'].map(status => `<option ${subtaskState.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select>
               <button type="button" class="btn" data-child-action onclick="runPanelSubtaskAction('status')">Update status</button>
               <button type="button" class="btn" data-child-action onclick="runPanelSubtaskAction('delete')">Delete selected</button>
               <button type="button" class="btn" data-child-action onclick="state.subtaskPanel.selected.clear();renderSubtaskPanel(state.taskById.get(state.editId))">Clear selection</button>
@@ -2322,12 +2334,16 @@ html += `<div class="task-cell"
                   const value = subtaskState.patch[key] || '';
                   const choices = key === 'category' ? state.categories : ['Low', 'Medium', 'High'];
                   return `<div class="form-field"><label class="apply-field"><input type="checkbox" ${applied ? 'checked' : ''} onchange="toggleSubtaskField(${argument},this.checked)">Apply ${label}</label>
-                    ${key.endsWith('Date') ? `<input type="date" aria-label="Bulk ${label}" value="${esc(value)}" ${applied ? '' : 'disabled'} onchange="state.subtaskPanel.patch[${argument}]=this.value">`
-                      : `<select aria-label="Bulk ${label}" ${applied ? '' : 'disabled'} onchange="state.subtaskPanel.patch[${argument}]=this.value">${choices.map(choice => `<option ${value === choice ? 'selected' : ''}>${esc(choice)}</option>`).join('')}</select>`}</div>`;
+                    ${key.endsWith('Date') ? `<input id="bulkValue${key}" type="date" aria-label="Bulk ${label}" value="${esc(value)}" ${applied ? '' : 'disabled'} onchange="setSubtaskPatch(${argument},this.value)">`
+                      : `<select id="bulkValue${key}" aria-label="Bulk ${label}" ${applied ? '' : 'disabled'} onchange="setSubtaskPatch(${argument},this.value)">${choices.map(choice => `<option ${value === choice ? 'selected' : ''}>${esc(choice)}</option>`).join('')}</select>`}</div>`;
                 }).join('')}
                 <div class="form-field full"><label class="apply-field"><input type="checkbox" ${Object.prototype.hasOwnProperty.call(subtaskState.patch, 'clients') ? 'checked' : ''} onchange="toggleSubtaskField('clients',this.checked)">Apply Clients (replace assignments)</label>
                   <div id="bulkClientsControl" ${Object.prototype.hasOwnProperty.call(subtaskState.patch, 'clients') ? '' : 'hidden'}></div></div>
-              </div><button type="button" class="btn btn-primary" data-child-action onclick="runPanelSubtaskAction('edit')" style="margin-top:12px">Apply selected fields</button>
+              </div><div class="bulk-edit-footer">
+                <output id="bulkEditSummary" aria-live="polite"></output>
+                <button type="button" class="btn btn-primary" id="bulkApplyBtn" data-child-action onclick="runPanelSubtaskAction('edit')">Apply selected fields</button>
+                <button type="button" class="btn" onclick="resetSubtaskPatch()">Reset changes</button>
+              </div>
             </details>`
           : `<div class="subtask-empty">
               No subtasks yet. Add the individual steps needed to complete this task.
@@ -2336,13 +2352,14 @@ html += `<div class="task-cell"
 
       <div class="subtask-create">
         <textarea id="newSubtaskName" aria-label="Subtask names, one per line" placeholder="Subtask names, one per line" oninput="state.subtaskPanel.draft=this.value;updateSubtaskDraftCount()">${esc(subtaskState.draft)}</textarea>
-
-        <button type="button" class="btn btn-primary"
-          onclick="createSubtask()">
-          Add subtasks
-        </button>
+        <div class="subtask-create-actions">
+          <label class="subtask-quantity" for="subtaskQuantity">Quantity per name
+            <input id="subtaskQuantity" type="number" min="1" max="100" step="1" value="${esc(subtaskState.quantity)}" oninput="state.subtaskPanel.quantity=Number(this.value);updateSubtaskDraftCount()" aria-describedby="subtaskDraftCount">
+          </label>
+          <output id="subtaskDraftCount" aria-live="polite"></output>
+          <button type="button" class="btn btn-primary" id="createSubtasksBtn" onclick="createSubtask()">Create subtasks</button>
+        </div>
       </div>
-      <div class="task-meta" id="subtaskDraftCount"></div>
       <div class="subtask-transfer">
     <strong>Convert this task into a subtask</strong>
 
@@ -2399,9 +2416,9 @@ function createSubtask() {
     return;
   }
 
-  const names = subtaskNames($('newSubtaskName').value);
-  if (!names.length || names.length > 100 || names.some(name => name.length > 200)) {
-    showPanelError('Enter 1-100 subtask names, at most 200 characters each.');
+  const batch = subtaskBatch($('newSubtaskName').value, state.subtaskPanel.quantity);
+  if (batch.error) {
+    showPanelError(batch.error);
     return;
   }
   if (parentHasUnsavedChanges(parent)) {
@@ -2413,7 +2430,7 @@ function createSubtask() {
     showToast(`Created ${result.created} subtasks under ${taskLabel(parent)}.`);
     loadTasks();
   }).withFailureHandler(error => showPanelError('Unable to create subtasks: ' + (error.message || error)))
-    .createSubtasks(parent.id, names);
+    .createSubtasks(parent.id, batch.names, batch.quantity);
 }
 
   function subtaskNames(value) {
@@ -2421,12 +2438,27 @@ function createSubtask() {
   }
 
   function resetSubtaskPanel(parentId = null) {
-    state.subtaskPanel = { parentId, page: 1, selected: new Set(), draft: '', patch: {}, editOpen: false };
+    state.subtaskPanel = { parentId, page: 1, selected: new Set(), draft: '', quantity: 1, patch: {}, editOpen: false, status: 'To Do' };
     state.clientSelections.bulkClients = [];
   }
 
   function updateSubtaskDraftCount() {
-    $('subtaskDraftCount').textContent = `${subtaskNames(state.subtaskPanel.draft).length} / 100 subtasks`;
+    const batch = subtaskBatch(state.subtaskPanel.draft, state.subtaskPanel.quantity);
+    $('subtaskDraftCount').textContent = batch.error && batch.names.length ? batch.error
+      : `${batch.names.length} names × ${batch.quantity} = ${batch.total} subtasks`;
+    $('createSubtasksBtn').textContent = `Create ${batch.total || 0} subtasks`;
+    $('createSubtasksBtn').disabled = Boolean(batch.error) || state.writing || state.syncing;
+  }
+
+  function subtaskBatch(value, quantity) {
+    const names = subtaskNames(value);
+    const total = Number.isInteger(quantity) && quantity > 0 ? names.length * quantity : 0;
+    let error = '';
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) error = 'Quantity must be a whole number from 1 to 100.';
+    else if (!names.length) error = 'Enter at least one subtask name.';
+    else if (total > 100) error = `${total} subtasks exceeds the 100-subtask limit.`;
+    else if (names.some(name => name.length > 200)) error = 'Subtask names must be at most 200 characters.';
+    return { names, quantity, total, error };
   }
 
   function showPanelError(message) {
@@ -2454,6 +2486,10 @@ function createSubtask() {
     }
     if ($('panelSelectionCount')) $('panelSelectionCount').textContent = `${panel.selected.size} selected`;
     document.querySelectorAll('[data-child-action]').forEach(button => { button.disabled = !panel.selected.size || state.writing || state.syncing; });
+    document.querySelectorAll('[data-child-id]').forEach(input => {
+      input.closest('.subtask-row').classList.toggle('is-selected', panel.selected.has(input.dataset.childId));
+    });
+    updateBulkEditSummary();
   }
 
   function selectPanelSubtask(id, checked) {
@@ -2483,7 +2519,35 @@ function createSubtask() {
     if (!enabled) delete panel.patch[key];
     else panel.patch[key] = key === 'clients' ? state.clientSelections.bulkClients || []
       : key === 'startDate' ? dateKey(parent.start) : key === 'endDate' ? dateKey(parent.end) : parent[key];
-    renderSubtaskPanel(parent);
+    if (key === 'clients') $('bulkClientsControl').hidden = !enabled;
+    else {
+      const input = $('bulkValue' + key);
+      input.disabled = !enabled;
+      if (enabled) input.value = panel.patch[key];
+    }
+    updateBulkEditSummary();
+  }
+
+  function setSubtaskPatch(key, value) {
+    state.subtaskPanel.patch[key] = value;
+    updateBulkEditSummary();
+  }
+
+  function resetSubtaskPatch() {
+    state.subtaskPanel.patch = {};
+    state.clientSelections.bulkClients = [];
+    renderSubtaskPanel(state.taskById.get(state.editId));
+  }
+
+  function updateBulkEditSummary() {
+    const panel = state.subtaskPanel;
+    const fields = Object.keys(panel.patch);
+    const labels = { category: 'Category', priority: 'Priority', startDate: 'Start date', endDate: 'End date', clients: 'Clients (replace)' };
+    if ($('bulkEditSummary')) $('bulkEditSummary').textContent = `${panel.selected.size} selected · ${fields.length} fields${fields.length ? ': ' + fields.map(key => labels[key]).join(', ') : ''}`;
+    if ($('bulkApplyBtn')) {
+      $('bulkApplyBtn').textContent = `Apply ${fields.length} fields to ${panel.selected.size} subtasks`;
+      $('bulkApplyBtn').disabled = !fields.length || !panel.selected.size || state.writing || state.syncing;
+    }
   }
 
   function runPanelSubtaskAction(action) {
@@ -2499,6 +2563,17 @@ function createSubtask() {
     if (action === 'edit' && !Object.keys(patch).length) {
       showPanelError('Choose at least one field to apply.');
       return;
+    }
+    if (action === 'edit') {
+      for (const id of ids) {
+        const task = state.taskById.get(id);
+        const start = patch.startDate === undefined ? task?.start : parseDate(patch.startDate);
+        const end = patch.endDate === undefined ? task?.end : parseDate(patch.endDate);
+        if ((patch.startDate !== undefined || patch.endDate !== undefined) && (!start || !end || end < start)) {
+          showPanelError(`Choose valid dates for ${taskLabel(task || { id })}; end cannot precede start.`);
+          return;
+        }
+      }
     }
     const status = $('panelBulkStatus').value;
     const runner = mutationRunner().withSuccessHandler(() => {
@@ -2606,6 +2681,8 @@ function createSubtask() {
 
     resetSubtaskPanel();
     $('taskForm').reset();
+    $('taskContext').hidden = true;
+    $('taskModal').classList.remove('editing-task');
     renderClientPicker('taskClients', [], 'taskClientsControl');
 
     populateParentTaskOptions();
@@ -2655,8 +2732,12 @@ function populateParentTaskOptions() {
     state.editId = id;
     $('taskForm').reset();
     $('parentTaskField').style.display = 'none';
-    $('modalTitle').textContent = 'Edit task';
-    $('saveBtn').textContent = 'Save changes';
+    $('modalTitle').textContent = t.parentTaskId ? 'Edit subtask' : 'Edit task';
+    $('saveBtn').textContent = t.parentTaskId ? 'Save subtask' : 'Save changes';
+    $('taskModal').classList.add('editing-task');
+    const parent = state.taskById.get(t.parentTaskId);
+    $('taskContext').hidden = false;
+    $('taskContext').innerHTML = `<span class="task-meta">${esc(t.id)}</span>${parent ? ` · <button type="button" class="subtask-link" onclick="openEdit(${esc(JSON.stringify(parent.id))})">${esc(parent.name)}</button>` : ''}`;
     $('saveBtn').disabled = false;
     $('taskName').value = t.name;
     $('category').value = t.category;
@@ -2687,7 +2768,7 @@ function populateParentTaskOptions() {
 
   function setSaving(saving) {
     $('saveBtn').disabled = saving;
-    $('saveBtn').textContent = saving ? 'Saving…' : (state.editId ? 'Save changes' : 'Create task');
+    $('saveBtn').textContent = saving ? 'Saving…' : (state.editId ? state.taskById.get(state.editId)?.parentTaskId ? 'Save subtask' : 'Save changes' : 'Create task');
   }
 
   function saveTask(event) {
