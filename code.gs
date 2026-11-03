@@ -604,10 +604,12 @@ function literalText_(value) {
   return /^[=+\-@]/.test(value) ? "'" + value : value;
 }
 
-function createSubtasks(parentTaskId, names) {
+function createSubtasks(parentTaskId, names, quantity = 1) {
   if (!Array.isArray(names) || names.some(name => typeof name !== 'string')) throw new Error('Subtask names must be a list of text values.');
   names = names.map(name => name.trim()).filter(Boolean);
-  if (!names.length || names.length > 100 || names.some(name => name.length > 200)) throw new Error('Enter 1-100 subtask names, at most 200 characters each.');
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) throw new Error('Quantity must be a whole number from 1 to 100.');
+  if (!names.length || names.length * quantity > 100 || names.some(name => name.length > 200)) throw new Error('Enter 1-100 subtask names in total, at most 200 characters each.');
+  names = names.flatMap(name => Array(quantity).fill(name));
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
