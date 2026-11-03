@@ -594,6 +594,12 @@
   .subtask-quantity { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 700; }
   .subtask-quantity input { width: 96px; min-height: 36px; }
   .subtask-create-actions output { flex: 1; min-width: 120px; padding-bottom: 10px; }
+  .subtask-section { padding: 18px 0; border-top: 1px solid var(--border); }
+  .subtask-section:first-child { padding-top: 0; border-top: 0; }
+  .subtask-section h4 { margin: 0 0 12px; font-size: 14px; }
+  .subtask-section > summary { cursor: pointer; font-weight: 700; font-size: 14px; }
+  .subtask-section .subtask-transfer { background: transparent; padding: 0; }
+  .subtask-create-result { display: block; margin-top: 10px; color: var(--green); font-size: 12px; }
   .subtask-edit { margin: 14px 0; }
   .subtask-edit summary { cursor: pointer; font-weight: 700; margin-bottom: 12px; }
   .subtask-edit .form-grid { gap: 12px; }
@@ -2311,6 +2317,24 @@ html += `<div class="task-cell"
   );
 
     content.innerHTML = `
+      <section class="subtask-section" aria-labelledby="addSubtasksHeading">
+        <h4 id="addSubtasksHeading">Add subtasks</h4>
+        <div class="subtask-create">
+          <label for="newSubtaskName">Subtask names</label>
+          <textarea id="newSubtaskName" aria-label="Subtask names, one per line" placeholder="Subtask names, one per line" oninput="state.subtaskPanel.draft=this.value;updateSubtaskDraftCount()">${esc(subtaskState.draft)}</textarea>
+          <div class="subtask-create-actions">
+            <label class="subtask-quantity" for="subtaskQuantity">Quantity per name
+              <input id="subtaskQuantity" type="number" min="1" max="100" step="1" value="${esc(subtaskState.quantity)}" oninput="state.subtaskPanel.quantity=Number(this.value);updateSubtaskDraftCount()" aria-describedby="subtaskDraftCount">
+            </label>
+            <output id="subtaskDraftCount" aria-live="polite"></output>
+            <button type="button" class="btn btn-primary" id="createSubtasksBtn" onclick="createSubtask()">Create subtasks</button>
+            <button type="button" class="btn" onclick="clearSubtaskDraft()">Clear names</button>
+          </div>
+        </div>
+        <output class="subtask-create-result" id="subtaskCreateResult" aria-live="polite">${subtaskState.lastCreated ? `Added ${subtaskState.lastCreated} subtasks. ${children.length} subtasks now belong to this task.` : ''}</output>
+      </section>
+      <section class="subtask-section" aria-labelledby="existingSubtasksHeading">
+        <h4 id="existingSubtasksHeading">Existing subtasks (${children.length})</h4>
       ${
         children.length
           ? `<div class="subtask-bulk">
@@ -2326,7 +2350,7 @@ html += `<div class="task-cell"
               <span>Subtasks page ${subtaskState.page} / ${pages}</span>
               <button type="button" class="btn" aria-label="Next subtask page" ${subtaskState.page === pages ? 'disabled' : ''} onclick="changePanelPage(1)">&#8594;</button>
             </div>
-            <details class="subtask-edit" ${subtaskState.editOpen ? 'open' : ''} ontoggle="state.subtaskPanel.editOpen=this.open"><summary>Bulk edit selected subtasks</summary>
+            <details class="subtask-edit subtask-section" ${subtaskState.editOpen ? 'open' : ''} ontoggle="state.subtaskPanel.editOpen=this.open"><summary>Bulk edit selected subtasks</summary>
               <div class="form-grid">
                 ${[['category', 'Category'], ['priority', 'Priority'], ['startDate', 'Start date'], ['endDate', 'End date']].map(([key, label]) => {
                   const applied = Object.prototype.hasOwnProperty.call(subtaskState.patch, key);
@@ -2350,16 +2374,8 @@ html += `<div class="task-cell"
             </div>`
       }
 
-      <div class="subtask-create">
-        <textarea id="newSubtaskName" aria-label="Subtask names, one per line" placeholder="Subtask names, one per line" oninput="state.subtaskPanel.draft=this.value;updateSubtaskDraftCount()">${esc(subtaskState.draft)}</textarea>
-        <div class="subtask-create-actions">
-          <label class="subtask-quantity" for="subtaskQuantity">Quantity per name
-            <input id="subtaskQuantity" type="number" min="1" max="100" step="1" value="${esc(subtaskState.quantity)}" oninput="state.subtaskPanel.quantity=Number(this.value);updateSubtaskDraftCount()" aria-describedby="subtaskDraftCount">
-          </label>
-          <output id="subtaskDraftCount" aria-live="polite"></output>
-          <button type="button" class="btn btn-primary" id="createSubtasksBtn" onclick="createSubtask()">Create subtasks</button>
-        </div>
-      </div>
+      </section>
+      <details class="subtask-section"><summary>Parent management</summary>
       <div class="subtask-transfer">
     <strong>Convert this task into a subtask</strong>
 
@@ -2388,6 +2404,7 @@ html += `<div class="task-cell"
       Convert to subtask
     </button>
   </div>
+  </details>
   ${children.length ? `
     <div style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;margin-bottom:6px">
@@ -2425,8 +2442,11 @@ function createSubtask() {
     showPanelError('Save your parent task changes before creating subtasks.');
     return;
   }
+  const panel = state.subtaskPanel;
+  panel.draft = $('newSubtaskName').value;
   mutationRunner().withSuccessHandler(result => {
-    state.subtaskPanel.draft = '';
+    panel.lastCreated = result.created;
+    panel.page = Math.max(1, Math.ceil(((state.childrenByParent.get(parent.id) || []).length + result.created) / 25));
     showToast(`Created ${result.created} subtasks under ${taskLabel(parent)}.`);
     loadTasks();
   }).withFailureHandler(error => showPanelError('Unable to create subtasks: ' + (error.message || error)))
@@ -2442,11 +2462,21 @@ function createSubtask() {
     state.clientSelections.bulkClients = [];
   }
 
+  function clearSubtaskDraft() {
+    if (state.writing || state.syncing) return;
+    state.subtaskPanel.draft = '';
+    state.subtaskPanel.lastCreated = 0;
+    $('newSubtaskName').value = '';
+    $('subtaskCreateResult').textContent = '';
+    updateSubtaskDraftCount();
+    $('newSubtaskName').focus();
+  }
+
   function updateSubtaskDraftCount() {
     const batch = subtaskBatch(state.subtaskPanel.draft, state.subtaskPanel.quantity);
     $('subtaskDraftCount').textContent = batch.error && batch.names.length ? batch.error
-      : `${batch.names.length} names × ${batch.quantity} = ${batch.total} subtasks`;
-    $('createSubtasksBtn').textContent = `Create ${batch.total || 0} subtasks`;
+      : `${batch.names.length} ${batch.names.length === 1 ? 'name' : 'names'} × ${batch.quantity} = ${batch.total} ${batch.total === 1 ? 'subtask' : 'subtasks'}`;
+    $('createSubtasksBtn').textContent = `Create ${batch.total || 0} ${batch.total === 1 ? 'subtask' : 'subtasks'}`;
     $('createSubtasksBtn').disabled = Boolean(batch.error) || state.writing || state.syncing;
   }
 
@@ -2545,7 +2575,7 @@ function createSubtask() {
     const labels = { category: 'Category', priority: 'Priority', startDate: 'Start date', endDate: 'End date', clients: 'Clients (replace)' };
     if ($('bulkEditSummary')) $('bulkEditSummary').textContent = `${panel.selected.size} selected · ${fields.length} fields${fields.length ? ': ' + fields.map(key => labels[key]).join(', ') : ''}`;
     if ($('bulkApplyBtn')) {
-      $('bulkApplyBtn').textContent = `Apply ${fields.length} fields to ${panel.selected.size} subtasks`;
+      $('bulkApplyBtn').textContent = `Apply ${fields.length} ${fields.length === 1 ? 'field' : 'fields'} to ${panel.selected.size} ${panel.selected.size === 1 ? 'subtask' : 'subtasks'}`;
       $('bulkApplyBtn').disabled = !fields.length || !panel.selected.size || state.writing || state.syncing;
     }
   }

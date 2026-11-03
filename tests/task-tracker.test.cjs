@@ -612,10 +612,47 @@ test('bulk edit field toggles preserve the panel and draft while making selected
   app.toggleSubtaskField('category', true);
   assert.equal(state.subtaskPanel.patch.category, 'Scheduling');
   assert.equal(app.elements.get('bulkValuecategory').disabled, false);
-  assert.equal(app.elements.get('bulkApplyBtn').textContent, 'Apply 1 fields to 1 subtasks');
+  assert.equal(app.elements.get('bulkApplyBtn').textContent, 'Apply 1 field to 1 subtask');
   app.setSubtaskPatch('category', 'Graphic Design');
   app.toggleSubtaskField('category', false);
   assert.equal(state.subtaskPanel.draft, 'Draft task');
   assert.equal(state.subtaskPanel.quantity, 3);
   assert.equal(app.elements.get('bulkApplyBtn').disabled, true);
+});
+
+test('adding subtasks retains names and quantity for further additions instead of clearing the draft', () => {
+  const app = loadingClient();
+  const state = app.getState();
+  const parent = listTask('VID-1');
+  state.loaded = true;
+  state.editId = parent.id;
+  state.tasks = [parent];
+  state.taskById.set(parent.id, parent);
+  state.childrenByParent.set(parent.id, Array.from({ length: 24 }, (_, index) => listTask('VID-' + (index + 2), parent.id)));
+  app.resetSubtaskPanel(parent.id);
+  state.subtaskPanel.quantity = 3;
+  app.elements.set('newSubtaskName', { value: 'Edit\nSchedule' });
+  vm.runInContext('parentHasUnsavedChanges=()=>false; showToast=()=>{}; loadTasks=()=>{state.syncing=false;};', app);
+  app.createSubtask();
+  app.calls[0].success({ success: true, created: 6 });
+  assert.equal(state.subtaskPanel.draft, 'Edit\nSchedule');
+  assert.equal(state.subtaskPanel.quantity, 3);
+  assert.equal(state.subtaskPanel.lastCreated, 6);
+  assert.equal(state.subtaskPanel.page, 2);
+  app.createSubtask();
+  assert.equal(app.calls.length, 2);
+  assert.equal(app.calls[1].args[2], 3);
+  assert.deepEqual(Array.from(app.calls[1].args[1]), ['Edit', 'Schedule']);
+});
+
+test('repeated creation appends without removing existing subtasks', () => {
+  const parent = taskRow('VID-001');
+  parent[5] = new Date(2026, 10, 1); parent[6] = new Date(2026, 10, 10);
+  const app = server([parent]);
+  app.context.createSubtasks('VID-001', ['Edit'], 3);
+  const firstIds = app.rows.slice(2).map(row => row[0]);
+  app.context.createSubtasks('VID-001', ['Schedule'], 2);
+  assert.equal(app.rows.length, 7);
+  assert.deepEqual(app.rows.slice(2, 5).map(row => row[0]), firstIds);
+  assert.equal(new Set(app.rows.slice(1).map(row => row[0])).size, 6);
 });
