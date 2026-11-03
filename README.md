@@ -61,6 +61,7 @@ Work in Progress!!
 | Bulk Actions | Update selected statuses or explicitly selected tasks together |
 | Bulk Subtasks | Create, update, and delete selected children from the parent task panel |
 | Client Assignments | Assign multiple clients independently of task categories |
+| Subtask Client Tags | Display each child's clients, Unassigned, and expandable additional names |
 | Gantt Timeline | Visualize tasks against a calendar |
 | Drag Scheduling | Reschedule individual tasks through drag-and-drop |
 | Task Hierarchy | Organize work using parent tasks and subtasks |
@@ -68,6 +69,7 @@ Work in Progress!!
 | Progress Tracking | Monitor task completion and status |
 | Search and Filters | Find tasks based on available criteria |
 | Dashboard | Daily, weekly, monthly, and yearly scheduled-task summaries |
+| Invoices | Biweekly hourly billing, saved client copies, paid tracking, PDF print and CSV export |
 
 ## Task Hierarchy
 
@@ -91,11 +93,19 @@ Client filters in All tasks, timeline, and dashboard match any assigned client. 
 
 The Clients field is stored as a JSON string array in column O. Blank cells mean no clients. Existing columns A:N retain their positions. Malformed client JSON is reported rather than silently replaced.
 
+Subtask rows display their own client assignments as compact tags, independently of the parent's current clients. Two tags are shown initially; additional names are available in an expandable list. Unassigned appears when a child has no clients, including after clearing clients with bulk edit.
+
 ## Dashboard Periods
 
 The dashboard defaults to Monthly and offers Daily, Weekly, Monthly, and Yearly modes, date selection, previous/next period, Today, and a client filter. Weeks run Monday-Sunday; months and years use calendar boundaries. The default/reset date comes from the spreadsheet timezone.
 
 Tasks count when their planned dates overlap the selected period, including boundaries. Invalid or missing planned dates are excluded. Parents and subtasks count individually; a task assigned to several clients counts once. Completion reflects the tasks' current statuses, not a historical status snapshot or work completed during that period. The top summary tiles use the same period/client scope while Dashboard is active and return to global totals in other views.
+
+## Date Display
+
+Dates use named English months in task tables, timeline/dashboard ranges, invoice previews/history, and client copies. Wider areas show full names such as January and November; compact areas use Jan, Feb, March, April, May, June, July, Aug, Sep, Oct, Nov, Dec. Narrow timeline columns use compact labels, and printed invoices always use full month names. Full dates remain available in date tooltips.
+
+Native date pickers retain the browser/operating system format, with a readable month-name label alongside the chosen value. Storage, date inputs, filtering and billing calculations continue to use ISO calendar dates internally. This presentation change does not migrate or rewrite saved task/invoice dates.
 
 ## Bulk Subtasks
 
@@ -110,6 +120,32 @@ The subtask panel displays 25 children per page. Selection persists across its p
 Selected children support status updates, confirmed deletion, and bulk edits to category, priority, clients, and planned dates. Each edit field has an explicit Apply switch: unchecked fields remain unchanged. Applying Clients replaces assignments; applying an empty selection clears them. A single planned-date edit preserves the other date and is validated against every selected task before writes.
 
 The server checks that every selected task still belongs directly to the chosen parent under the same lock as the write. Bulk transfer is not included. Spreadsheet runtime failures can still leave partial writes; reconciliation reloads data without retrying a mutation.
+
+## Biweekly Invoices
+
+Open **Invoices** in the sidebar or **Open invoices** on Dashboard. The invoice workspace is separate from task scheduling: the task Duration column is calendar days and is never treated as billable hours.
+
+### First Setup
+
+1. Open Billing defaults and set your name/business, contact details, currency, hourly rate, payment instructions, and the first date of a 14-day billing cycle.
+2. Save the defaults. Initial defaults are USD, a zero hourly rate, and today's spreadsheet date as the cycle anchor; these are placeholders, not an assumed billing agreement.
+3. Create a new invoice and choose/type one client. Billing timeline offers Two weeks (start date plus 13 days, inclusive) or Custom dates (your own start/end). The period arrows move by the selected range's length. The default fortnight is anchored to Billing cycle starts, not twice per calendar month.
+4. The app counts matching videos for the client and timeline. Choose Scheduled overlap or Completed in range, select the video source, then Add matching videos to load them together. Enter hours and an hourly rate for each video; the total is the sum of each video's hours multiplied by its hourly rate. Rates default from the most recent saved invoice for that client/currency, or the global default; every line can be overridden. Use up to two decimals for hours and rates. A task may have several clients, but each invoice is explicitly for one client; hours are not automatically allocated, duplicated, or inferred from task dates/status.
+5. Save draft, review the client preview, then Issue invoice when ready. The preview always shows Draft until issued. Print / PDF opens browser printing, where Save as PDF creates a client copy; Download CSV and Copy text are also available. Positive hours/rates and sender/client details are required for client copies and issuance.
+
+The video count/picker uses Video editing tasks for the selected client and timeline. Scheduled overlap includes boundary dates; Completed in range requires Done status and an actual completion date within the range. Unassigned videos are excluded unless Include unassigned is checked. The default source is individual tasks without subtasks, avoiding counting a container parent and its children together; Top-level tasks and All video tasks are explicit alternatives when your records represent videos differently.
+
+Add matching videos preserves existing lines and never duplicates a task already present. New lines have blank hours, not assumed one-hour charges. Changing the timeline or filters confirms before clearing entered lines; cancelling preserves hours/rates. The 100-line limit applies to the resulting invoice. Individual/manual additions remain available. Client copies include the number of video lines and total hours. A video can appear in another period when it has additional billable work; choosing dates does not automatically issue or send an invoice.
+
+### Saved Copies and Status
+
+Invoices are snapshots of client details, descriptions, hours, rates, currency, and payment notes. Later task edits/deletion and changed defaults do not alter saved copies. Drafts remain editable or deletable. Issued invoices are read-only and can be marked Paid or Void; paid/void snapshots remain in history. Voiding preserves the original and permits a replacement for the same client/period. Only one issued/paid invoice is permitted per client and period. Mark paid records your manual confirmation; the app does not collect or transfer money.
+
+History can be filtered by client and is paginated. Outstanding and paid totals are shown separately by currency, without conversion. Stale invoice/default revisions are rejected rather than silently overwriting another session's changes. Unsaved editors are retained after failures, and ambiguous writes reconcile history without automatic retries. Reopen the saved invoice to resolve a revision conflict; use Reload saved defaults to discard stale default edits explicitly.
+
+The backend lazily creates **Invoice_Master** on the first invoice save and **Invoice_Settings** on the first defaults save. Viewing invoices does not create sheets. These sheets do not modify Task_Master or require extra task columns. Invoice IDs persist across draft retries, invoice numbers are allocated under a script lock, and totals are recalculated server-side with per-line minor-unit rounding. Conflicting sheet headers or malformed snapshots produce errors instead of overwriting data.
+
+This is simple hourly invoicing, not a tax/accounting or automatic time-tracking system. There are no tax/VAT calculations, discounts, foreign-exchange conversion, automatic sending, reminders, or payment processing. The spreadsheet/deployment access controls also govern billing data. Test real Sheets persistence and the deployed browser's print/download permissions before using client copies.
 
 ## All Tasks
 
@@ -129,6 +165,8 @@ The frontend shares one task snapshot and renders only the active view. Searches
 
 Saving task details and status uses one write request. Each action performs at most one follow-up task refresh. Mutations are serialized in the browser, and stale responses from earlier reads are ignored. Server mutations and category upgrades share a script lock across web-app and spreadsheet-menu execution contexts.
 
+Command buttons cannot issue overlapping writes. A shared guard also rejects an identical command and payload submitted within 700 ms, even if the first write and refresh have already finished. This covers rapid clicks and repeated form submissions; entered names, quantity, selection and edits are preserved. Changed commands can proceed once the pending operation finishes, and the same batch can be deliberately added again after the cooldown. The form remains inactive and shows a busy state through the reconciliation refresh; closing the dialog is available after the write finishes. Calendar navigation and other non-mutating controls are not throttled. This is browser-side protection, not server-side exactly-once execution across tabs, reloads or ambiguous network failures.
+
 Week view uses compact 72px day columns, 54px rows, and 20px bars. Dragging uses measured cell widths, so one column still means one day. The parent subtask panel also keeps mounted rows bounded through pagination. Client and dashboard filters operate on the loaded snapshot without additional server requests. Notifications identify affected tasks and remain visible until clicked or keyboard-dismissed.
 
 A failed refresh keeps the last loaded data and displays Retry. After a write failure, a reconciliation read runs without automatically retrying the write. Further writes remain blocked until that read succeeds or Retry reconnects. A request may have partially succeeded before its failure was reported: Google Sheets does not provide transactional rollback, and locks do not prevent manual spreadsheet edits.
@@ -145,6 +183,8 @@ node --test tests/task-tracker.test.cjs
 
 Tests cover grouping, overlap filters, client sorting/serialization, calendar periods, pagination, explicit selection, stale responses, write serialization, scoped bulk validation, inherited batch creation, category migration/backup/rerun safety, status dates, lock release, formula preservation, and injected partial-write failures. Browser checks use a synthetic Apps Script bridge; they do not prove Google Sheets service behavior.
 
+Invoice tests additionally cover 14-day/custom boundaries, client/timeline video counts, source/completion filters, matching-video import, retained manual hours, hourly rounding, invalid amounts, draft/issue validation, immutable snapshots, revision conflicts, duplicate client-period issuance, void/replacement, independent storage/defaults and formula-safe CSV cells. Browser checks exercise draft-to-issued-to-paid, print-only client content and mobile layout using a mock bridge; they do not substitute for live billing verification.
+
 Before production deployment, use a copy of the spreadsheet to verify:
 
 1. Initial load, failed refresh, Retry, and 200/1,000-task timings against real Apps Script executions.
@@ -152,6 +192,7 @@ Before production deployment, use a copy of the spreadsheet to verify:
 3. Duration formulas and actual start/end dates after saves, reopening, and deletion.
 4. Day/week/month alignment, scrolling, dragging/cancellation, collapse, resize, and keyboard controls at desktop and mobile widths.
 5. The category/client upgrade, legacy sheets, client JSON, parent-scoped batches, and date/client filtering across timezone and calendar boundaries.
+6. First invoice/default saves, draft reopening, issued/paid/void copies, concurrent revision conflicts, real PDF printing and CSV downloads. Do not populate production with synthetic invoices.
 
 ## Deployment
 
