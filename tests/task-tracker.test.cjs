@@ -553,3 +553,25 @@ test('legacy getTasks returns empty clients without altering the sheet and inclu
   assert.match(response.spreadsheetToday, /^\d{4}-\d{2}-\d{2}$/);
   assert.equal(app.writes.length, 0);
 });
+
+test('active category validation and errors only list the new categories; legacy names are migration-only', () => {
+  const app = server([taskRow('VID-001')]);
+  for (const category of ['Graphic Design', 'Video editing', 'Scheduling']) {
+    assert.doesNotThrow(() => app.context.validateCategory_(category));
+    assert.equal(app.context.categoryForUpgrade_(category), category);
+  }
+  const message = 'Invalid task category. Allowed categories: Graphic Design, Video editing, Scheduling.';
+  for (const category of ['Graphics', 'Pre-production', 'Editing', 'Post-production', 'Subtitles', 'Review', 'Delivery']) {
+    assert.throws(() => app.context.validateCategory_(category), error => error.message === message);
+    assert.equal(app.context.categoryForUpgrade_(category), category === 'Graphics' ? 'Graphic Design' : 'Video editing');
+  }
+  const payload = { taskId: 'VID-001', taskName: 'Name', category: 'Editing', priority: 'High', startDate: '2026-11-03', endDate: '2026-11-05' };
+  assert.throws(() => app.context.createTask(payload), error => error.message === message);
+  assert.throws(() => app.context.updateTask(payload), error => error.message === message);
+  assert.throws(() => app.context.updateSubtasks('VID-001', ['VID-001'], { category: 'Editing' }), error => error.message === message);
+  app.rows[1][2] = 'Editing';
+  assert.throws(() => app.context.createSubtasks('VID-001', ['Child']), error => error.message === message);
+  assert.throws(() => app.context.categoryForUpgrade_('Unknown'), /Graphic Design, Video editing, Scheduling/);
+  assert.throws(() => app.context.categoryForUpgrade_('__proto__'), /Unknown category/);
+  assert.equal(app.writes.length, 0);
+});
