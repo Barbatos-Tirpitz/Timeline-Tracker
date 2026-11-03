@@ -26,6 +26,22 @@ const CONFIG = {
   PRIORITIES: ['Low', 'Medium', 'High']
 };
 
+const LEGACY_CATEGORY_MAP = Object.freeze({
+  'Graphics': 'Graphic Design',
+  'Pre-production': 'Video editing',
+  'Editing': 'Video editing',
+  'Post-production': 'Video editing',
+  'Subtitles': 'Video editing',
+  'Review': 'Video editing',
+  'Delivery': 'Video editing'
+});
+
+function validateCategory_(category) {
+  if (!CONFIG.CATEGORIES.includes(category)) {
+    throw new Error('Invalid task category. Allowed categories: ' + CONFIG.CATEGORIES.join(', ') + '.');
+  }
+}
+
 // Adds a menu whenever the spreadsheet opens.
 function onOpen() {
   SpreadsheetApp.getUi()
@@ -89,9 +105,8 @@ function initializeTaskHeaders_(sheet) {
 
 function categoryForUpgrade_(category) {
   if (CONFIG.CATEGORIES.includes(category)) return category;
-  if (category === 'Graphics') return 'Graphic Design';
-  if (['Pre-production', 'Editing', 'Post-production', 'Subtitles', 'Review', 'Delivery'].includes(category)) return 'Video editing';
-  throw new Error('Unknown category "' + category + '". Review it before upgrading.');
+  if (Object.prototype.hasOwnProperty.call(LEGACY_CATEGORY_MAP, category)) return LEGACY_CATEGORY_MAP[category];
+  throw new Error('Unknown category "' + category + '". Set it to one of ' + CONFIG.CATEGORIES.join(', ') + ' before upgrading.');
 }
 
 function upgradeTaskDatabase() {
@@ -330,9 +345,7 @@ function createTask(formData) {
       throw new Error('Please complete all required fields.');
     }
 
-    if (!CONFIG.CATEGORIES.includes(category)) {
-      throw new Error('Invalid task category. Use Graphic Design, Video editing, or Scheduling; upgrade legacy categories first.');
-    }
+    validateCategory_(category);
 
     if (!CONFIG.PRIORITIES.includes(priority)) {
       throw new Error('Invalid task priority.');
@@ -397,9 +410,7 @@ function updateTask(formData) {
       throw new Error('Please complete all required fields.');
     }
 
-    if (!CONFIG.CATEGORIES.includes(category)) {
-      throw new Error('Invalid task category.');
-    }
+    validateCategory_(category);
 
     if (!CONFIG.PRIORITIES.includes(priority)) {
       throw new Error('Invalid task priority.');
@@ -604,7 +615,8 @@ function createSubtasks(parentTaskId, names) {
     if (!hasClientsColumn_(selection.sheet)) throw new Error('Run Upgrade Categories and Clients first.');
     const parent = selection.selected[0].values;
     if (parent[13]) throw new Error('Only top-level tasks can have subtasks.');
-    if (!CONFIG.CATEGORIES.includes(parent[2]) || !CONFIG.PRIORITIES.includes(parent[3]) ||
+    validateCategory_(parent[2]);
+    if (!CONFIG.PRIORITIES.includes(parent[3]) ||
         !parent[5] || !parent[6] || typeof parent[5].getTime !== 'function' || typeof parent[6].getTime !== 'function' ||
         !Number.isFinite(parent[5].getTime()) || !Number.isFinite(parent[6].getTime()) || parent[6] < parent[5]) {
       throw new Error('Save valid parent category, priority and planned dates before adding subtasks.');
@@ -623,7 +635,7 @@ function updateSubtasks(parentTaskId, taskIds, patch) {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch) || !Object.keys(patch).length || Object.keys(patch).some(key => !allowed.includes(key))) {
     throw new Error('Choose at least one supported field to apply.');
   }
-  if (patch.category !== undefined && !CONFIG.CATEGORIES.includes(patch.category)) throw new Error('Invalid task category.');
+  if (patch.category !== undefined) validateCategory_(patch.category);
   if (patch.priority !== undefined && !CONFIG.PRIORITIES.includes(patch.priority)) throw new Error('Invalid task priority.');
   const clients = patch.clients === undefined ? null : normalizeClients_(patch.clients);
   const start = patch.startDate === undefined ? null : parseLocalDate(patch.startDate);
