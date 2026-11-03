@@ -15,16 +15,13 @@ const CONFIG = {
   'Actual End',
   'Created At',
   'Updated At',
-  'Parent Task ID'
+  'Parent Task ID',
+  'Clients'
   ],
   CATEGORIES: [
-    'Pre-production',
-    'Editing',
-    'Post-production',
-    'Graphics',
-    'Subtitles',
-    'Review',
-    'Delivery'
+    'Graphic Design',
+    'Video editing',
+    'Scheduling'
   ],
   PRIORITIES: ['Low', 'Medium', 'High']
 };
@@ -35,7 +32,103 @@ function onOpen() {
     .createMenu('Task Manager')
     .addItem('Build / Refresh Timeline', 'setupTimeline')
     .addItem('Initialize Task Database', 'setupTaskDatabase')
+    .addItem('Upgrade Categories and Clients (with backup)', 'upgradeTaskDatabase')
     .addToUi();
+}
+
+function normalizeClients_(values) {
+  if (!Array.isArray(values)) throw new Error('Clients must be a list of names.');
+  const names = new Map();
+  values.forEach(value => {
+    if (typeof value !== 'string') throw new Error('Each client must be a name.');
+    const name = value.trim();
+    if (!name || name.length > 100) throw new Error('Client names must contain 1-100 characters.');
+    if (!names.has(name.toLowerCase())) names.set(name.toLowerCase(), name);
+  });
+  if (names.size > 50) throw new Error('A task can have at most 50 clients.');
+  return [...names.values()].sort((first, second) => first.localeCompare(second, undefined, { sensitivity: 'base', numeric: true }));
+}
+
+function readClients_(value, taskId) {
+  if (value === '' || value == null) return [];
+  try {
+    return normalizeClients_(JSON.parse(String(value)));
+  } catch (error) {
+    throw new Error('Invalid Clients data for ' + taskId + ': ' + error.message);
+  }
+}
+
+function hasClientsColumn_(sheet) {
+  if (sheet.getMaxColumns() < 15) return false;
+  const header = sheet.getRange(1, 15).getValue();
+  if (header && header !== 'Clients') throw new Error('Column O is already in use. Inspect Task_Master before upgrading.');
+  if (!header && sheet.getLastRow() > 1 && sheet.getRange(2, 15, sheet.getLastRow() - 1, 1).getValues().some(row => row[0] !== '')) {
+    throw new Error('Column O contains data without a Clients header. Inspect Task_Master before upgrading.');
+  }
+  return header === 'Clients';
+}
+
+function validateTaskHeaders_(sheet) {
+  if (!sheet.getLastRow()) return;
+  const existing = sheet.getRange(1, 1, 1, 13).getValues()[0];
+  if (existing.join('|') !== CONFIG.HEADERS.slice(0, 13).join('|')) throw new Error('Task_Master headers do not match the required structure.');
+  if (sheet.getMaxColumns() >= 14) {
+    const parentHeader = sheet.getRange(1, 14).getValue();
+    if (parentHeader && parentHeader !== 'Parent Task ID') throw new Error('Column N is already in use. Inspect Task_Master before upgrading.');
+  }
+  hasClientsColumn_(sheet);
+}
+
+function initializeTaskHeaders_(sheet) {
+  validateTaskHeaders_(sheet);
+  if (sheet.getMaxColumns() < CONFIG.HEADERS.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), CONFIG.HEADERS.length - sheet.getMaxColumns());
+  }
+  sheet.getRange(1, 1, 1, CONFIG.HEADERS.length).setValues([CONFIG.HEADERS]);
+}
+
+function categoryForUpgrade_(category) {
+  if (CONFIG.CATEGORIES.includes(category)) return category;
+  if (category === 'Graphics') return 'Graphic Design';
+  if (['Pre-production', 'Editing', 'Post-production', 'Subtitles', 'Review', 'Delivery'].includes(category)) return 'Video editing';
+  throw new Error('Unknown category "' + category + '". Review it before upgrading.');
+}
+
+function upgradeTaskDatabase() {
+  const ui = SpreadsheetApp.getUi();
+  if (ui.alert('Upgrade task database?', 'Create a backup, add Clients in column O, and migrate task categories?', ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+    if (!sheet) throw new Error('Initialize Task_Master first.');
+    validateTaskHeaders_(sheet);
+    const width = Math.min(15, sheet.getMaxColumns());
+    const rows = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, width).getValues() : [];
+    const changes = [];
+    const withClients = hasClientsColumn_(sheet);
+    rows.forEach((values, index) => {
+      if (!values[0]) return;
+      if (withClients) readClients_(values[14], values[0]);
+      const category = categoryForUpgrade_(String(values[2] || ''));
+      if (category !== values[2]) changes.push({ rowNumber: index + 2, category });
+    });
+    if (!changes.length && hasClientsColumn_(sheet)) {
+      ss.toast('Database is already upgraded.', 'Task Manager', 5);
+      return;
+    }
+    sheet.copyTo(ss).setName('Task_Backup_' + Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyyMMdd_HHmmss_SSS'));
+    initializeTaskHeaders_(sheet);
+    const now = new Date();
+    contiguousRows_(changes).forEach(group => {
+      sheet.getRange(group[0].rowNumber, 3, group.length, 1).setValues(group.map(record => [record.category]));
+      sheet.getRange(group[0].rowNumber, 13, group.length, 1).setValues(group.map(() => [now]));
+    });
+    ss.toast('Categories and Clients upgraded. Backup created.', 'Task Manager', 5);
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function setupTaskDatabase() {
@@ -47,41 +140,12 @@ function setupTaskDatabase() {
     sheet = ss.insertSheet(CONFIG.SHEET_NAME);
   }
 
-  // Initialize a completely empty database.
-  if (sheet.getLastRow() === 0) {
-    sheet.getRange(1, 1, 1, CONFIG.HEADERS.length)
-      .setValues([CONFIG.HEADERS]);
-
-  } else {
-    // Validate the original 13 columns.
-    const existing = sheet.getRange(1, 1, 1, 13)
-      .getValues()[0];
-
-    const originalHeaders = CONFIG.HEADERS.slice(0, 13);
-
-    if (existing.join('|') !== originalHeaders.join('|')) {
-      throw new Error(
-        'Task_Master headers do not match the required structure.'
-      );
-    }
-
-    // Add Parent Task ID in column N if missing.
-    const parentHeader = sheet.getRange(1, 14).getValue();
-
-    if (!parentHeader) {
-      sheet.getRange(1, 14).setValue('Parent Task ID');
-
-    } else if (parentHeader !== 'Parent Task ID') {
-      throw new Error(
-        'Column N is already in use. Please inspect Task_Master before continuing.'
-      );
-    }
-  }
+  initializeTaskHeaders_(sheet);
 
   // Apply database formatting.
   sheet.setFrozenRows(1);
 
-  sheet.getRange('A1:N1')
+  sheet.getRange('A1:O1')
     .setFontWeight('bold')
     .setBackground('#1F2937')
     .setFontColor('#FFFFFF');
@@ -116,19 +180,22 @@ function getTasks() {
 
   const timezone = ss.getSpreadsheetTimeZone();
   const lastRow = sheet.getLastRow();
+  const spreadsheetToday = Utilities.formatDate(new Date(), timezone, 'yyyy-MM-dd');
+  const withClients = hasClientsColumn_(sheet);
 
   // Backend confirms that the database contains no task rows.
   if (lastRow < 2) {
     return {
       success: true,
       hasTasks: false,
+      spreadsheetToday,
       total: 0,
       tasks: []
     };
   }
 
   const rows = sheet.getRange(
-    2, 1, lastRow - 1, 14
+    2, 1, lastRow - 1, withClients ? 15 : Math.min(14, sheet.getMaxColumns())
   ).getValues();
 
   const taskRows = rows.filter(row =>
@@ -139,6 +206,7 @@ function getTasks() {
     return {
       success: true,
       hasTasks: false,
+      spreadsheetToday,
       total: 0,
       tasks: []
     };
@@ -196,6 +264,7 @@ function getTasks() {
         ? Utilities.formatDate(row[10], timezone, 'MMM d, yyyy') : '',
 
       parentTaskId: String(row[13] || ''),
+      clients: withClients ? readClients_(row[14], taskId) : [],
       subtaskCount: stats.total,
       completedSubtaskCount: stats.completed,
 
@@ -208,6 +277,7 @@ function getTasks() {
   return {
     success: true,
     hasTasks: true,
+    spreadsheetToday,
     total: tasks.length,
     tasks: tasks
   };
@@ -215,7 +285,7 @@ function getTasks() {
 
 // Creates a new task.
 function createTask(formData) {
-  const lock = LockService.getDocumentLock() || LockService.getScriptLock();
+  const lock = LockService.getScriptLock();
   lock.waitLock(10000);
 
   try {
@@ -231,10 +301,13 @@ function createTask(formData) {
 
     // Optional parent task ID.
     const parentTaskId = String(formData.parentTaskId || '').trim();
+    if (!hasClientsColumn_(sheet)) throw new Error('Run Upgrade Categories and Clients from the spreadsheet menu first.');
+    let inheritedClients = [];
 
     if (parentTaskId) {
       const parentRow = findTaskRow(sheet, parentTaskId);
       const existingParentId = sheet.getRange(parentRow, 14).getValue();
+      inheritedClients = readClients_(sheet.getRange(parentRow, 15).getValue(), parentTaskId);
 
       if (existingParentId) {
         throw new Error(
@@ -249,6 +322,7 @@ function createTask(formData) {
     const startDate = parseLocalDate(formData.startDate);
     const endDate = parseLocalDate(formData.endDate);
     const description = String(formData.description || '').trim();
+    const clients = formData.clients === undefined ? inheritedClients : normalizeClients_(formData.clients);
 
     // Required-field validation.
     if (!taskName || !category || !priority ||
@@ -257,7 +331,7 @@ function createTask(formData) {
     }
 
     if (!CONFIG.CATEGORIES.includes(category)) {
-      throw new Error('Invalid task category.');
+      throw new Error('Invalid task category. Use Graphic Design, Video editing, or Scheduling; upgrade legacy categories first.');
     }
 
     if (!CONFIG.PRIORITIES.includes(priority)) {
@@ -270,54 +344,7 @@ function createTask(formData) {
       );
     }
 
-    // Find the highest existing task ID.
-    const lastRow = sheet.getLastRow();
-    let maxId = 0;
-
-    if (lastRow >= 2) {
-      const ids = sheet.getRange(2, 1, lastRow - 1, 1)
-        .getDisplayValues();
-
-      ids.forEach(row => {
-        const match = String(row[0]).match(/^VID-(\d+)$/);
-        if (match) {
-          maxId = Math.max(maxId, Number(match[1]));
-        }
-      });
-    }
-
-    const taskId = 'VID-' + String(maxId + 1).padStart(3, '0');
-    const now = new Date();
-    const newRow = sheet.getLastRow() + 1;
-
-    // Write all 14 columns, including Parent Task ID.
-    sheet.getRange(newRow, 1, 1, 14).setValues([[
-      taskId,
-      taskName,
-      category,
-      priority,
-      'To Do',
-      startDate,
-      endDate,
-      '',
-      description,
-      '',
-      '',
-      now,
-      now,
-      parentTaskId
-    ]]);
-
-    // Inclusive calendar-day duration.
-    sheet.getRange(newRow, 8).setFormula(
-      `=IF(OR(F${newRow}="",G${newRow}=""),"",G${newRow}-F${newRow}+1)`
-    );
-
-    sheet.getRange(newRow, 6, 1, 2)
-      .setNumberFormat('mmm d, yyyy');
-
-    sheet.getRange(newRow, 12, 1, 2)
-      .setNumberFormat('mmm d, yyyy hh:mm');
+    const taskId = appendTasks_(sheet, [{ taskName, category, priority, startDate, endDate, description, clients, parentTaskId }])[0];
 
     return {
       success: true,
@@ -353,7 +380,7 @@ function findTaskRow(sheet, taskId) {
 // Updates task details without changing its status.
 // Updates task details without changing its status.
 function updateTask(formData) {
-  const lock = LockService.getDocumentLock() || LockService.getScriptLock();
+  const lock = LockService.getScriptLock();
   lock.waitLock(10000);
 
   try {
@@ -391,6 +418,8 @@ function updateTask(formData) {
 
     const row = findTaskRow(sheet, taskId);
 
+    const clients = formData.clients === undefined ? null : normalizeClients_(formData.clients);
+    if (clients !== null && !hasClientsColumn_(sheet)) throw new Error('Run Upgrade Categories and Clients from the spreadsheet menu first.');
     let statusValues = null;
     if (formData.status !== undefined) {
       validateStatus_(formData.status);
@@ -411,6 +440,7 @@ function updateTask(formData) {
 
     sheet.getRange(row, 9).setValue(description);
     sheet.getRange(row, 13).setValue(new Date());
+    if (clients !== null) sheet.getRange(row, 15).setValue(JSON.stringify(clients));
 
     if (statusValues) {
       writeStatusRows_(sheet, [{ rowNumber: row, values: statusValues }]);
@@ -448,7 +478,8 @@ function readTaskSelection_(taskIds) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET_NAME);
   if (!sheet) throw new Error('Task_Master sheet not found.');
   const lastRow = sheet.getLastRow();
-  const rows = lastRow < 2 ? [] : sheet.getRange(2, 1, lastRow - 1, 14).getValues();
+  const width = hasClientsColumn_(sheet) ? 15 : Math.min(14, sheet.getMaxColumns());
+  const rows = lastRow < 2 ? [] : sheet.getRange(2, 1, lastRow - 1, width).getValues();
   const byId = new Map();
   rows.forEach((values, index) => {
     const id = String(values[0] || '').trim();
@@ -496,13 +527,14 @@ function writeStatusRows_(sheet, records) {
   });
 }
 
-function updateTaskStatuses(taskIds, newStatus) {
-  const lock = LockService.getDocumentLock() || LockService.getScriptLock();
+function updateTaskStatuses(taskIds, newStatus, parentTaskId) {
+  const lock = LockService.getScriptLock();
   lock.waitLock(10000);
 
   try {
     validateStatus_(newStatus);
     const selection = readTaskSelection_(taskIds);
+    if (parentTaskId !== undefined) assertSubtaskSelection_(selection, parentTaskId);
     const now = new Date();
     const changes = selection.selected.map(record => ({
       rowNumber: record.rowNumber,
@@ -515,6 +547,113 @@ function updateTaskStatuses(taskIds, newStatus) {
       changed: changes.length,
       message: changes.length + ' task statuses updated.'
     };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function assertSubtaskSelection_(selection, parentTaskId) {
+  parentTaskId = String(parentTaskId || '').trim();
+  const parent = selection.rows.find(values => String(values[0]) === parentTaskId);
+  if (!parent || parent[13]) throw new Error('Select an existing top-level parent task.');
+  if (selection.selected.some(record => String(record.values[13] || '').trim() !== parentTaskId)) {
+    throw new Error('Selection contains tasks that are no longer direct subtasks of this parent. Refresh and select again.');
+  }
+  return parent;
+}
+
+function appendTasks_(sheet, records, existingRows) {
+  const lastRow = sheet.getLastRow();
+  const rows = existingRows || (lastRow > 1 ? sheet.getRange(2, 1, lastRow - 1, 1).getValues() : []);
+  let maxId = 0;
+  const seen = new Set();
+  rows.forEach(values => {
+    const id = String(values[0] || '').trim();
+    if (id && seen.has(id)) throw new Error('Duplicate task ID: ' + id);
+    if (id) seen.add(id);
+    const match = id.match(/^VID-(\d+)$/);
+    if (match) maxId = Math.max(maxId, Number(match[1]));
+  });
+  const now = new Date();
+  const ids = records.map((record, index) => 'VID-' + String(maxId + index + 1).padStart(3, '0'));
+  const values = records.map((record, index) => {
+    const row = lastRow + index + 1;
+    return [ids[index], literalText_(record.taskName), record.category, record.priority, 'To Do', record.startDate, record.endDate,
+      `=IF(OR(F${row}="",G${row}=""),"",G${row}-F${row}+1)`, literalText_(record.description || ''), '', '', now, now,
+      record.parentTaskId || '', JSON.stringify(record.clients)];
+  });
+  if (lastRow + records.length > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), lastRow + records.length - sheet.getMaxRows());
+  sheet.getRange(lastRow + 1, 1, records.length, CONFIG.HEADERS.length).setValues(values);
+  sheet.getRange(lastRow + 1, 6, records.length, 2).setNumberFormat('mmm d, yyyy');
+  sheet.getRange(lastRow + 1, 12, records.length, 2).setNumberFormat('mmm d, yyyy hh:mm');
+  return ids;
+}
+
+function literalText_(value) {
+  return /^[=+\-@]/.test(value) ? "'" + value : value;
+}
+
+function createSubtasks(parentTaskId, names) {
+  if (!Array.isArray(names) || names.some(name => typeof name !== 'string')) throw new Error('Subtask names must be a list of text values.');
+  names = names.map(name => name.trim()).filter(Boolean);
+  if (!names.length || names.length > 100 || names.some(name => name.length > 200)) throw new Error('Enter 1-100 subtask names, at most 200 characters each.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const selection = readTaskSelection_([parentTaskId]);
+    if (!hasClientsColumn_(selection.sheet)) throw new Error('Run Upgrade Categories and Clients first.');
+    const parent = selection.selected[0].values;
+    if (parent[13]) throw new Error('Only top-level tasks can have subtasks.');
+    if (!CONFIG.CATEGORIES.includes(parent[2]) || !CONFIG.PRIORITIES.includes(parent[3]) ||
+        !parent[5] || !parent[6] || typeof parent[5].getTime !== 'function' || typeof parent[6].getTime !== 'function' ||
+        !Number.isFinite(parent[5].getTime()) || !Number.isFinite(parent[6].getTime()) || parent[6] < parent[5]) {
+      throw new Error('Save valid parent category, priority and planned dates before adding subtasks.');
+    }
+    const clients = readClients_(parent[14], parentTaskId);
+    const records = names.map(taskName => ({ taskName, category: parent[2], priority: parent[3], startDate: parent[5], endDate: parent[6], clients, parentTaskId }));
+    const taskIds = appendTasks_(selection.sheet, records, selection.rows);
+    return { success: true, taskIds, created: taskIds.length, message: taskIds.length + ' subtasks created.' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function updateSubtasks(parentTaskId, taskIds, patch) {
+  const allowed = ['category', 'priority', 'clients', 'startDate', 'endDate'];
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch) || !Object.keys(patch).length || Object.keys(patch).some(key => !allowed.includes(key))) {
+    throw new Error('Choose at least one supported field to apply.');
+  }
+  if (patch.category !== undefined && !CONFIG.CATEGORIES.includes(patch.category)) throw new Error('Invalid task category.');
+  if (patch.priority !== undefined && !CONFIG.PRIORITIES.includes(patch.priority)) throw new Error('Invalid task priority.');
+  const clients = patch.clients === undefined ? null : normalizeClients_(patch.clients);
+  const start = patch.startDate === undefined ? null : parseLocalDate(patch.startDate);
+  const end = patch.endDate === undefined ? null : parseLocalDate(patch.endDate);
+  if ((patch.startDate !== undefined && !start) || (patch.endDate !== undefined && !end)) throw new Error('Choose valid planned dates.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const selection = readTaskSelection_(taskIds);
+    assertSubtaskSelection_(selection, parentTaskId);
+    if (clients !== null && !hasClientsColumn_(selection.sheet)) throw new Error('Run Upgrade Categories and Clients first.');
+    if (start || end) selection.selected.forEach(record => {
+      const mergedStart = start || record.values[5];
+      const mergedEnd = end || record.values[6];
+      if (!mergedStart || !mergedEnd || typeof mergedStart.getTime !== 'function' || typeof mergedEnd.getTime !== 'function' ||
+          !Number.isFinite(mergedStart.getTime()) || !Number.isFinite(mergedEnd.getTime()) || mergedEnd < mergedStart) {
+        throw new Error('End date cannot precede start date for ' + record.values[0] + '.');
+      }
+    });
+    const fields = [];
+    if (patch.category !== undefined) fields.push([3, patch.category]);
+    if (patch.priority !== undefined) fields.push([4, patch.priority]);
+    if (start) fields.push([6, start]);
+    if (end) fields.push([7, end]);
+    if (clients !== null) fields.push([15, JSON.stringify(clients)]);
+    fields.push([13, new Date()]);
+    contiguousRows_(selection.selected).forEach(group => fields.forEach(([column, value]) => {
+      selection.sheet.getRange(group[0].rowNumber, column, group.length, 1).setValues(group.map(() => [value]));
+    }));
+    return { success: true, taskIds: selection.ids, updated: selection.ids.length };
   } finally {
     lock.releaseLock();
   }
@@ -951,12 +1090,13 @@ function deleteTask(taskId) {
   return result;
 }
 
-function deleteTasks(taskIds) {
-  const lock = LockService.getDocumentLock() || LockService.getScriptLock();
+function deleteTasks(taskIds, parentTaskId) {
+  const lock = LockService.getScriptLock();
   lock.waitLock(10000);
 
   try {
     const selection = readTaskSelection_(taskIds);
+    if (parentTaskId !== undefined) assertSubtaskSelection_(selection, parentTaskId);
     const selectedIds = new Set(selection.ids);
     selection.rows.forEach(values => {
       const parentId = String(values[13] || '').trim();
@@ -980,7 +1120,7 @@ function deleteTasks(taskIds) {
 }
 // Changes a task's parent without recreating the task.
 function setTaskParent(taskId, newParentTaskId) {
-  const lock = LockService.getDocumentLock() || LockService.getScriptLock();
+  const lock = LockService.getScriptLock();
   lock.waitLock(10000);
 
   try {

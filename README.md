@@ -59,13 +59,15 @@ Work in Progress!!
 | Task Management | Create, edit, update, and delete tasks |
 | Grouped Task List | Sort and paginate parent groups, with separate pages for large child lists |
 | Bulk Actions | Update selected statuses or explicitly selected tasks together |
+| Bulk Subtasks | Create, update, and delete selected children from the parent task panel |
+| Client Assignments | Assign multiple clients independently of task categories |
 | Gantt Timeline | Visualize tasks against a calendar |
 | Drag Scheduling | Reschedule individual tasks through drag-and-drop |
 | Task Hierarchy | Organize work using parent tasks and subtasks |
 | Collapse / Expand | Show or hide subtasks in the timeline |
 | Progress Tracking | Monitor task completion and status |
 | Search and Filters | Find tasks based on available criteria |
-| Dashboard | View task statistics and progress summaries |
+| Dashboard | Daily, weekly, monthly, and yearly scheduled-task summaries |
 
 ## Task Hierarchy
 
@@ -79,11 +81,37 @@ The application supports a parent-child task structure.
 
 **Current hierarchy depth:** One subtask level.
 
+## Categories and Clients
+
+Task categories are exactly **Graphic Design**, **Video editing**, and **Scheduling**. Clients are a separate optional field: a task may have several clients, or none (Unassigned).
+
+The Clients control offers reusable suggestions and an Add client action. Client names are trimmed and deduplicated case-insensitively; commas and quotes are valid parts of a name. Each task allows up to 50 client names of up to 100 characters. Suggestions come from current tasks, not a separate client registry.
+
+Client filters in All tasks, timeline, and dashboard match any assigned client. Sorting by Clients uses the alphabetically first client, keeps Unassigned last in either direction, and shows each task once. Parent/child grouping still takes precedence over a global flat sort. New subtasks initially copy saved parent clients; later parent edits or transfers do not overwrite their assignments.
+
+The Clients field is stored as a JSON string array in column O. Blank cells mean no clients. Existing columns A:N retain their positions. Malformed client JSON is reported rather than silently replaced.
+
+## Dashboard Periods
+
+The dashboard defaults to Monthly and offers Daily, Weekly, Monthly, and Yearly modes, date selection, previous/next period, Today, and a client filter. Weeks run Monday-Sunday; months and years use calendar boundaries. The default/reset date comes from the spreadsheet timezone.
+
+Tasks count when their planned dates overlap the selected period, including boundaries. Invalid or missing planned dates are excluded. Parents and subtasks count individually; a task assigned to several clients counts once. Completion reflects the tasks' current statuses, not a historical status snapshot or work completed during that period. The top summary tiles use the same period/client scope while Dashboard is active and return to global totals in other views.
+
+## Bulk Subtasks
+
+Inside a parent task, enter one subtask name per line to create 1-100 subtasks together (200 characters per name). Empty lines are ignored; repeated names create distinct IDs. New children copy saved parent category, priority, planned dates, and clients, with To Do status. Save pending parent edits before creating children.
+
+The subtask panel displays 25 children per page. Selection persists across its pages, is separate from All tasks selection, and resets when changing the selected task or closing the dialog. Select visible never includes another page automatically.
+
+Selected children support status updates, confirmed deletion, and bulk edits to category, priority, clients, and planned dates. Each edit field has an explicit Apply switch: unchecked fields remain unchanged. Applying Clients replaces assignments; applying an empty selection clears them. A single planned-date edit preserves the other date and is validated against every selected task before writes.
+
+The server checks that every selected task still belongs directly to the chosen parent under the same lock as the write. Bulk transfer is not included. Spreadsheet runtime failures can still leave partial writes; reconciliation reloads data without retrying a mutation.
+
 ## All Tasks
 
-- Search by task ID, name, category, or description. Filter by status, category, priority, and date range.
+- Search by task ID, name, category, description, or client. Filter by status, category, client, priority, and date range.
 - Date filters include tasks overlapping the range, including boundary dates. Undated tasks are excluded only when a date filter is active.
-- Sort by task ID, name, category, priority, status, start, or end date. Undated tasks sort last in either direction.
+- Sort by task ID, name, category, clients, priority, status, start, or end date. Undated tasks sort last in either direction.
 - Pages contain 25 parent groups by default (25/50/100 options). Each expanded parent shows up to 25 matching children, with its own child-page controls.
 - A matching child keeps its parent visible as context without including nonmatching siblings. Context-only parents cannot be selected or updated inline.
 - Parent checkboxes select only that task. The header checkbox selects only the matching rows currently displayed, never collapsed children or other pages.
@@ -95,7 +123,9 @@ The application supports a parent-child task structure.
 
 The frontend shares one task snapshot and renders only the active view. Searches are debounced by 200 ms; filtering, sorting, paging, and switching views do not fetch tasks. The timeline mounts only viewport rows plus an eight-row buffer on each side, and batches geometry reads before inserting bars.
 
-Saving task details and status uses one write request. Each action performs at most one follow-up task refresh. Mutations are serialized in the browser, and stale responses from earlier reads are ignored. Server mutations use a document lock, with a script-lock fallback when no document lock is available.
+Saving task details and status uses one write request. Each action performs at most one follow-up task refresh. Mutations are serialized in the browser, and stale responses from earlier reads are ignored. Server mutations and category upgrades share a script lock across web-app and spreadsheet-menu execution contexts.
+
+Week view uses compact 72px day columns, 54px rows, and 20px bars. Dragging uses measured cell widths, so one column still means one day. The parent subtask panel also keeps mounted rows bounded through pagination. Client and dashboard filters operate on the loaded snapshot without additional server requests. Notifications identify affected tasks and remain visible until clicked or keyboard-dismissed.
 
 A failed refresh keeps the last loaded data and displays Retry. After a write failure, a reconciliation read runs without automatically retrying the write. Further writes remain blocked until that read succeeds or Retry reconnects. A request may have partially succeeded before its failure was reported: Google Sheets does not provide transactional rollback, and locks do not prevent manual spreadsheet edits.
 
@@ -109,7 +139,7 @@ Run the dependency-free Node regression suite from the repository root:
 node --test tests/task-tracker.test.cjs
 ```
 
-Tests cover grouping, overlap filters, sorting, pagination, explicit selection, stale responses, write serialization, bulk validation, status dates, lock release/fallback, formula preservation, and injected partial-write failures. Browser checks use a synthetic Apps Script bridge; they do not prove Google Sheets service behavior.
+Tests cover grouping, overlap filters, client sorting/serialization, calendar periods, pagination, explicit selection, stale responses, write serialization, scoped bulk validation, inherited batch creation, category migration/backup/rerun safety, status dates, lock release, formula preservation, and injected partial-write failures. Browser checks use a synthetic Apps Script bridge; they do not prove Google Sheets service behavior.
 
 Before production deployment, use a copy of the spreadsheet to verify:
 
@@ -117,10 +147,18 @@ Before production deployment, use a copy of the spreadsheet to verify:
 2. Inline/bulk status updates, parent-plus-children deletion, missing IDs, and concurrent updates from two sessions.
 3. Duration formulas and actual start/end dates after saves, reopening, and deletion.
 4. Day/week/month alignment, scrolling, dragging/cancellation, collapse, resize, and keyboard controls at desktop and mobile widths.
+5. The category/client upgrade, legacy sheets, client JSON, parent-scoped batches, and date/client filtering across timezone and calendar boundaries.
 
 ## Deployment
 
-Update both `App.html` and `code.gs` in the spreadsheet's bound Apps Script project. Keep the existing HTML filename `App`, initialize the task database if needed, then publish a new web-app deployment version. No new sheet columns or third-party packages are required. Do not upload the Node tests to Apps Script or populate production with synthetic test tasks.
+Update both [App.html](App.html) and [code.gs](code.gs) in the spreadsheet's bound Apps Script project; keep the HTML filename `App`. Test on a spreadsheet copy first and pause normal writes during the production upgrade.
+
+1. For a fresh spreadsheet, run Initialize Task Database. For existing data, use Task Manager > Upgrade Categories and Clients (with backup) from the spreadsheet menu (reload the spreadsheet to refresh the menu).
+2. Confirm the upgrade. It preflights headers/categories, copies Task_Master to a timestamped backup, adds Clients in column O, and maps Graphics to Graphic Design and the other six known legacy categories to Video editing. Existing new-category values remain unchanged. Unknown/blank categories or occupied column O stop the upgrade before migration writes; resolve them explicitly and retry.
+3. Check the backup, new headers, migrated categories, formulas, and existing client data. Re-running an already completed upgrade makes no further category changes or backups.
+4. Publish a new web-app deployment version with the updated backend and frontend together, then perform the live checks above.
+
+No third-party packages are required. Do not upload the Node tests to Apps Script or populate production with synthetic test tasks. Existing clients remain empty until assigned; no client names are inferred from old task categories.
 
 The HTML requires the deployed Apps Script web app for real task data. Opening it directly shows a connection error rather than providing a standalone backend.
 

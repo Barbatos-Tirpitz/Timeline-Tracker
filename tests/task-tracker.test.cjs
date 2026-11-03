@@ -259,28 +259,38 @@ test('large child groups have independent pages; context and collapsed rows are 
 });
 
 function taskRow(id, parent = '', status = 'To Do') {
-  return [id, id, 'Editing', 'Medium', status, '', '', '=G2-F2+1', '', '', '', '', '', parent];
+  return [id, id, 'Video editing', 'Medium', status, '', '', '=G2-F2+1', '', '', '', '', '', parent, '[]'];
 }
 
 function server(records, missingSheet = false, failAfter = Infinity, documentLock = true) {
-  const rows = [Array(14).fill('header'), ...records.map(row => row.slice())];
+  const headers = ['Task ID', 'Task Name', 'Category', 'Priority', 'Status', 'Start Date', 'End Date', 'Duration', 'Description', 'Actual Start', 'Actual End', 'Created At', 'Updated At', 'Parent Task ID', 'Clients'];
+  const rows = [headers, ...records.map(row => row.slice())];
+  let maxColumns = 15;
   const writes = [];
+  const backups = [];
   let releases = 0;
   const sheet = {
     getLastRow: () => rows.length,
+    getMaxColumns: () => maxColumns,
+    getMaxRows: () => 10000,
+    insertColumnsAfter(column, count) { maxColumns += count; },
+    copyTo() { backups.push(rows.map(row => row.slice())); return { setName() {} }; },
     getRange(row, column, height = 1, width = 1) {
       return {
-        getValues: () => rows.slice(row - 1, row - 1 + height).map(values => values.slice(column - 1, column - 1 + width)),
+        getValues: () => Array.from({ length: height }, (_, offset) => Array.from({ length: width }, (_, index) => rows[row - 1 + offset]?.[column - 1 + index] ?? '')),
+        getValue: () => rows[row - 1]?.[column - 1] ?? '',
         getDisplayValues: () => rows.slice(row - 1, row - 1 + height).map(values => values.slice(column - 1, column - 1 + width).map(String)),
         setValues(values) {
           if (writes.length === failAfter) throw new Error('Injected write failure');
           writes.push({ row, column, values });
           values.forEach((valuesRow, offset) => valuesRow.forEach((value, index) => {
+            if (!rows[row - 1 + offset]) rows[row - 1 + offset] = Array(15).fill('');
             rows[row - 1 + offset][column - 1 + index] = value;
           }));
           return this;
         },
-        setValue(value) { return this.setValues([[value]]); }
+        setValue(value) { return this.setValues([[value]]); },
+        setNumberFormat() { return this; }
       };
     },
     deleteRows(row, count) {
@@ -288,15 +298,19 @@ function server(records, missingSheet = false, failAfter = Infinity, documentLoc
       writes.push({ delete: row, count }); rows.splice(row - 1, count);
     }
   };
+  const ui = { answer: 'YES', Button: { YES: 'YES' }, ButtonSet: { YES_NO: 'YES_NO' }, alert() { return this.answer; } };
+  const spreadsheet = { getSheetByName: () => missingSheet ? null : sheet, getSpreadsheetTimeZone: () => 'UTC', toast() {} };
   const context = vm.createContext({
-    SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: () => missingSheet ? null : sheet }), flush() {} },
+    Date,
+    Utilities: { formatDate: date => date.toISOString().slice(0, 10) },
+    SpreadsheetApp: { getActiveSpreadsheet: () => spreadsheet, getUi: () => ui, flush() {} },
     LockService: {
       getDocumentLock: () => documentLock ? { waitLock() {}, releaseLock() { releases++; } } : null,
       getScriptLock: () => ({ waitLock() {}, releaseLock() { releases++; } })
     }
   });
   vm.runInContext(backend, context);
-  return { context, rows, writes, releases: () => releases };
+  return { context, rows, writes, backups, ui, sheet, setMaxColumns: count => { maxColumns = count; }, releases: () => releases };
 }
 
 test('backend and frontend scripts parse', () => {
@@ -353,7 +367,7 @@ test('status transitions preserve start and completion on no-op, clear completio
 
 test('modal detail save accepts optional status and validates it before writing', () => {
   const app = server([taskRow('VID-001')]);
-  const payload = { taskId: 'VID-001', taskName: 'Updated', category: 'Editing', priority: 'High', startDate: '2026-11-03', endDate: '2026-11-05', status: 'Invalid' };
+  const payload = { taskId: 'VID-001', taskName: 'Updated', category: 'Video editing', priority: 'High', startDate: '2026-11-03', endDate: '2026-11-05', status: 'Invalid' };
   assert.throws(() => app.context.updateTask(payload), /Invalid status/);
   assert.equal(app.writes.length, 0);
   app.context.updateTask({ ...payload, status: 'Done' });
@@ -379,4 +393,163 @@ test('script lock is used when document lock is unavailable', () => {
   app.context.updateTaskStatus('VID-001', 'Done');
   assert.equal(app.rows[1][4], 'Done');
   assert.equal(app.releases(), 1);
+});
+
+test('clients JSON round-trips punctuation, normalizes duplicates and rejects malformed data', () => {
+  const app = server([]);
+  assert.deepEqual(Array.from(app.context.normalizeClients_([' Zebra ', 'Acme, Inc.', 'zebra'])), ['Acme, Inc.', 'Zebra']);
+  assert.deepEqual(Array.from(app.context.readClients_('["Acme, Inc.","Client \\"A\\""]', 'VID-1')), ['Acme, Inc.', 'Client "A"']);
+  assert.throws(() => app.context.readClients_('not JSON', 'VID-1'), /Invalid Clients data for VID-1/);
+  assert.throws(() => app.context.normalizeClients_('Acme'), /list/);
+});
+
+test('header upgrade preserves original fields and rejects occupied column O before writing', () => {
+  const app = server([]);
+  app.setMaxColumns(14);
+  app.rows[0] = app.rows[0].slice(0, 14);
+  app.context.initializeTaskHeaders_(app.sheet);
+  assert.equal(app.rows[0][13], 'Parent Task ID');
+  assert.equal(app.rows[0][14], 'Clients');
+  app.rows[0][14] = 'Unrelated data';
+  const count = app.writes.length;
+  assert.throws(() => app.context.initializeTaskHeaders_(app.sheet), /Column O/);
+  assert.equal(app.writes.length, count);
+});
+
+test('category upgrade is explicit and deterministic, and detail edits preserve or clear clients', () => {
+  const app = server([taskRow('VID-001')]);
+  assert.equal(app.context.categoryForUpgrade_('Graphics'), 'Graphic Design');
+  assert.equal(app.context.categoryForUpgrade_('Editing'), 'Video editing');
+  assert.equal(app.context.categoryForUpgrade_('Scheduling'), 'Scheduling');
+  assert.throws(() => app.context.categoryForUpgrade_('Unknown'), /Unknown category/);
+  app.rows[1][14] = '["Client A"]';
+  const payload = { taskId: 'VID-001', taskName: 'Updated', category: 'Scheduling', priority: 'High', startDate: '2026-11-03', endDate: '2026-11-05' };
+  app.context.updateTask(payload);
+  assert.equal(app.rows[1][14], '["Client A"]');
+  app.context.updateTask({ ...payload, clients: [] });
+  assert.equal(app.rows[1][14], '[]');
+  assert.equal(app.rows[1][7], '=G2-F2+1');
+});
+
+test('batch creation inherits saved defaults and clients, allocates unique IDs and literal names', () => {
+  const parent = taskRow('VID-009');
+  parent[5] = new Date(2026, 10, 1); parent[6] = new Date(2026, 10, 10); parent[14] = '["Acme"]';
+  const app = server([parent]);
+  const result = app.context.createSubtasks('VID-009', [' First ', '', 'First', '=SUM(A1:A2)']);
+  assert.deepEqual(Array.from(result.taskIds), ['VID-010', 'VID-011', 'VID-012']);
+  assert.equal(app.rows[2][1], 'First');
+  assert.equal(app.rows[4][1], "'=SUM(A1:A2)");
+  assert.equal(app.rows[2][14], '["Acme"]');
+  assert.equal(app.rows[2][13], 'VID-009');
+  assert.match(app.rows[2][7], /G3-F3\+1/);
+  assert.equal(app.writes.length, 1);
+  assert.throws(() => app.context.createSubtasks('VID-009', Array(101).fill('Name')), /1-100/);
+});
+
+test('bulk subtask patches validate every merged date and parent scope before writing', () => {
+  const parent = taskRow('VID-001');
+  const child = taskRow('VID-002', 'VID-001');
+  child[5] = new Date(2026, 10, 1); child[6] = new Date(2026, 10, 5); child[14] = '["Acme"]';
+  const app = server([parent, child, taskRow('VID-003')]);
+  assert.throws(() => app.context.updateSubtasks('VID-001', ['VID-002'], { startDate: '2026-11-06' }), /End date/);
+  assert.throws(() => app.context.updateSubtasks('VID-001', ['VID-002', 'VID-003'], { priority: 'High' }), /no longer direct/);
+  assert.throws(() => app.context.updateTaskStatuses(['VID-003'], 'Done', 'VID-001'), /no longer direct/);
+  assert.throws(() => app.context.deleteTasks(['VID-003'], 'VID-001'), /no longer direct/);
+  assert.equal(app.writes.length, 0);
+  app.context.updateSubtasks('VID-001', ['VID-002'], { priority: 'High', clients: [] });
+  assert.equal(app.rows[2][3], 'High');
+  assert.equal(app.rows[2][14], '[]');
+  assert.equal(app.rows[2][7], '=G2-F2+1');
+  assert.equal(app.rows[2][5], child[5]);
+  assert.throws(() => app.context.updateSubtasks('VID-001', ['VID-002'], {}), /at least one/);
+});
+
+test('client filters are independent and client sorting uses the first alphabetical name with unassigned last', () => {
+  const app = client();
+  const task = listTask('VID-1', '', { clients: ['Zebra', 'Acme'], category: 'Scheduling' });
+  assert.equal(app.clientMatches(task, 'client:ACME'), true);
+  assert.equal(app.taskMatches(task, { client: 'client:Zebra', category: 'Graphic Design' }), false);
+  assert.equal(app.clientMatches(task, 'unassigned'), false);
+  assert.equal(app.clientMatches(listTask('VID-2'), 'unassigned'), true);
+  assert.ok(app.compareTasks(task, listTask('VID-2', '', { clients: ['Beta'] }), 'clients', 1) < 0);
+  assert.ok(app.compareTasks(task, listTask('VID-2'), 'clients', -1) < 0);
+});
+
+test('dashboard calendar periods cover leap months, Monday-Sunday weeks and year boundaries', () => {
+  const app = client();
+  for (const [period, anchor, start, end] of [
+    ['daily', '2026-11-03', '2026-11-03', '2026-11-03'],
+    ['weekly', '2026-11-01', '2026-10-26', '2026-11-01'],
+    ['weekly', '2026-11-02', '2026-11-02', '2026-11-08'],
+    ['monthly', '2024-02-29', '2024-02-01', '2024-02-29'],
+    ['yearly', '2026-12-31', '2026-01-01', '2026-12-31']
+  ]) {
+    const range = app.dashboardRange(period, app.parseDate(anchor));
+    assert.equal(app.dateKey(range.start), start);
+    assert.equal(app.dateKey(range.end), end);
+  }
+});
+
+test('dashboard counts scheduled overlap once per multi-client task and excludes invalid dates', () => {
+  const app = client();
+  const range = app.dashboardRange('daily', app.parseDate('2026-11-03'));
+  const task = listTask('VID-1', '', { start: app.parseDate('2026-11-01'), end: app.parseDate('2026-11-03'), clients: ['Acme', 'Beta'] });
+  assert.equal(app.dashboardTasks([task], range, '').length, 1);
+  assert.equal(app.dashboardTasks([task], range, 'client:Beta').length, 1);
+  assert.equal(app.dashboardTasks([task], range, 'unassigned').length, 0);
+  assert.equal(app.dashboardTasks([listTask('undated'), { ...task, end: app.parseDate('2026-10-31') }], range, '').length, 0);
+});
+
+test('subtask panel selects only visible children and keeps selection separate from All tasks', () => {
+  const app = client();
+  const state = app.getState();
+  state.tasks = [listTask('VID-1'), ...Array.from({ length: 60 }, (_, index) => listTask('VID-' + (index + 2), 'VID-1'))];
+  app.resetSubtaskPanel('VID-1');
+  app.selectPanelPage(true);
+  assert.equal(state.subtaskPanel.selected.size, 25);
+  assert.equal(state.list.selected.size, 0);
+  state.subtaskPanel.page = 2;
+  app.selectPanelPage(true);
+  assert.equal(state.subtaskPanel.selected.size, 50);
+  app.resetSubtaskPanel('VID-9');
+  assert.equal(state.subtaskPanel.selected.size, 0);
+  assert.deepEqual(Array.from(app.subtaskNames(' One\n\nTwo\r\n One ')), ['One', 'Two', 'One']);
+});
+
+test('administrator upgrade creates a backup before migration and is safe to rerun', () => {
+  const row = taskRow('VID-001'); row[2] = 'Graphics'; row[14] = '';
+  const app = server([row]);
+  app.rows[0] = app.rows[0].slice(0, 14); app.setMaxColumns(14);
+  app.context.upgradeTaskDatabase();
+  assert.equal(app.backups.length, 1);
+  assert.equal(app.backups[0][1][2], 'Graphics');
+  assert.equal(app.rows[0][14], 'Clients');
+  assert.equal(app.rows[1][2], 'Graphic Design');
+  assert.equal(app.rows[1][7], '=G2-F2+1');
+  const writes = app.writes.length;
+  app.context.upgradeTaskDatabase();
+  assert.equal(app.writes.length, writes);
+  assert.equal(app.backups.length, 1);
+});
+
+test('upgrade cancellation and unknown categories cannot partially migrate data', () => {
+  const legacy = taskRow('VID-001'); legacy[2] = 'Editing';
+  const unknown = taskRow('VID-002'); unknown[2] = 'Unexpected';
+  const app = server([legacy, unknown]);
+  assert.throws(() => app.context.upgradeTaskDatabase(), /Unknown category/);
+  assert.equal(app.writes.length, 0);
+  assert.equal(app.backups.length, 0);
+  app.ui.answer = 'NO';
+  app.context.upgradeTaskDatabase();
+  assert.equal(app.writes.length, 0);
+});
+
+test('legacy getTasks returns empty clients without altering the sheet and includes calendar metadata', () => {
+  const row = taskRow('VID-001'); row[14] = '';
+  const app = server([row]);
+  app.rows[0] = app.rows[0].slice(0, 14); app.setMaxColumns(14);
+  const response = app.context.getTasks();
+  assert.equal(response.tasks[0].clients.length, 0);
+  assert.match(response.spreadsheetToday, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(app.writes.length, 0);
 });
