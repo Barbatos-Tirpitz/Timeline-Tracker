@@ -1,4 +1,4 @@
-# Task Timeline Tracker
+<img width="698" height="672" alt="image" src="https://github.com/user-attachments/assets/f430fc3f-2ed4-4624-9b59-6bf81e84cd9a" /># Task Timeline Tracker
 
 <p align="center">
   A lightweight, self-hosted task management and timeline tracking application powered by Google Sheets and Google Apps Script.
@@ -25,30 +25,34 @@ The application is designed to be deployed independently. Each user or team can 
 
 <!-- Replace these image paths after adding your screenshots to assets/screenshots/ -->
 
-### Dashboard
+### Metrics
 
 Get an overview of task progress, workload, and current task statuses.
 
-<img width="1860" height="852" alt="image" src="https://github.com/user-attachments/assets/5ecb103f-3962-4354-bfc9-26ee6585b20e" />
+<img width="1854" height="938" alt="image" src="https://github.com/user-attachments/assets/e8a5142d-3c24-41bf-b427-b7ff01c157bd" />
+
 
 ### Timeline
 
 Visualize task schedules using an interactive Gantt-style timeline. Navigate across dates and reschedule individual tasks by dragging their timeline bars.
 
-<img width="1837" height="950" alt="image" src="https://github.com/user-attachments/assets/58271b09-a81e-4ae6-8778-f0c61714633a" />
+<img width="1856" height="932" alt="image" src="https://github.com/user-attachments/assets/5c76a682-3cf7-4688-8d5b-f3cde6056f27" />
+
 
 
 ### Task Management
 
 Create, update, search, and filter tasks while keeping important task information organized.
 
-Work in Progress!!
+<img width="705" height="855" alt="image" src="https://github.com/user-attachments/assets/86b1b19c-f20e-4fdb-8eb9-9cb663323813" />
+<img width="704" height="805" alt="image" src="https://github.com/user-attachments/assets/c88d465a-ff1f-47a1-a8a4-b712bf5acd64" />
+<img width="698" height="672" alt="image" src="https://github.com/user-attachments/assets/cb00ecea-3017-4c64-a177-4e33eeeafa06" />
+
+
 
 ### Parent Tasks and Subtasks
 
 Organize complex work into smaller tasks. Expand or collapse subtasks to keep the timeline organized.
-
-Work in Progress!!
 
 ---
 
