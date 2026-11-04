@@ -1311,6 +1311,7 @@
     clientOptions: [],
     clientSelections: {},
     spreadsheetToday: '',
+    spreadsheetTimeZone: '',
     dashboard: { period: 'monthly', anchor: null, client: '' },
     invoices: { loaded: false, loading: false, error: '', request: 0, records: [], settings: null, settingsRevision: 0, editor: null, dirty: false, historyClient: '', historyPage: 1 },
     subtaskPanel: { parentId: null, page: 1, selected: new Set(), draft: '', quantity: 1, patch: {}, editOpen: false, status: 'To Do' },
@@ -1399,6 +1400,29 @@
 
   function dateKey(d) {
     return d ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` : '';
+  }
+
+  function dateKeyInTimeZone(value, timeZone) {
+    if (!timeZone) return dateKey(value);
+    try {
+      const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+        timeZone, year: 'numeric', month: '2-digit', day: '2-digit'
+      }).formatToParts(value).filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+      return `${parts.year}-${parts.month}-${parts.day}`;
+    } catch {
+      return dateKey(value);
+    }
+  }
+
+  function refreshSpreadsheetToday(now = new Date()) {
+    if (!state.loaded) return false;
+    const today = dateKeyInTimeZone(now, state.spreadsheetTimeZone);
+    if (!today || today === state.spreadsheetToday) return false;
+    state.spreadsheetToday = today;
+    renderStats();
+    if (state.activeView === 'dashboard') renderDashboard();
+    else if (state.activeView === 'timeline') render();
+    return true;
   }
 
   const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -1519,6 +1543,7 @@
       state.tasks = response.tasks.map(normalizeTask);
       applyTaskHourRollups(state.tasks);
       state.spreadsheetToday = response.spreadsheetToday || dateKey(new Date());
+      state.spreadsheetTimeZone = response.spreadsheetTimeZone || state.spreadsheetTimeZone || '';
       if (!state.dashboard.anchor) state.dashboard.anchor = parseDate(state.spreadsheetToday);
       state.taskById = new Map(state.tasks.map(task => [task.id, task]));
       state.childrenByParent = new Map();
@@ -2617,6 +2642,8 @@ html += `<div class="task-cell"
     dashboard.model = model;
     const total = model.scoped.length;
     const completedParents = model.completed.filter(task => !task.parentTaskId).length;
+    const attentionClient = dashboard.client === 'unassigned' ? 'Unassigned'
+      : dashboard.client ? dashboard.client.slice(7) : 'all clients';
     const tiles = [
       ['Completed', model.completed.length, `${completedParents} parent/standalone · ${model.completed.length - completedParents} subtasks`, 'completed'],
       ['Recorded hours', formatHours(model.hours.total), `${formatHours(model.hours.completed)} h on completed work · scheduled scope`, 'hours'],
@@ -2635,13 +2662,13 @@ html += `<div class="task-cell"
         <button class="btn" onclick="state.dashboard.anchor=parseDate(state.spreadsheetToday)||new Date();renderDashboard()">Today</button>
         <label>Client <select class="field-control" id="dashboardClient" onchange="state.dashboard.client=this.value;renderDashboard()">${clientFilterOptions(dashboard.client)}</select></label>
       </div>
-      <div class="panel-subtitle" style="margin-top:14px">${displayDateRange(range.start, range.end)} · ${total} scheduled tasks · ${model.parents} parent/standalone · ${model.subtasks} subtasks${dashboard.client ? ' · ' + esc(dashboard.client === 'unassigned' ? 'Unassigned' : dashboard.client.slice(7)) : ''}</div>
+      <div class="panel-subtitle" style="margin-top:14px"><strong title="Current date in the spreadsheet time zone">Today:</strong> ${displayDate(today, true)} <span aria-hidden="true">·</span> <strong>Selected period:</strong> ${displayDateRange(range.start, range.end)} · ${total} scheduled tasks · ${model.parents} parent/standalone · ${model.subtasks} subtasks${dashboard.client ? ' · ' + esc(dashboard.client === 'unassigned' ? 'Unassigned' : dashboard.client.slice(7)) : ''}</div>
       <section class="metrics-tiles" id="dashboardMetrics" aria-label="Selected period metrics">${tiles.map(([label, value, note, kind]) => `<button type="button" class="stat metrics-tile" onclick="openMetricTasks('${kind}')"><div class="stat-label">${label}</div><div class="stat-number">${value}</div><div class="stat-foot">${note}</div>${kind === 'hours' ? renderHoursProgress(model.hours.completed, model.hours.total, false, false) : ''}</button>`).join('')}</section>
       <div class="metrics-charts">
         <section class="metrics-section" aria-labelledby="metricsDeliveryHeading"><div class="metrics-section-head"><h3 id="metricsDeliveryHeading">Planned Finish vs Actual Completion</h3></div><div class="metrics-caption">Planned finish counts include every status; actual completions use the date tasks were marked Done. A task may appear in both.</div>${renderMetricsDeliveryChart(model, dashboard.period)}</section>
         <section class="metrics-section" aria-labelledby="metricsHoursHeading"><div class="metrics-section-head"><h3 id="metricsHoursHeading">Hours by Parent Task</h3><button class="subtask-link" onclick="openMetricTasks('hours')">View work</button></div><div class="metrics-caption">Recorded task totals · selected schedule window</div>${renderMetricsParentChart(model)}</section>
       </div>
-      <section class="metrics-section" aria-labelledby="metricsAttentionHeading"><div class="metrics-section-head"><h3 id="metricsAttentionHeading">Needs Attention</h3><button class="subtask-link" onclick="openMetricTasks('attention')">View all (${model.attention.length})</button></div><div class="metrics-caption">Current overdue/due-today work; blocked and missing-hour work in the selected schedule window</div>${renderMetricsAttention(model)}</section>
+      <section class="metrics-section" aria-labelledby="metricsAttentionHeading"><div class="metrics-section-head"><h3 id="metricsAttentionHeading">Needs Attention</h3><button class="subtask-link" onclick="openMetricTasks('attention')">View all (${model.attention.length})</button></div><div class="metrics-caption">Overdue and due-today items for ${esc(attentionClient)} are current and not limited to this period. Showing up to eight; View all opens every match. Blocked and missing-hour items use the selected schedule window.</div>${renderMetricsAttention(model)}</section>
       <div class="invoice-dashboard"><strong>Invoice review</strong><span class="subtitle">${dashboard.client && dashboard.client !== 'unassigned' ? esc(dashboard.client.slice(7)) : 'Select a client to prepare a draft'}</span><button class="btn" data-metric-command data-metric-invoice="true" ${!dashboard.client || dashboard.client === 'unassigned' ? 'disabled' : ''} onclick="reviewMetricsInvoice()">Review for invoicing</button><button class="btn" onclick="switchView('invoices')">Saved invoices</button></div>
       `;
     refreshDateInputLabels();
@@ -4535,6 +4562,7 @@ function deleteCurrentTask() {
   });
 
   restoreMetricsPreferences();
+  if (typeof setInterval === 'function') setInterval(refreshSpreadsheetToday, 60000);
   loadTasks();
 </script>
 </body>
