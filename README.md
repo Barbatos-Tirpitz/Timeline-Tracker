@@ -68,7 +68,7 @@ Work in Progress!!
 | Collapse / Expand | Show or hide subtasks in the timeline |
 | Progress Tracking | Monitor task completion and status |
 | Search and Filters | Find tasks based on available criteria |
-| Dashboard | Daily, weekly, monthly, and yearly scheduled-task summaries |
+| Metrics Workspace | Daily, weekly, biweekly, monthly, and yearly task/hour summaries |
 | Invoices | Biweekly hourly billing, saved client copies, paid tracking, PDF print and CSV export |
 
 ## Task Hierarchy
@@ -109,13 +109,27 @@ The Clients field is stored as a JSON string array in column O. Blank cells mean
 
 Subtask rows display their own client assignments as compact tags, independently of the parent's current clients. Two tags are shown initially; additional names are available in an expandable list. Unassigned appears when a child has no clients, including after clearing clients with bulk edit.
 
-## Dashboard Periods
+## Metrics and Timeline Summary
 
-The dashboard defaults to Monthly and offers Daily, Weekly, Fortnightly, Monthly, and Yearly modes, date selection, previous/next period, Today, and a client filter. All tasks also offers Weekly/Fortnightly/Monthly date presets, a reference date, previous/next period, All dates, and Custom dates. Timeline offers Weekly, Fortnightly, and Monthly alongside Day. These are date-window filters; task-field sorting remains available separately.
+The former Dashboard is now the dedicated **Metrics** workspace. Sticky Daily, Weekly, Biweekly, Monthly, and Yearly controls, reference date, previous/next arrows, Today, and client filter determine its analysis period. Monthly remains the default. The last period/date/client is remembered locally when browser storage is permitted. These analytics belong inside Metrics rather than repeating at the top of every workspace.
 
-Fortnightly explicitly means 14 days (the requested bi-monthly mode is interpreted as every two weeks, matching the payment cycle), not twice per month or every two months. Weekly and fortnightly views start on Monday of the reference week; navigation advances 7 or 14 days respectively. Months and years use calendar boundaries. The default/reset date comes from the spreadsheet timezone. Manual All tasks From/Through edits switch its period to Custom dates. Period changes do not modify task dates, tracked hours or schedules.
+Four actionable tiles show actual completions in the selected period, recorded hours on scheduled work, current overdue work for the selected client, and blocked scheduled work. Parent/standalone and subtask counts are separated. Overdue is explicitly **now**, not a historical snapshot of the selected month.
 
-Tasks count when their planned dates overlap the selected period, including boundaries. Invalid or missing planned dates are excluded. Parents and subtasks count individually; a task assigned to several clients counts once. Completion reflects the tasks' current statuses, not a historical status snapshot or work completed during that period. The top summary tiles use the same period/client scope while Dashboard is active and return to global totals in other views.
+**Due vs Completed** compares leaf-task planned deadlines with actual completion dates. Daily/weekly/biweekly views use day buckets, Monthly uses 7-day buckets, and Yearly uses calendar months. Counts appear as text on keyboard-operable bars; dense charts scroll within their container on mobile. Completion events can be included even when their planned dates were outside the period. Parent containers are excluded from this chart to avoid counting the same work twice.
+
+**Hours by Parent Task** shows the five largest parent/standalone groups by recorded leaf-task hours in the schedule window, with a View work shortcut for the full set. Shared-client tasks count once for the selected client filter; hours are not split or added again for parent rollups. These are stored task totals, not hours worked on each calendar day. Accurate daily time-spent charts require dated time entries, which are not implemented.
+
+**Needs Attention** prioritizes current overdue tasks, blocked work in the schedule window, work due today, and completed scheduled videos with zero recorded hours. It shows at most eight rows, with View all, edit links, quick status changes and leaf-hour saves. Parent totals remain read-only. Actions use the existing write/cooldown guards and one follow-up task refresh.
+
+Tiles and chart bars open All tasks with an explicit Metrics filter and the relevant client/date context. Parent context is retained without including unrelated siblings. The filter reevaluates task changes, can be cleared explicitly, and is removed when ordinary task filters are changed. Returning to Metrics preserves its period/client selection. Review for invoicing carries a selected client and period into an empty invoice draft; it does not mark anything billed or overwrite an unsaved invoice without confirmation.
+
+The task-summary tiles appear only on Timeline. They follow its selected calendar period and task/status/category/client filters, and collapsing subtasks does not change totals. All tasks has no repeated task-summary tiles; Invoices keeps only its separate financial totals. Timeline scrolling does not rebuild summary tiles.
+
+All tasks also offers Weekly/Biweekly/Monthly date presets, a reference date, previous/next period, All dates, and Custom dates. Timeline offers Weekly, Biweekly, and Monthly alongside Day. These are date-window filters; task-field sorting remains available separately.
+
+Biweekly explicitly means 14 days (the requested bi-monthly mode is interpreted as every two weeks, matching the payment cycle), not twice per month or every two months. Weekly and biweekly views start on Monday of the reference week; navigation advances 7 or 14 days respectively. Months and years use calendar boundaries. The default/reset date comes from the spreadsheet timezone. Manual All tasks From/Through edits switch its period to Custom dates. Period changes do not modify task dates, tracked hours or schedules.
+
+The scheduled-scope caption and recorded-hour/blocked metrics use planned-date overlap, including boundaries; invalid or missing planned dates are excluded from that scope. Actual completions use Done status plus the actual completion date. Parents and subtasks are counted separately where shown; a multi-client task counts once. Current status/hour values are not historical snapshots. Changing Metrics periods does not alter Timeline's summary scope, task schedules, or saved invoice copies.
 
 ## Date Display
 
@@ -139,13 +153,13 @@ The server checks that every selected task still belongs directly to the chosen 
 
 ## Biweekly Invoices
 
-Open **Invoices** in the sidebar or **Open invoices** on Dashboard. The invoice workspace is separate from task scheduling: the task Duration column is calendar days and is never treated as billable hours.
+Open **Invoices** in the sidebar or **Open invoices** in Metrics. The invoice workspace is separate from task scheduling: the task Duration column is calendar days and is never treated as billable hours.
 
 ### First Setup
 
 1. Open Billing defaults and set your name/business, contact details, currency, hourly rate, payment instructions, and the first date of a 14-day billing cycle.
 2. Save the defaults. Initial defaults are USD, a zero hourly rate, and today's spreadsheet date as the cycle anchor; these are placeholders, not an assumed billing agreement.
-3. Create a new invoice and choose/type one client. Billing timeline offers Two weeks (start date plus 13 days, inclusive) or Custom dates (your own start/end). The period arrows move by the selected range's length. The default fortnight is anchored to Billing cycle starts, not twice per calendar month.
+3. Create a new invoice and choose/type one client. Billing timeline offers Two weeks (start date plus 13 days, inclusive) or Custom dates (your own start/end). The period arrows move by the selected range's length. The default biweekly period is anchored to Billing cycle starts, not twice per calendar month.
 4. The app counts matching videos for the client and timeline. Choose Scheduled overlap or Completed in range, select the video source, then Add matching videos to load them together. Enter hours and an hourly rate for each video; the total is the sum of each video's hours multiplied by its hourly rate. Rates default from the most recent saved invoice for that client/currency, or the global default; every line can be overridden. Use up to two decimals for hours and rates. A task may have several clients, but each invoice is explicitly for one client; hours are not automatically allocated, duplicated, or inferred from task dates/status.
 5. Set an optional Invoice number and Invoice name, save draft, review the client preview, then Issue invoice when ready. A blank number is allocated automatically. Custom numbers are unique across saved invoices (case-insensitive) and editable while Draft; issued copies remain immutable. Names appear in the client preview, generated PDF, CSV/text copies and export filenames. Positive hours/rates and sender/client details are required for client copies and issuance.
 
@@ -157,6 +171,8 @@ Add matching videos preserves existing lines and never duplicates a task already
 
 ### Saved Copies and Status
 
+Invoice readiness is shown above the editor and beside individual line fields. Missing client/sender/dates, missing or invalid descriptions/hours/rates, duplicate video lines, duplicate invoice numbers and an already issued/paid client-period are identified before issuing. Checklist items focus the affected field; duplicate warnings can open the saved invoice after confirmation. Issue invoice is disabled until checks pass, while Save draft remains available for incomplete drafts supported by the backend. The backend still revalidates every save/issue under its lock. Corrected fields update readiness without clearing entries, and existing issued/paid/void copies are labelled as saved copies rather than editable drafts.
+
 Invoices are snapshots of client details, descriptions, hours, rates, currency, and payment notes. Later task edits/deletion and changed defaults do not alter saved copies. Drafts remain editable or deletable. Issued invoices are read-only and can be marked Paid or Void; paid/void snapshots remain in history. Voiding preserves the original and permits a replacement for the same client/period. Only one issued/paid invoice is permitted per client and period. Mark paid records your manual confirmation; the app does not collect or transfer money.
 
 History can be filtered by client and is paginated. Outstanding and paid totals are shown separately by currency, without conversion. Stale invoice/default revisions are rejected rather than silently overwriting another session's changes. Unsaved editors are retained after failures, and ambiguous writes reconcile history without automatic retries. Reopen the saved invoice to resolve a revision conflict; use Reload saved defaults to discard stale default edits explicitly.
@@ -166,6 +182,8 @@ The backend lazily creates **Invoice_Master** on the first invoice save and **In
 This is simple hourly invoicing, not a tax/accounting or automatic time-tracking system. There are no tax/VAT calculations, discounts, foreign-exchange conversion, automatic sending, reminders, or payment processing. The spreadsheet/deployment access controls also govern billing data. Test real Sheets persistence and the deployed browser's print/download permissions before using client copies.
 
 ## All Tasks
+
+Leaf tasks/subtasks have inline Hours inputs with explicit Save (or Enter), Unsaved/Check hours state, and disabled unchanged saves. Parent hours remain calculated/read-only. Unsaved inline values survive paging, sorting, filter changes and refreshes until saved; missing tasks or tasks that become parents are pruned. Failed writes retain the draft value, then reconcile task data. Closing/reloading the page warns when unsaved inline values remain.
 
 - Search by task ID, name, category, description, or client. Filter by status, category, client, priority, and date range.
 - Date filters include tasks overlapping the range, including boundary dates. Undated tasks are excluded only when a date filter is active.
@@ -178,6 +196,8 @@ This is simple hourly invoicing, not a tax/accounting or automatic time-tracking
 - Bulk deletion requires explicit selection of every existing subtask before selecting a parent for deletion. No children are automatically included. The server rechecks this rule before writing, and deletion requires confirmation.
 
 ## Loading and Performance
+
+Task dialogs capture a clean form baseline. Closing with Cancel, Escape or the backdrop, opening another task, and switching workspaces ask before discarding task or pending subtask/bulk edits. Cancelling keeps entered values. Calculated parent-hour updates are not considered user edits. Successful main saves mark form fields saved; pending child creation/bulk fields keep the dialog open. Status-only updates preserve other unsaved details. Successfully created/applied reusable templates are not repeatedly treated as unsaved work. Focus returns to the opening control when it is still present.
 
 The frontend shares one task snapshot and renders only the active view. Searches are debounced by 200 ms; filtering, sorting, paging, and switching views do not fetch tasks. The timeline mounts only viewport rows plus an eight-row buffer on each side, and batches geometry reads before inserting bars.
 

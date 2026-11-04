@@ -1229,6 +1229,328 @@ test('rapid PDF clicks generate one copy and library failures restore the export
   assert.equal(app.pdfMessages.at(-1), 'Library unavailable');
 });
 
+test('timeline summary is not repeated in other workspaces and Metrics owns its filtered totals', () => {
+  const app = client();
+  const state = app.getState();
+  state.tasks = [listTask('VID-1', '', { hours: 2, status: 'Done', start: app.parseDate('2026-11-03'), end: app.parseDate('2026-11-03') }),
+    listTask('VID-2', '', { hours: 5, start: app.parseDate('2026-11-20'), end: app.parseDate('2026-11-21') })];
+  state.loaded = true;
+  for (const view of ['tasks', 'dashboard', 'invoices']) {
+    state.activeView = view;
+    app.renderStats();
+    assert.equal(app.elements.get('stats').hidden, true);
+  }
+  state.activeView = 'dashboard';
+  state.dashboard.period = 'daily';
+  state.dashboard.anchor = app.parseDate('2026-11-03');
+  app.renderDashboard();
+  assert.match(app.elements.get('dashboardContent').innerHTML, /id="dashboardMetrics"/);
+  assert.match(app.elements.get('dashboardContent').innerHTML, /1 scheduled tasks/);
+  assert.equal(app.elements.get('stats').hidden, true);
+  state.activeView = 'timeline';
+  app.renderStats();
+  assert.equal(app.elements.get('stats').hidden, false);
+  assert.match(app.elements.get('stats').innerHTML, /Hours logged/);
+});
+
+test('metrics model separates actual completions from schedules and counts leaf hours by parent once', () => {
+  const app = client();
+  const date = value => app.parseDate(value);
+  const tasks = [
+    listTask('VID-1', '', { name: 'Project', hours: 99, start: date('2026-11-01'), end: date('2026-11-30') }),
+    listTask('VID-2', 'VID-1', { hours: 3, clients: ['Acme', 'Beta'], status: 'Done', start: date('2026-11-01'), end: date('2026-11-04'), actualEndDate: date('2026-11-03') }),
+    listTask('VID-3', 'VID-1', { hours: 2, clients: ['Acme'], status: 'Blocked', start: date('2026-11-02'), end: date('2026-11-03') }),
+    listTask('VID-4', '', { hours: 0, category: 'Video editing', clients: ['Acme'], status: 'Done', start: date('2026-10-01'), end: date('2026-10-20'), actualEndDate: date('2026-11-04') })
+  ];
+  const range = app.dashboardRange('weekly', date('2026-11-04'));
+  const model = app.buildMetricsModel(tasks, range, 'client:Acme', date('2026-11-04'), 'weekly');
+  assert.equal(model.hours.total, 5);
+  assert.equal(model.groups.length, 1);
+  assert.equal(model.groups[0].units, 500);
+  assert.equal(model.completed.length, 2);
+  assert.equal(model.overdue.length, 1);
+  assert.equal(model.attention[0].task.id, 'VID-3');
+  assert.equal(model.buckets.reduce((sum, bucket) => sum + bucket.completedIds.length, 0), 2);
+  assert.equal(model.buckets.reduce((sum, bucket) => sum + bucket.dueIds.length, 0), 2);
+});
+
+test('metric drilldowns reevaluate changed tasks and calendar buckets remain bounded', () => {
+  const app = client();
+  const task = listTask('VID-1', '', { start: app.parseDate('2026-11-01'), end: app.parseDate('2026-11-02') });
+  const focus = { kind: 'overdue', start: '2026-11-01', end: '2026-11-30', period: 'monthly', client: '' };
+  assert.equal(app.metricsFocusIds([task], focus, app.parseDate('2026-11-04')).length, 1);
+  task.status = 'Done';
+  assert.equal(app.metricsFocusIds([task], focus, app.parseDate('2026-11-04')).length, 0);
+  for (const [period, count] of [['daily', 1], ['weekly', 7], ['fortnightly', 14], ['monthly', 5], ['yearly', 12]]) {
+    const range = app.dashboardRange(period, app.parseDate('2026-11-04'));
+    assert.equal(app.buildMetricsModel([], range, '', app.parseDate('2026-11-04'), period).buckets.length, count);
+  }
+});
+
+test('metric drilldown task IDs preserve parent context while excluding unrelated siblings', () => {
+  const app = client();
+  const tasks = [listTask('VID-1'), listTask('VID-2', 'VID-1'), listTask('VID-3', 'VID-1')];
+  const grouped = app.taskGroups(tasks, { taskIds: new Set(['VID-2']) }, 'id', 1);
+  assert.equal(grouped.matchingCount, 1);
+  assert.equal(grouped.groups[0].contextOnly, true);
+  assert.equal(grouped.groups[0].children.length, 1);
+  assert.equal(grouped.groups[0].children[0].id, 'VID-2');
+});
+
+test('metrics preferences persist safely without assuming browser storage access', () => {
+  const app = client();
+  const values = new Map();
+  app.localStorage = { getItem: key => values.get(key), setItem: (key, value) => values.set(key, value) };
+  const dashboard = app.getState().dashboard;
+  dashboard.period = 'weekly'; dashboard.client = 'client:Acme'; dashboard.anchor = app.parseDate('2026-11-04');
+  app.persistMetricsPreferences();
+  dashboard.period = 'monthly'; dashboard.client = ''; dashboard.anchor = null;
+  app.restoreMetricsPreferences();
+  assert.equal(dashboard.period, 'weekly');
+  assert.equal(dashboard.client, 'client:Acme');
+  assert.equal(app.dateKey(dashboard.anchor), '2026-11-04');
+  app.localStorage.getItem = () => { throw new Error('Storage blocked'); };
+  assert.doesNotThrow(() => app.restoreMetricsPreferences());
+});
+
+test('Metrics invoice review carries client/range without silently replacing an unsaved draft', () => {
+  const app = client();
+  const state = app.getState();
+  app.confirm = () => false;
+  app.switchView = view => { state.activeView = view; };
+  app.renderInvoices = () => {};
+  state.dashboard = { period: 'weekly', anchor: app.parseDate('2026-11-04'), client: 'client:Acme' };
+  state.invoices.loaded = true;
+  state.invoices.settings = { anchor: '2026-11-02', currency: 'USD', defaultRate: 25, senderName: 'Studio', senderDetails: '', paymentNotes: '' };
+  state.invoices.today = '2026-11-04';
+  state.invoices.editor = invoiceDraft({ client: 'Keep existing client' });
+  state.invoices.dirty = true;
+  app.reviewMetricsInvoice();
+  assert.equal(state.invoices.editor.client, 'Keep existing client');
+  state.invoices.dirty = false;
+  app.reviewMetricsInvoice();
+  assert.equal(state.invoices.editor.client, 'Acme');
+  assert.equal(state.invoices.editor.periodStart, '2026-11-02');
+  assert.equal(state.invoices.editor.periodEnd, '2026-11-08');
+  assert.equal(state.invoices.editor.periodMode, 'custom');
+  assert.equal(state.invoices.editor.lines.length, 0);
+});
+
+test('metric charts expose numeric labels, escape names, and bound parent bars', () => {
+  const app = client();
+  const tasks = Array.from({ length: 20 }, (_, index) => listTask('VID-' + index, '', { name: 'Client <script>' + index,
+    hours: index + 1, start: app.parseDate('2026-11-01'), end: app.parseDate('2026-11-04'), status: 'Done', actualEndDate: app.parseDate('2026-11-04') }));
+  const range = app.dashboardRange('weekly', app.parseDate('2026-11-04'));
+  const model = app.buildMetricsModel(tasks, range, '', app.parseDate('2026-11-04'), 'weekly');
+  const parentChart = app.renderMetricsParentChart(model);
+  assert.equal((parentChart.match(/class="metrics-parent"/g) || []).length, 5);
+  assert.match(parentChart, /Client &lt;script&gt;/);
+  assert.doesNotMatch(parentChart, /Client <script>/);
+  assert.match(app.renderMetricsDeliveryChart(model, 'weekly'), /Completed: 20 tasks/);
+  const empty = app.buildMetricsModel([], range, '', app.parseDate('2026-11-04'), 'weekly');
+  assert.match(app.renderMetricsDeliveryChart(empty, 'weekly'), /No deadlines or actual completions/);
+  assert.match(app.renderMetricsParentChart(empty), /No recorded hours/);
+});
+
+function taskFormClient(transport = false) {
+  const app = transport ? loadingClient() : client();
+  const state = app.getState();
+  state.editId = 'VID-1';
+  for (const [id, value] of Object.entries({ taskName: 'Video', category: 'Video editing', priority: 'Medium', startDate: '2026-11-04', endDate: '2026-11-05', description: '', parentTaskId: '', taskStatus: 'To Do', taskHours: '2' })) app.elements.set(id, { value });
+  app.elements.set('taskModal', { classList: { remove() {} } });
+  state.clientSelections.taskClients = ['Acme'];
+  state.taskBaseline = app.captureTaskForm();
+  if (transport) {
+    state.loaded = true;
+    state.taskById.set('VID-1', listTask('VID-1', '', { name: 'Video', category: 'Video editing', hours: 2, start: app.parseDate('2026-11-04'), end: app.parseDate('2026-11-05'), clients: ['Acme'] }));
+    app.elements.set('saveBtn', { disabled: false });
+    app.elements.set('formError', { style: {} });
+    vm.runInContext('showToast=()=>{};', app);
+  }
+  return app;
+}
+
+test('task dirty guards preserve edits on cancelled close and ignore calculated parent-hour changes', () => {
+  const app = taskFormClient();
+  assert.equal(app.taskFormHasChanges(), false);
+  app.elements.get('taskName').value = 'Unsaved name';
+  app.confirm = () => false;
+  assert.equal(app.closeModal(), false);
+  assert.equal(app.getState().editId, 'VID-1');
+  assert.equal(app.elements.get('taskName').value, 'Unsaved name');
+  app.elements.get('taskName').value = 'Video';
+  app.elements.get('taskHours').readOnly = true;
+  app.elements.get('taskHours').value = '100';
+  assert.equal(app.taskFormHasChanges(), false);
+  app.elements.get('description').value = 'New notes';
+  app.confirm = () => true;
+  assert.equal(app.closeModal(), true);
+  assert.equal(app.getState().taskBaseline, null);
+});
+
+test('unsent child drafts and bulk changes are guarded but already applied templates are not', () => {
+  const app = taskFormClient();
+  const panel = app.getState().subtaskPanel;
+  panel.draft = 'Step one'; panel.quantity = 2;
+  assert.equal(app.hasPendingSubtaskWork(), true);
+  panel.createdDraftKey = JSON.stringify([panel.draft, panel.quantity]);
+  assert.equal(app.hasPendingSubtaskWork(), false);
+  panel.patch = { priority: 'High' };
+  assert.equal(app.hasPendingSubtaskWork(), true);
+  panel.appliedPatchKey = JSON.stringify(panel.patch);
+  assert.equal(app.hasPendingSubtaskWork(), false);
+});
+
+test('workspace switching cannot discard a dirty task when confirmation is cancelled', () => {
+  const app = taskFormClient();
+  app.getState().activeView = 'timeline';
+  app.elements.get('description').value = 'Keep these notes';
+  app.confirm = () => false;
+  app.switchView('dashboard');
+  assert.equal(app.getState().activeView, 'timeline');
+  assert.equal(app.getState().editId, 'VID-1');
+  assert.equal(app.elements.get('description').value, 'Keep these notes');
+});
+
+test('status-only saving leaves other unsaved details open', () => {
+  const app = loadingClient();
+  const state = app.getState();
+  state.loaded = true; state.editId = 'VID-1';
+  state.taskById.set('VID-1', listTask('VID-1'));
+  for (const [id, value] of Object.entries({ taskName: 'Video', category: 'Video editing', priority: 'Medium', startDate: '2026-11-04', endDate: '2026-11-05', description: '', parentTaskId: '', taskStatus: 'To Do', taskHours: '2' })) app.elements.set(id, { value });
+  state.taskBaseline = app.captureTaskForm();
+  app.elements.get('description').value = 'Unsaved notes';
+  app.elements.get('taskStatus').value = 'Done';
+  app.messages = [];
+  vm.runInContext('showToast=message=>messages.push(message);', app);
+  app.saveStatusOnly();
+  app.calls[0].success({ success: true });
+  assert.equal(state.editId, 'VID-1');
+  assert.equal(state.taskBaseline.status, 'Done');
+  assert.equal(app.elements.get('description').value, 'Unsaved notes');
+  assert.equal(app.taskFormHasChanges(), true);
+});
+
+test('inline hours save uses the hours-only endpoint and clears drafts only after success', () => {
+  const app = loadingClient();
+  const state = app.getState();
+  state.loaded = true;
+  state.taskById.set('VID-1', listTask('VID-1', '', { hours: 2 }));
+  state.list.hourDrafts.set('VID-1', '3.5');
+  app.elements.set('inlineHours-VID-1', { value: '3.5', checkValidity: () => true });
+  app.messages = [];
+  vm.runInContext('showToast=message=>messages.push(message);', app);
+  assert.equal(app.hasInlineHourChanges(), true);
+  app.saveInlineTaskHours('VID-1');
+  assert.equal(app.calls[0].method, 'updateTaskHours');
+  assert.equal(state.list.hourDrafts.get('VID-1'), '3.5');
+  app.calls[0].success({ success: true });
+  assert.equal(state.list.hourDrafts.has('VID-1'), false);
+  assert.equal(app.calls[1].method, 'getTasks');
+});
+
+test('inline hours failures retain entered values and do not alter the saved task hours', () => {
+  const app = loadingClient();
+  const state = app.getState();
+  state.loaded = true;
+  const task = listTask('VID-1', '', { hours: 2 });
+  state.taskById.set(task.id, task);
+  state.list.hourDrafts.set(task.id, '4');
+  app.elements.set('inlineHours-VID-1', { value: '4', checkValidity: () => true });
+  vm.runInContext('showToast=()=>{};', app);
+  app.saveInlineTaskHours(task.id);
+  app.calls[0].failure(new Error('Unavailable'));
+  assert.equal(state.list.hourDrafts.get(task.id), '4');
+  assert.equal(task.hours, 2);
+  assert.equal(app.calls[1].method, 'getTasks');
+});
+
+test('invoice readiness identifies field-specific hours/rates and duplicate identities before issuing', () => {
+  const app = client();
+  const invoice = invoiceDraft({ number: 'ACME-01', lines: [{ taskId: 'VID-1', description: 'Video', hours: '', rate: 0 }] });
+  const pending = app.invoiceReadiness(invoice, []);
+  assert.equal(pending.ready, false);
+  assert.deepEqual(Array.from(pending.issues, issue => issue.field), ['hours', 'rate']);
+  assert.equal(pending.issues[0].line, 0);
+  invoice.lines[0].hours = 3.5; invoice.lines[0].rate = 25;
+  assert.equal(app.invoiceReadiness(invoice, []).ready, true);
+  const other = { id: 'INV-other-invoice', number: 'acme-01', client: 'ACME', status: 'Issued', periodStart: invoice.periodStart, periodEnd: invoice.periodEnd };
+  const duplicate = app.invoiceReadiness(invoice, [other]);
+  assert.equal(duplicate.ready, false);
+  assert.ok(duplicate.issues.some(issue => issue.field === 'number'));
+  assert.ok(duplicate.issues.some(issue => /client and period/.test(issue.message)));
+  assert.equal(app.invoiceReadiness(invoice, [{ ...other, id: invoice.id }]).ready, true);
+});
+
+test('invoice readiness checks invalid dates and leaves incomplete draft values unchanged', () => {
+  const app = client();
+  const invoice = invoiceDraft({ client: '', senderName: '', issueDate: '', lines: [] });
+  const before = JSON.stringify(invoice);
+  const result = app.invoiceReadiness(invoice);
+  assert.equal(result.ready, false);
+  assert.ok(result.issues.some(issue => issue.field === 'client'));
+  assert.ok(result.issues.some(issue => issue.field === 'senderName'));
+  assert.ok(result.issues.some(issue => issue.field === 'issueDate'));
+  assert.equal(JSON.stringify(invoice), before);
+});
+
+test('saving parent details keeps unsent subtask names open and marks only the form fields saved', () => {
+  const app = taskFormClient(true);
+  const state = app.getState();
+  app.resetSubtaskPanel('VID-1');
+  state.subtaskPanel.draft = 'New child';
+  state.subtaskPanel.quantity = 3;
+  app.elements.get('description').value = 'Saved parent notes';
+  app.saveTask({ preventDefault() {} });
+  assert.equal(app.calls[0].method, 'updateTask');
+  app.calls[0].success({ success: true });
+  assert.equal(state.editId, 'VID-1');
+  assert.equal(state.subtaskPanel.draft, 'New child');
+  assert.equal(state.subtaskPanel.quantity, 3);
+  assert.equal(app.taskFormHasChanges(), false);
+  assert.equal(app.hasPendingSubtaskWork(), true);
+  assert.equal(app.calls[1].method, 'getTasks');
+});
+
+test('invoice Issue command performs readiness checks before confirmation or a server write', () => {
+  const app = loadingClient();
+  const state = app.getState();
+  state.invoices.editor = invoiceDraft({ lines: [] });
+  app.messages = [];
+  let confirmations = 0;
+  app.confirm = () => { confirmations++; return true; };
+  vm.runInContext('showToast=message=>messages.push(message);focusInvoiceIssue=()=>{};', app);
+  app.saveCurrentInvoice('Issued');
+  assert.equal(app.calls.length, 0);
+  assert.equal(confirmations, 0);
+  assert.equal(app.elements.get('issueInvoiceBtn').disabled, true);
+  assert.match(app.messages[0], /at least one/);
+});
+
+test('void invoice copies remain exportable after a replacement is issued for the same period', () => {
+  const app = client();
+  const invoice = invoiceDraft({ status: 'Void', number: 'OLD-01' });
+  const replacement = { ...invoice, id: 'INV-replacement-ready', status: 'Issued', number: 'NEW-01' };
+  assert.equal(app.invoiceReadiness(invoice, [replacement]).ready, true);
+  assert.equal(app.invoiceReadiness({ ...invoice, status: 'Draft' }, [replacement]).ready, false);
+});
+
+test('Biweekly labels retain existing 14-day period values and saved-preference compatibility', () => {
+  const app = client();
+  const state = app.getState();
+  state.loaded = true;
+  state.activeView = 'dashboard';
+  state.dashboard.period = 'fortnightly';
+  state.dashboard.anchor = app.parseDate('2026-11-04');
+  app.renderDashboard();
+  assert.match(app.elements.get('dashboardContent').innerHTML, />Biweekly<\/button>/);
+  assert.doesNotMatch(app.elements.get('dashboardContent').innerHTML, />Fortnightly<\/button>/);
+  assert.ok(html.includes('title="14 days">Biweekly</button>'));
+  assert.ok(html.includes('value="fortnightly">Biweekly (14 days)</option>'));
+  const range = app.dashboardRange('fortnightly', state.dashboard.anchor);
+  assert.equal(app.dayDiff(range.start, range.end), 13);
+});
+
 test('display dates use readable full and compact English months without changing stored date keys', () => {
   const app = client();
   const compact = ['Jan', 'Feb', 'March', 'April', 'May', 'June', 'July', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
