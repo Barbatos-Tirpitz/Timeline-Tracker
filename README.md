@@ -1,56 +1,41 @@
 # Task Timeline Tracker
 
-<p align="center">
-  A lightweight, self-hosted task management and timeline tracking application powered by Google Sheets and Google Apps Script.
-</p>
+A self-hosted task management and timeline application built with Google Apps Script and Google Sheets. Track work in a sortable task list, plan schedules on a Gantt-style timeline, organize tasks into parent/subtask groups, and review workload in the Metrics workspace.
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Status-Active%20Development-blue" alt="Project Status">
-  <img src="https://img.shields.io/badge/Backend-Google%20Apps%20Script-orange" alt="Backend">
-  <img src="https://img.shields.io/badge/Frontend-HTML%20%7C%20CSS%20%7C%20JavaScript-yellow" alt="Frontend">
-  <img src="https://img.shields.io/badge/Storage-Google%20Sheets-green" alt="Storage">
-</p>
+Each user or team deploys its own copy of the spreadsheet and bound Apps Script web app.
 
----
+![Project status: active development](https://img.shields.io/badge/Status-Active%20Development-blue) ![Backend: Google Apps Script](https://img.shields.io/badge/Backend-Google%20Apps%20Script-orange) ![Frontend: HTML, CSS, JavaScript](https://img.shields.io/badge/Frontend-HTML%20%7C%20CSS%20%7C%20JavaScript-yellow) ![Storage: Google Sheets](https://img.shields.io/badge/Storage-Google%20Sheets-green)
 
-## Overview
+## At a glance
 
-Task Timeline Tracker is a general-purpose task management application inspired by project management tools such as Jira.
-
-It combines a spreadsheet-based backend with an interactive web interface, allowing users to organize tasks, monitor progress, manage subtasks, and visualize schedules through a Gantt-style timeline.
-
-The application is designed to be deployed independently. Each user or team can create their own copy of the spreadsheet and deploy their own Google Apps Script web application.
+- **All tasks:** Search, filter, sort, paginate, and bulk-update tasks.
+- **Timeline:** View planned work by day, week, biweekly period, or month; drag task bars to reschedule.
+- **Task hierarchy:** Group subtasks under parent tasks, track their progress and hours, and collapse or expand them in the timeline. The hierarchy supports one subtask level.
+- **Metrics:** Review completions, scheduled hours, overdue and blocked work, and period summaries.
+- **Invoices:** Prepare and save biweekly or custom-period hourly invoices for clients, then print or export copies.
+- **Storage:** Keep task data in your own Google spreadsheet; no build-tool packages are needed.
 
 ## Preview
 
-<!-- Replace these image paths after adding your screenshots to assets/screenshots/ -->
+### Metrics
 
-### Dashboard
+Review task progress, workload, and current status.
 
-Get an overview of task progress, workload, and current task statuses.
-
-<img width="1860" height="852" alt="image" src="https://github.com/user-attachments/assets/5ecb103f-3962-4354-bfc9-26ee6585b20e" />
+<img width="1854" height="938" alt="Metrics workspace" src="https://github.com/user-attachments/assets/e8a5142d-3c24-41bf-b427-b7ff01c157bd" />
 
 ### Timeline
 
-Visualize task schedules using an interactive Gantt-style timeline. Navigate across dates and reschedule individual tasks by dragging their timeline bars.
+Visualize schedules on a Gantt-style timeline, navigate across dates, and reschedule tasks by dragging their bars.
 
-<img width="1837" height="950" alt="image" src="https://github.com/user-attachments/assets/58271b09-a81e-4ae6-8778-f0c61714633a" />
+<img width="1856" height="932" alt="Timeline workspace" src="https://github.com/user-attachments/assets/5c76a682-3cf7-4688-8d5b-f3cde6056f27" />
 
+### Task management
 
-### Task Management
+Create, edit, search, and filter tasks while keeping their details organized.
 
-Create, update, search, and filter tasks while keeping important task information organized.
-
-Work in Progress!!
-
-### Parent Tasks and Subtasks
-
-Organize complex work into smaller tasks. Expand or collapse subtasks to keep the timeline organized.
-
-Work in Progress!!
-
----
+<img width="705" height="855" alt="Task details" src="https://github.com/user-attachments/assets/86b1b19c-f20e-4fdb-8eb9-9cb663323813" />
+<img width="704" height="805" alt="Task management" src="https://github.com/user-attachments/assets/c88d465a-ff1f-47a1-a8a4-b712bf5acd64" />
+<img width="698" height="672" alt="Task management" src="https://github.com/user-attachments/assets/cb00ecea-3017-4c64-a177-4e33eeeafa06" />
 
 ## Features
 
@@ -128,36 +113,52 @@ Four actionable tiles show actual completions in the selected period, recorded h
 **Needs Attention** prioritizes current overdue tasks, blocked work in the schedule window, work due today, and completed scheduled videos with zero recorded subtask hours. It shows at most eight rows, with View all, edit links, quick status changes and subtask-hour saves. Top-level tasks link to add or edit subtasks instead of exposing an hour input. Actions use the existing write/cooldown guards and one follow-up task refresh.
 
 Tiles and chart bars open All tasks with an explicit Metrics filter and the relevant client/date context. Parent context is retained without including unrelated siblings. The filter reevaluates task changes, can be cleared explicitly, and is removed when ordinary task filters are changed. Returning to Metrics preserves its period/client selection. Review for invoicing carries a selected client and period into an empty invoice draft; it does not mark anything billed or overwrite an unsaved invoice without confirmation.
+### Tasks and scheduling
 
-The task-summary tiles appear only on Timeline. They follow its selected calendar period and task/status/category/client filters, and collapsing subtasks does not change totals. All tasks has no repeated task-summary tiles; Invoices keeps only its separate financial totals. Timeline scrolling does not rebuild summary tiles.
+- Create, update, and delete tasks; organize work with parent tasks and subtasks.
+- Track status, category, priority, planned dates, actual work dates, client assignments, and hours.
+- Search and filter tasks by available criteria, including status, category, client, priority, and date range.
+- Select tasks for bulk status changes, edits, or deletion. Deletion requires explicit selection of subtasks; children are never silently included when a parent is selected.
+- View schedule data in day, weekly, biweekly, or monthly periods. Biweekly means a continuous 14-day period.
+- Parent progress is based on the proportion of completed subtasks. Parent hours are a read-only sum of direct child hours; standalone tasks can also record hours.
+- Hours are recorded on leaf tasks and counted once in metrics. Hours progress for a parent is based on completed-subtask hours divided by total subtask hours.
 
-All tasks also offers Weekly/Biweekly/Monthly date presets, a reference date, previous/next period, All dates, and Custom dates. Timeline offers Weekly, Biweekly, and Monthly alongside Day. These are date-window filters; task-field sorting remains available separately.
+### Metrics and reporting
 
-Biweekly explicitly means 14 days (the requested bi-monthly mode is interpreted as every two weeks, matching the payment cycle), not twice per month or every two months. Weekly and biweekly views start on Monday of the reference week; navigation advances 7 or 14 days respectively. Months and years use calendar boundaries. The default/reset date comes from the spreadsheet timezone. Manual All tasks From/Through edits switch its period to Custom dates. Period changes do not modify task dates, tracked hours or schedules.
+The Metrics workspace provides daily, weekly, biweekly, monthly, and yearly summaries. It includes completion and scheduled-work metrics, charts, and a prioritized “Needs Attention” list. Client and date context is carried into task results opened from metrics.
 
-The scheduled-scope caption and recorded-hour/blocked metrics use planned-date overlap, including boundaries; invalid or missing planned dates are excluded from that scope. Actual completions use Done status plus the actual completion date. Parents and subtasks are counted separately where shown; a multi-client task counts once. Current status/hour values are not historical snapshots. Changing Metrics periods does not alter Timeline's summary scope, task schedules, or saved invoice copies.
+The Timeline also has task-summary tiles that follow its selected calendar period and task filters. All tasks and Timeline support date ranges and presets.
 
-## Date Display
+### Categories and clients
 
-Dates use named English months in task tables, timeline/dashboard ranges, invoice previews/history, and client copies. Wider areas show full names such as January and November; compact areas use Jan, Feb, March, April, May, June, July, Aug, Sep, Oct, Nov, Dec. Narrow timeline columns use compact labels, and printed invoices always use full month names. Full dates remain available in date tooltips.
+The built-in categories are **Graphic Design**, **Video editing**, **Scheduling**, and **Revision**. Clients are optional and separate from categories; a task can have multiple clients or be unassigned. Client suggestions are reusable, and client names are trimmed and deduplicated without regard to case.
 
 Native date pickers retain the browser/operating system format, with a readable month-name label alongside the chosen value. Storage, date inputs, filtering and billing calculations continue to use ISO calendar dates internally. Task date-only writes are parsed in the spreadsheet time zone and read back in that same zone to avoid off-by-one-day changes when Apps Script and spreadsheet time zones differ. This does not migrate or rewrite saved task/invoice dates.
+### Invoices
 
-## Bulk Subtasks
+Invoices are separate from task scheduling: task Duration is measured in calendar days and is not billable time. Create hourly invoices for a two-week cycle or custom dates, add matching video-editing tasks for a client, review and save a draft, then issue the invoice when ready. Saved invoices are snapshots, so later task or billing-default changes do not change existing copies.
 
-Inside a parent task, enter one subtask name per line to create 1-100 subtasks together (200 characters per name). Empty lines are ignored; repeated names create distinct IDs. New children copy saved parent category, priority, planned dates, and clients, with To Do status. Save pending parent edits before creating children.
+Invoice history tracks outstanding, paid, and void invoices. Copies can be printed as PDF or exported as CSV. Invoicing is a basic hourly workflow; it does not calculate taxes, discounts, foreign exchange, or track time automatically.
 
-Quantity per name multiplies each entered name: two names at quantity three create six subtasks with distinct IDs. The preview and create button show the exact total; the expanded batch cannot exceed 100. Names and quantity remain after creation so another click appends another batch without replacing existing children. Clear names explicitly clears the draft. The panel opens the page containing the first new subtask in status order and reports the resulting total.
+## Deploy
 
-Creation, existing subtasks, bulk editing, and collapsed Parent management have separate sections. Bulk-field toggles preserve the creation draft and field focus; the apply action shows the number of fields and selected subtasks.
+Test upgrades and deployment on a **copy** of your spreadsheet before using production data.
 
-The subtask panel displays 25 children per page. Selection persists across its pages, is separate from All tasks selection, and resets when changing the selected task or closing the dialog. Select visible never includes another page automatically.
+1. Create or choose a Google spreadsheet for the application.
+2. In the spreadsheet's bound Apps Script project, add/update both [`App.html`](App.html) and [`code.gs`](code.gs). Keep the HTML filename `App`.
+3. For a fresh spreadsheet, run **Initialize Task Database**. For an existing spreadsheet, use **Task Manager → Upgrade Categories, Clients and Hours** from the spreadsheet menu. Reload the spreadsheet first if the menu is not visible.
+4. Review the upgrade backup and verify the headers, migrated categories, formulas, and client data. The upgrade creates a timestamped backup of `Task_Master`, adds Clients in column O and Hours in column P, and maps the legacy `Graphics` category to `Graphic Design`.
+5. Publish a new web-app deployment version with the updated backend and frontend together, then verify the app using the checklist below.
 
-Edit-panel subtasks always sort **To Do > In Progress > Blocked > Done**, with natural task-ID ordering within a status, before pagination. Status updates refresh that order without changing task details. The visible-page checkbox follows the same sorted slice.
+No build-tool packages are required. The PDF export lazily loads jsPDF from a CDN. The task interface needs the deployed Apps Script web app for real data; opening `App.html` directly does not provide a backend.
 
-Selection checkboxes are 22px with 40px label hit areas. The Select subtasks control offers All subtasks, To Do, In Progress, Blocked and Done; Select matching replaces the selection with every matching child of that parent across all pages. The separate Select visible checkbox selects only the current page. Selection counts explicitly include other pages, and backend scope/deletion checks still apply.
+## Data and behavior notes
 
-Selected children support status updates, confirmed deletion, and bulk edits to category, priority, clients, hours per subtask, and planned dates. Each edit field has an explicit Apply switch: unchecked fields remain unchanged. Applying Clients replaces assignments; applying an empty selection clears them. A single planned-date edit preserves the other date and is validated against every selected task before writes.
+- The spreadsheet is the source of task data. Each deployment can use its own spreadsheet and web app.
+- Existing/blank task hours are treated as zero. Hours use column P, after Clients in column O; the upgrade should be run before recording hours on an existing spreadsheet.
+- Parent and subtask schedules are independent. Changing a subtask does not change its parent's dates, and status updates do not cascade through the hierarchy.
+- In All tasks, parent groups and child lists are paginated separately. Selections persist across pages but are cleared when filters change.
+- Invoice data is stored separately in `Invoice_Master` and `Invoice_Settings`, created when invoices or billing defaults are first saved.
 
 The server checks that every selected task still belongs directly to the chosen parent under the same lock as the write. Bulk transfer is not included. Spreadsheet runtime failures can still leave partial writes; reconciliation reloads data without retrying a mutation.
 
@@ -222,6 +223,7 @@ A failed refresh keeps the last loaded data and displays Retry. After a write fa
 The target workload is 200-1,000 tasks. Local browser checks with 1,000 synthetic tasks mounted 21-29 timeline rows rather than all 1,000. Ten desktop runs at 1440 x 1000 measured timeline rendering at 14 ms median / 27 ms slowest, and task-list rendering at 17 ms / 23 ms. These are local mock-data observations, not before/after benchmarks or live Apps Script latency guarantees.
 
 ## Verification
+## Development and verification
 
 Run the dependency-free Node regression suite from the repository root:
 
@@ -229,40 +231,18 @@ Run the dependency-free Node regression suite from the repository root:
 node --test tests/task-tracker.test.cjs
 ```
 
-Tests cover grouping, overlap filters, client sorting/serialization, calendar periods, pagination, explicit selection, stale responses, write serialization, scoped bulk validation, inherited batch creation, category migration/backup/rerun safety, status dates, lock release, formula preservation, and injected partial-write failures. Browser checks use a synthetic Apps Script bridge; they do not prove Google Sheets service behavior.
+Before production deployment, use a spreadsheet copy to check initial load and refresh recovery, task edits and bulk operations, date and timeline behavior at desktop and mobile widths, and category/client/hour upgrades. Also verify invoice creation, draft reopening, issued/paid/void copies, PDF printing, and CSV downloads. Do not populate production with synthetic invoices.
 
-Invoice tests additionally cover 14-day/custom boundaries, client/timeline video counts, source/completion filters, matching-video import, retained manual hours, hourly rounding, invalid amounts, draft/issue validation, immutable snapshots, revision conflicts, duplicate client-period issuance, void/replacement, independent storage/defaults and formula-safe CSV cells. Browser checks exercise draft-to-issued-to-paid, print-only client content and mobile layout using a mock bridge; they do not substitute for live billing verification.
+The intended workload is approximately 200–1,000 tasks. Validate performance with real Apps Script executions and your own spreadsheet before relying on that range.
 
-Before production deployment, use a copy of the spreadsheet to verify:
-
-1. Initial load, failed refresh, Retry, and 200/1,000-task timings against real Apps Script executions.
-2. Inline/bulk status updates, parent-plus-children deletion, missing IDs, and concurrent updates from two sessions.
-3. Duration formulas and actual start/end dates after saves, reopening, and deletion.
-4. Day/week/month alignment, scrolling, dragging/cancellation, collapse, resize, and keyboard controls at desktop and mobile widths.
-5. The category/client upgrade, legacy sheets, client JSON, parent-scoped batches, and date/client filtering across timezone and calendar boundaries.
-6. First invoice/default saves, draft reopening, issued/paid/void copies, concurrent revision conflicts, real PDF printing and CSV downloads. Do not populate production with synthetic invoices.
-
-## Deployment
-
-Update both [App.html](App.html) and [code.gs](code.gs) in the spreadsheet's bound Apps Script project; keep the HTML filename `App`. Test on a spreadsheet copy first and pause normal writes during the production upgrade.
-
-1. For a fresh spreadsheet, run Initialize Task Database. For existing data, use Task Manager > Upgrade Categories, Clients and Hours (with backup) from the spreadsheet menu (reload the spreadsheet to refresh the menu).
-2. Confirm the upgrade. It preflights headers/categories/clients/hours, copies Task_Master to a timestamped backup, adds Clients in column O and Hours in P, and maps Graphics to Graphic Design and the other six known legacy categories to Video editing. Existing new-category values remain unchanged. Unknown/blank categories, invalid stored hours or occupied O/P stop the upgrade before migration writes; resolve them explicitly and retry.
-3. Check the backup, new headers, migrated categories, formulas, and existing client data. Re-running an already completed upgrade makes no further category changes or backups.
-4. Publish a new web-app deployment version with the updated backend and frontend together, then perform the live checks above.
-
-No build-tool packages are required. Generated PDF export uses the lazy-loaded jsPDF CDN dependency described above; task tracking and other exports do not require it. Do not upload the Node tests to Apps Script or populate production with synthetic test tasks. Existing clients remain empty until assigned; no client names are inferred from old task categories.
-
-The HTML requires the deployed Apps Script web app for real task data. Opening it directly shows a connection error rather than providing a standalone backend.
-
-## Later Releases
-
-Broader hierarchy validation, enhanced timeline navigation, Kanban, activity history, and dependencies/milestones remain outside this release.
-
-## Technology Stack
+## Technology
 
 | Layer | Technology |
 |---|---|
 | Frontend | HTML, CSS, JavaScript |
 | Backend | Google Apps Script |
-| Database | Google Sheets |
+| Data store | Google Sheets |
+
+## Planned work
+
+Broader hierarchy validation, enhanced timeline navigation, Kanban, activity history, and dependencies/milestones are outside the current release.
