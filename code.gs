@@ -320,6 +320,7 @@ function getTasks() {
         ? Utilities.formatDate(row[10], timezone, 'MMM d, yyyy') : '',
       actualEndDate: row[10] instanceof Date
         ? Utilities.formatDate(row[10], timezone, 'yyyy-MM-dd') : '',
+      updatedAt: taskVersion_(row[12]),
 
       parentTaskId: String(row[13] || ''),
       clients: withClients ? readClients_(row[14], taskId) : [],
@@ -381,8 +382,8 @@ function createTask(formData) {
     const taskName = String(formData.taskName || '').trim();
     const category = String(formData.category || '');
     const priority = String(formData.priority || '');
-    const startDate = parseLocalDate(formData.startDate);
-    const endDate = parseLocalDate(formData.endDate);
+    const startDate = parseTaskDate_(formData.startDate);
+    const endDate = parseTaskDate_(formData.endDate);
     const description = String(formData.description || '').trim();
     const clients = formData.clients === undefined ? inheritedClients : normalizeClients_(formData.clients);
     const hours = normalizeTaskHours_(formData.hours);
@@ -450,8 +451,8 @@ function updateTask(formData) {
     const taskName = String(formData.taskName || '').trim();
     const category = String(formData.category || '');
     const priority = String(formData.priority || '');
-    const startDate = parseLocalDate(formData.startDate);
-    const endDate = parseLocalDate(formData.endDate);
+    const startDate = parseTaskDate_(formData.startDate);
+    const endDate = parseTaskDate_(formData.endDate);
     const description = String(formData.description || '').trim();
 
     if (!taskId || !taskName || !category ||
@@ -477,6 +478,7 @@ function updateTask(formData) {
     }
 
     const row = findTaskRow(sheet, taskId);
+    assertTaskVersion_(formData.expectedUpdatedAt, sheet.getRange(row, 13).getValue());
 
     const hours = formData.hours === undefined ? null : normalizeTaskHours_(formData.hours, taskId);
     if (hours !== null) assertEditableTaskHours_(sheet, taskId);
@@ -529,19 +531,31 @@ function assertEditableTaskHours_(sheet, taskId, rows) {
   }
 }
 
-function updateTaskHours(taskId, value) {
+function updateTaskHours(taskId, value, expectedUpdatedAt) {
   const hours = normalizeTaskHours_(value, taskId);
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
     const selection = readTaskSelection_([taskId]);
     assertEditableTaskHours_(selection.sheet, selection.ids[0], selection.rows);
+    assertTaskVersion_(expectedUpdatedAt, selection.selected[0].values[12]);
     const row = selection.selected[0].rowNumber;
     selection.sheet.getRange(row, 16).setValue(hours);
     selection.sheet.getRange(row, 13).setValue(new Date());
     return { success: true, taskId: selection.ids[0], hours, message: selection.ids[0] + ' hours updated.' };
   } finally {
     lock.releaseLock();
+  }
+}
+
+function taskVersion_(value) {
+  return value instanceof Date && Number.isFinite(value.getTime()) ? value.getTime() : 0;
+}
+
+function assertTaskVersion_(expected, currentValue) {
+  const version = Number(expected);
+  if (!Number.isSafeInteger(version) || version < 0 || version !== taskVersion_(currentValue)) {
+    throw new Error('This task changed since it was loaded. Refresh and retry your edit.');
   }
 }
 
@@ -721,8 +735,8 @@ function updateSubtasks(parentTaskId, taskIds, patch) {
   if (patch.priority !== undefined && !CONFIG.PRIORITIES.includes(patch.priority)) throw new Error('Invalid task priority.');
   const clients = patch.clients === undefined ? null : normalizeClients_(patch.clients);
   const hours = patch.hours === undefined ? null : normalizeTaskHours_(patch.hours);
-  const start = patch.startDate === undefined ? null : parseLocalDate(patch.startDate);
-  const end = patch.endDate === undefined ? null : parseLocalDate(patch.endDate);
+  const start = patch.startDate === undefined ? null : parseTaskDate_(patch.startDate);
+  const end = patch.endDate === undefined ? null : parseTaskDate_(patch.endDate);
   if ((patch.startDate !== undefined && !start) || (patch.endDate !== undefined && !end)) throw new Error('Choose valid planned dates.');
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -743,17 +757,26 @@ function updateSubtasks(parentTaskId, taskIds, patch) {
         throw new Error('End date cannot precede start date for ' + record.values[0] + '.');
       }
     });
-    const fields = [];
-    if (patch.category !== undefined) fields.push([3, patch.category]);
-    if (patch.priority !== undefined) fields.push([4, patch.priority]);
-    if (start) fields.push([6, start]);
-    if (end) fields.push([7, end]);
-    if (clients !== null) fields.push([15, JSON.stringify(clients)]);
-    if (hours !== null) fields.push([16, hours]);
-    fields.push([13, new Date()]);
-    contiguousRows_(selection.selected).forEach(group => fields.forEach(([column, value]) => {
-      selection.sheet.getRange(group[0].rowNumber, column, group.length, 1).setValues(group.map(() => [value]));
+    const firstRow = selection.selected.reduce((first, record) => Math.min(first, record.rowNumber), Infinity);
+    const lastRow = selection.selected.reduce((last, record) => Math.max(last, record.rowNumber), 0);
+    const range = selection.sheet.getRange(firstRow, 1, lastRow - firstRow + 1, taskReadWidth_(selection.sheet));
+    const values = range.getValues();
+    const formulas = range.getFormulas();
+    formulas.forEach((row, rowIndex) => row.forEach((formula, columnIndex) => {
+      if (formula) values[rowIndex][columnIndex] = formula;
     }));
+    const updatedAt = new Date();
+    selection.selected.forEach(record => {
+      const row = values[record.rowNumber - firstRow];
+      if (patch.category !== undefined) row[2] = patch.category;
+      if (patch.priority !== undefined) row[3] = patch.priority;
+      if (start) row[5] = start;
+      if (end) row[6] = end;
+      if (clients !== null) row[14] = JSON.stringify(clients);
+      if (hours !== null) row[15] = hours;
+      row[12] = updatedAt;
+    });
+    range.setValues(values);
     return { success: true, taskIds: selection.ids, updated: selection.ids.length };
   } finally {
     lock.releaseLock();
@@ -787,6 +810,29 @@ function parseLocalDate(value) {
   return date;
 }
 
+function parseTaskDate_(value) {
+  if (!parseLocalDate(value)) return null;
+  const timezone = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
+  return Utilities.parseDate(String(value), timezone, 'yyyy-MM-dd');
+}
+
+function ensureTimelineColumns_(sheet, lastColumn) {
+  const currentColumns = sheet.getMaxColumns();
+  if (currentColumns < lastColumn) sheet.insertColumnsAfter(currentColumns, lastColumn - currentColumns);
+}
+
+function timelineDayCount_(rows, timezone) {
+  const ranges = rows.filter(row => row[0] instanceof Date && row[1] instanceof Date && row[1] >= row[0])
+    .map(row => [Utilities.formatDate(row[0], timezone, 'yyyy-MM-dd'), Utilities.formatDate(row[1], timezone, 'yyyy-MM-dd')]);
+  if (!ranges.length) return 90;
+  const starts = ranges.map(range => range[0]).sort();
+  const ends = ranges.map(range => range[1]).sort();
+  const start = starts[0].split('-').map(Number);
+  const end = ends[ends.length - 1].split('-').map(Number);
+  const span = (Date.UTC(end[0], end[1] - 1, end[2]) - Date.UTC(start[0], start[1] - 1, start[2])) / 86400000 + 1;
+  return Math.max(90, span);
+}
+
 function setupTimeline() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const db = ss.getSheetByName(CONFIG.SHEET_NAME);
@@ -800,6 +846,12 @@ function setupTimeline() {
   if (!sheet) {
     sheet = ss.insertSheet('Timeline');
   }
+
+  const timezone = ss.getSpreadsheetTimeZone();
+  const dateRows = db.getLastRow() > 1 ? db.getRange(2, 6, db.getLastRow() - 1, 2).getValues() : [];
+  const timelineDays = timelineDayCount_(dateRows, timezone);
+  const timelineLastColumn = 5 + timelineDays;
+  ensureTimelineColumns_(sheet, timelineLastColumn);
 
   // Clear previous generated layout.
   sheet.clear();
@@ -839,10 +891,10 @@ function setupTimeline() {
   // Generate a dynamic daily timeline.
   // If no tasks exist, show the next 90 days.
   sheet.getRange('F2').setFormula(
-    '=IFERROR(SEQUENCE(1,MAX(1,MAX(FILTER(Task_Master!G2:G,Task_Master!G2:G<>""))-MIN(FILTER(Task_Master!F2:F,Task_Master!F2:F<>""))+1),MIN(FILTER(Task_Master!F2:F,Task_Master!F2:F<>"")),1),SEQUENCE(1,90,TODAY(),1))'
+    `=IFERROR(SEQUENCE(1,${timelineDays},MIN(FILTER(Task_Master!F2:F,Task_Master!F2:F<>"")),1),SEQUENCE(1,90,TODAY(),1))`
   );
 
-  sheet.getRange('F2:ZZ2')
+  sheet.getRange(2, 6, 1, timelineDays)
     .setNumberFormat('d-mmm')
     .setHorizontalAlignment('center')
     .setFontWeight('bold');
@@ -857,18 +909,18 @@ function setupTimeline() {
   sheet.setColumnWidth(4, 110);
   sheet.setColumnWidth(5, 110);
 
-  sheet.setColumnWidths(6, 180, 30);
+  sheet.setColumnWidths(6, timelineDays, 30);
 
   sheet.getRange('D3:E200')
     .setNumberFormat('mmm d, yyyy');
 
-  sheet.getRange('A3:ZZ200')
+  sheet.getRange(3, 1, 198, timelineLastColumn)
     .setVerticalAlignment('middle');
 
   sheet.setRowHeight(2, 32);
 
   // Conditional formatting rules.
-  const timelineRange = sheet.getRange('F3:ZZ200');
+  const timelineRange = sheet.getRange(3, 6, 198, timelineDays);
   const rules = [];
 
   const statusColors = [
@@ -908,7 +960,7 @@ function setupTimeline() {
       .whenFormulaSatisfied('=F$2=TODAY()')
       .setBackground('#FDE68A')
       .setFontColor('#92400E')
-      .setRanges([sheet.getRange('F2:ZZ2')])
+      .setRanges([sheet.getRange(2, 6, 1, timelineDays)])
       .build()
   );
 

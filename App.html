@@ -1476,6 +1476,7 @@
     start,
     end,
     actualEndDate: parseDate(get('actualEndDate')),
+    updatedAt: Number(get('updatedAt') || 0),
     description: String(get('description') || ''),
     parentTaskId: String(get('parentTaskId') || '').trim(),
     hours: Number(get('hours') || 0),
@@ -2099,6 +2100,7 @@ html += `<div class="task-cell"
 
       const payload = {
         taskId: t.id,
+        expectedUpdatedAt: t.updatedAt,
         taskName: t.name,
         category: t.category,
         priority: t.priority,
@@ -2635,7 +2637,7 @@ html += `<div class="task-cell"
       <div class="panel-subtitle" style="margin-top:14px">${displayDateRange(range.start, range.end)} · ${total} scheduled tasks · ${model.parents} parent/standalone · ${model.subtasks} subtasks${dashboard.client ? ' · ' + esc(dashboard.client === 'unassigned' ? 'Unassigned' : dashboard.client.slice(7)) : ''}</div>
       <section class="metrics-tiles" id="dashboardMetrics" aria-label="Selected period metrics">${tiles.map(([label, value, note, kind]) => `<button type="button" class="stat metrics-tile" onclick="openMetricTasks('${kind}')"><div class="stat-label">${label}</div><div class="stat-number">${value}</div><div class="stat-foot">${note}</div>${kind === 'hours' ? renderHoursProgress(model.hours.completed, model.hours.total, false, false) : ''}</button>`).join('')}</section>
       <div class="metrics-charts">
-        <section class="metrics-section" aria-labelledby="metricsDeliveryHeading"><div class="metrics-section-head"><h3 id="metricsDeliveryHeading">Due vs Completed</h3></div><div class="metrics-caption">Individual tasks · planned deadlines and actual completion dates</div>${renderMetricsDeliveryChart(model, dashboard.period)}</section>
+        <section class="metrics-section" aria-labelledby="metricsDeliveryHeading"><div class="metrics-section-head"><h3 id="metricsDeliveryHeading">Planned Finish vs Actual Completion</h3></div><div class="metrics-caption">Planned finish counts include every status; actual completions use the date tasks were marked Done. A task may appear in both.</div>${renderMetricsDeliveryChart(model, dashboard.period)}</section>
         <section class="metrics-section" aria-labelledby="metricsHoursHeading"><div class="metrics-section-head"><h3 id="metricsHoursHeading">Hours by Parent Task</h3><button class="subtask-link" onclick="openMetricTasks('hours')">View work</button></div><div class="metrics-caption">Recorded task totals · selected schedule window</div>${renderMetricsParentChart(model)}</section>
       </div>
       <section class="metrics-section" aria-labelledby="metricsAttentionHeading"><div class="metrics-section-head"><h3 id="metricsAttentionHeading">Needs Attention</h3><button class="subtask-link" onclick="openMetricTasks('attention')">View all (${model.attention.length})</button></div><div class="metrics-caption">Current overdue/due-today work; blocked and missing-hour work in the selected schedule window</div>${renderMetricsAttention(model)}</section>
@@ -2666,7 +2668,7 @@ html += `<div class="task-cell"
   function openMetricTasks(kind, key = '') {
     const dashboard = state.dashboard;
     const range = dashboardRange(dashboard.period, dashboard.anchor);
-    const labels = { completed: 'Actual completions', overdue: 'Overdue now', blocked: 'Blocked scheduled work', hours: 'Recorded-hour work', attention: 'Needs Attention', parent: 'Work by parent', dueBucket: 'Planned deadlines', completedBucket: 'Actual completions' };
+    const labels = { completed: 'Actual completions', overdue: 'Overdue now', blocked: 'Blocked scheduled work', hours: 'Recorded-hour work', attention: 'Needs Attention', parent: 'Work by parent', dueBucket: 'Planned finish dates', completedBucket: 'Actual completions' };
     const focus = { kind, key, label: labels[kind] || 'Metrics', start: dateKey(range.start), end: dateKey(range.end), client: dashboard.client, period: dashboard.period };
     ['taskSearch', 'taskStatusFilter', 'taskCategoryFilter', 'taskPriorityFilter', 'taskDateFrom', 'taskDateTo'].forEach(id => { $(id).value = ''; });
     $('taskClientFilter').value = dashboard.client;
@@ -2723,7 +2725,7 @@ html += `<div class="task-cell"
       showToast(`Updated hours for ${taskLabel(task)}.`);
       loadTasks();
     }).withFailureHandler(error => showToast(`Unable to update hours for ${taskLabel(task)}: ` + (error.message || error)))
-      .updateTaskHours(id, input.value);
+      .updateTaskHours(id, input.value, task.updatedAt);
   }
 
   function hasInlineHourChanges() {
@@ -2752,13 +2754,14 @@ html += `<div class="task-cell"
 
   function renderMetricsDeliveryChart(model, period) {
     const maximum = Math.max(0, ...model.buckets.flatMap(bucket => [bucket.dueIds.length, bucket.completedIds.length]));
-    if (!maximum) return '<div class="metrics-zero">No deadlines or actual completions in this period.</div>';
-    return `<div class="metrics-legend"><span><i style="background:#b58105"></i>Due</span><span><i style="background:#1f845a"></i>Completed</span></div><div class="metrics-chart-scroll"><div class="metrics-buckets" style="--bucket-count:${model.buckets.length}">${model.buckets.map(bucket => {
+    if (!maximum) return '<div class="metrics-zero">No planned finish dates or actual completions in this period.</div>';
+    return `<div class="metrics-legend"><span><i style="background:#b58105"></i>Planned finish</span><span><i style="background:#1f845a"></i>Actual completion</span></div><div class="metrics-chart-scroll"><div class="metrics-buckets" style="--bucket-count:${model.buckets.length}">${model.buckets.map(bucket => {
       const label = period === 'yearly' ? COMPACT_MONTH_NAMES[bucket.start.getMonth()] : formatDisplayDate(bucket.start, true, false);
-      return `<div class="metrics-bucket"><div class="metrics-bar-pair">${[['dueIds', 'Due', 'dueBucket'], ['completedIds', 'Completed', 'completedBucket']].map(([key, title, kind]) => {
+      return `<div class="metrics-bucket"><div class="metrics-bar-pair">${[['dueIds', 'Planned finish', 'dueBucket'], ['completedIds', 'Actual completion', 'completedBucket']].map(([key, title, kind]) => {
         const count = bucket[key].length;
         const height = count / maximum * 84;
-        const description = `${title}: ${count} tasks, ${formatDisplayDate(bucket.start)} - ${formatDisplayDate(bucket.end)}`;
+        const noun = count === 1 ? 'task' : 'tasks';
+        const description = `${title}: ${count} ${noun}${kind === 'dueBucket' ? ' by planned end date' : ' marked Done'}; ${formatDisplayDate(bucket.start)} - ${formatDisplayDate(bucket.end)}`;
         return `<button type="button" class="metrics-count-bar ${kind === 'completedBucket' ? 'completed' : ''}" style="--fill-height:${height}%" title="${esc(description)}" aria-label="${esc(description)}" onclick="openMetricTasks('${kind}',${esc(JSON.stringify(bucket.key))})"><span class="metrics-bar-value">${count}</span><span class="metrics-bar-fill" aria-hidden="true"></span></button>`;
       }).join('')}</div><span class="metrics-bucket-label">${esc(label)}${dateKey(bucket.start) !== dateKey(bucket.end) && period !== 'yearly' ? '<br>- ' + bucket.end.getDate() : ''}</span></div>`;
     }).join('')}</div></div>`;
@@ -3529,6 +3532,7 @@ function populateParentTaskOptions() {
     if (!currentTask || !state.childrenByParent.has(currentTask.id)) data.hours = $('taskHours').value;
     if (isEdit) {
       data.taskId = state.editId;
+      data.expectedUpdatedAt = currentTask.updatedAt;
       data.status = $('taskStatus').value;
     }
     setSaving(true);
