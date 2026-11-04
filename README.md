@@ -1,4 +1,3 @@
-<img width="698" height="672" alt="image" src="https://github.com/user-attachments/assets/f430fc3f-2ed4-4624-9b59-6bf81e84cd9a" /># Task Timeline Tracker
 
 <p align="center">
   A lightweight, self-hosted task management and timeline tracking application powered by Google Sheets and Google Apps Script.
