@@ -380,6 +380,26 @@ test('task version tokens use spreadsheet-stable second precision', () => {
   assert.equal(app.context.nextTaskUpdatedAt_(timestamp, timestamp).getTime(), loadedVersion + 1000);
 });
 
+test('current date rolls over in the spreadsheet time zone and refreshes Metrics attention', () => {
+  const app = client();
+  const state = app.getState();
+  state.loaded = true;
+  state.activeView = 'dashboard';
+  state.spreadsheetTimeZone = 'America/Los_Angeles';
+  state.spreadsheetToday = '2026-11-03';
+  let dashboardRenders = 0;
+  let statsRenders = 0;
+  app.renderDashboard = () => { dashboardRenders++; };
+  app.renderStats = () => { statsRenders++; };
+  assert.equal(app.dateKeyInTimeZone(new Date('2026-11-04T07:30:00Z'), state.spreadsheetTimeZone), '2026-11-03');
+  assert.equal(app.refreshSpreadsheetToday(new Date('2026-11-04T08:01:00Z')), true);
+  assert.equal(state.spreadsheetToday, '2026-11-04');
+  assert.equal(dashboardRenders, 1);
+  assert.equal(statsRenders, 1);
+  assert.equal(app.refreshSpreadsheetToday(new Date('2026-11-04T08:02:00Z')), false);
+  assert.equal(dashboardRenders, 1);
+});
+
 test('spreadsheet Timeline sizing expands a fresh sheet to its date span', () => {
   const app = server([]);
   let columns = 26;
@@ -465,6 +485,29 @@ test('task detail updates reject stale revisions without overwriting newer field
   assert.throws(() => app.context.updateTask(stale), /changed since it was loaded/);
   assert.equal(app.rows[1][1], 'First save');
   assert.equal(app.writes.length, writes);
+});
+
+test('status, bulk edits, and transfers advance task versions and invalidate stale hours forms', () => {
+  const parent = taskRow('VID-001');
+  const child = taskRow('VID-002', 'VID-001');
+  const otherParent = taskRow('VID-003');
+  const app = server([parent, child, otherParent]);
+  app.context.initializeTaskHeaders_(app.sheet);
+  let version = app.context.getTasks().tasks[1].updatedAt;
+  app.context.updateTaskStatus('VID-002', 'In Progress');
+  let nextVersion = app.context.getTasks().tasks[1].updatedAt;
+  assert.ok(nextVersion > version);
+  assert.throws(() => app.context.updateTaskHours('VID-002', 1, version), /changed since it was loaded/);
+  version = nextVersion;
+  app.context.updateSubtasks('VID-001', ['VID-002'], { priority: 'High' });
+  nextVersion = app.context.getTasks().tasks[1].updatedAt;
+  assert.ok(nextVersion > version);
+  assert.throws(() => app.context.updateTaskHours('VID-002', 1, version), /changed since it was loaded/);
+  version = nextVersion;
+  app.context.setTaskParent('VID-002', 'VID-003');
+  nextVersion = app.context.getTasks().tasks[1].updatedAt;
+  assert.ok(nextVersion > version);
+  assert.throws(() => app.context.updateTaskHours('VID-002', 1, version), /changed since it was loaded/);
 });
 
 test('partial write failures are errors, never successes, and release the lock for reconciliation', () => {
@@ -610,6 +653,20 @@ test('dashboard counts scheduled overlap once per multi-client task and excludes
   assert.equal(app.dashboardTasks([listTask('undated'), { ...task, end: app.parseDate('2026-10-31') }], range, '').length, 0);
 });
 
+test('Metrics labels spreadsheet today separately from its selected reporting period', () => {
+  const app = client();
+  const state = app.getState();
+  state.loaded = true;
+  state.activeView = 'dashboard';
+  state.spreadsheetToday = '2026-11-04';
+  state.dashboard.period = 'daily';
+  state.dashboard.anchor = app.parseDate('2026-10-04');
+  app.renderDashboard();
+  const markup = app.elements.get('dashboardContent').innerHTML;
+  assert.match(markup, /Today:<\/strong>.*November 4, 2026/);
+  assert.match(markup, /Selected period:<\/strong>.*October 4, 2026/);
+});
+
 test('subtask panel selects only visible children and keeps selection separate from All tasks', () => {
   const app = client();
   const state = app.getState();
@@ -661,6 +718,7 @@ test('legacy getTasks returns empty clients without altering the sheet and inclu
   const response = app.context.getTasks();
   assert.equal(response.tasks[0].clients.length, 0);
   assert.match(response.spreadsheetToday, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(response.spreadsheetTimeZone, 'UTC');
   assert.equal(app.writes.length, 0);
 });
 
@@ -1463,6 +1521,52 @@ test('metrics model separates actual completions from schedules and counts leaf 
   assert.equal(model.attention[0].task.id, 'VID-3');
   assert.equal(model.buckets.reduce((sum, bucket) => sum + bucket.completedIds.length, 0), 2);
   assert.equal(model.buckets.reduce((sum, bucket) => sum + bucket.dueIds.length, 0), 2);
+});
+
+test('Needs Attention catches In Progress tasks due yesterday or today outside the selected period', () => {
+  const app = client();
+  const today = app.parseDate('2026-11-04');
+  const yesterday = app.parseDate('2026-11-03');
+  const tasks = [
+    listTask('VID-YESTERDAY', '', { status: 'In Progress', clients: ['Acme'], end: app.parseDate('2026-12-01') }),
+    listTask('VID-TODAY', '', { status: 'In Progress', clients: ['Acme'], end: app.parseDate('2026-12-02') }),
+    listTask('VID-OTHER-CLIENT', '', { status: 'In Progress', clients: ['Beta'], end: yesterday }),
+    listTask('VID-DONE', '', { status: 'Done', clients: ['Acme'], end: yesterday })
+  ];
+  const range = app.dashboardRange('daily', today);
+  tasks[0].end = yesterday;
+  tasks[1].end = today;
+  const model = app.buildMetricsModel(tasks, range, 'client:Acme', today, 'daily');
+  assert.deepEqual(Array.from(model.overdue, task => task.id), ['VID-YESTERDAY']);
+  assert.deepEqual(Array.from(model.dueToday, task => task.id), ['VID-TODAY']);
+  assert.deepEqual(Array.from(model.attention, item => item.reason), ['Overdue now', 'Due today']);
+  assert.equal(app.buildMetricsModel(tasks, range, '', today, 'daily').overdue.some(task => task.id === 'VID-OTHER-CLIENT'), true);
+  assert.match(html, /Overdue and due-today items for \$\{esc\(attentionClient\)\} are current and not limited to this period/);
+  assert.match(html, /Showing up to eight; View all opens every match/);
+});
+
+test('rescheduling an In Progress task to yesterday or today reaches the refreshed attention rows', () => {
+  const backend = server([taskRow('VID-OVERDUE')]);
+  backend.rows[1][4] = 'In Progress';
+  backend.rows[1][5] = new Date(2026, 10, 10);
+  backend.rows[1][6] = new Date(2026, 10, 12);
+  backend.rows[1][14] = '["Acme"]';
+  backend.context.initializeTaskHeaders_(backend.sheet);
+  const app = client();
+  const today = app.parseDate('2026-11-04');
+  const range = app.dashboardRange('daily', today);
+  const firstVersion = backend.context.getTasks().tasks[0].updatedAt;
+  backend.context.updateTask({ taskId: 'VID-OVERDUE', taskName: 'VID-OVERDUE', category: 'Video editing', priority: 'Medium', status: 'In Progress', startDate: '2026-11-02', endDate: '2026-11-03', description: '', clients: ['Acme'], expectedUpdatedAt: firstVersion });
+  let task = app.normalizeTask(backend.context.getTasks().tasks[0]);
+  let model = app.buildMetricsModel([task], range, 'client:Acme', today, 'daily');
+  assert.equal(model.attention[0].reason, 'Overdue now');
+  backend.context.updateTask({ taskId: 'VID-OVERDUE', taskName: 'VID-OVERDUE', category: 'Video editing', priority: 'Medium', status: 'In Progress', startDate: '2026-11-03', endDate: '2026-11-04', description: '', clients: ['Acme'], expectedUpdatedAt: backend.context.getTasks().tasks[0].updatedAt });
+  task = app.normalizeTask(backend.context.getTasks().tasks[0]);
+  model = app.buildMetricsModel([task], range, 'client:Acme', today, 'daily');
+  assert.equal(model.attention[0].reason, 'Due today');
+  app.getState().taskById = new Map([[task.id, task]]);
+  app.getState().childrenByParent = new Map();
+  assert.match(app.renderMetricsAttention(model), /Due today/);
 });
 
 test('metric drilldowns reevaluate changed tasks and calendar buckets remain bounded', () => {

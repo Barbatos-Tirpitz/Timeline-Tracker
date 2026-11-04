@@ -238,6 +238,7 @@ function getTasks() {
       success: true,
       hasTasks: false,
       spreadsheetToday,
+      spreadsheetTimeZone: timezone,
       total: 0,
       tasks: []
     };
@@ -256,6 +257,7 @@ function getTasks() {
       success: true,
       hasTasks: false,
       spreadsheetToday,
+      spreadsheetTimeZone: timezone,
       total: 0,
       tasks: []
     };
@@ -341,6 +343,7 @@ function getTasks() {
     success: true,
     hasTasks: true,
     spreadsheetToday,
+    spreadsheetTimeZone: timezone,
     total: tasks.length,
     tasks: tasks
   };
