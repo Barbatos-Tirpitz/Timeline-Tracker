@@ -324,10 +324,10 @@ function getTasks() {
 
       parentTaskId: String(row[13] || ''),
       clients: withClients ? readClients_(row[14], taskId) : [],
-      hours: ownHours.get(taskId),
+      hours: String(row[13] || '').trim() ? ownHours.get(taskId) : 0,
       subtaskHours: stats.hourUnits / 100,
-      totalHours: stats.total ? stats.hourUnits / 100 : ownHours.get(taskId),
-      completedHours: stats.total ? stats.completedHourUnits / 100 : String(row[4]) === 'Done' ? ownHours.get(taskId) : 0,
+      totalHours: stats.total ? stats.hourUnits / 100 : String(row[13] || '').trim() ? ownHours.get(taskId) : 0,
+      completedHours: stats.total ? stats.completedHourUnits / 100 : String(row[13] || '').trim() && String(row[4]) === 'Done' ? ownHours.get(taskId) : 0,
       subtaskCount: stats.total,
       completedSubtaskCount: stats.completed,
 
@@ -388,6 +388,7 @@ function createTask(formData) {
     const clients = formData.clients === undefined ? inheritedClients : normalizeClients_(formData.clients);
     const hours = normalizeTaskHours_(formData.hours);
     if (formData.hours !== undefined && !hasHoursColumn_(sheet)) throw new Error('Run Upgrade Categories, Clients and Hours from the spreadsheet menu first.');
+    if (!parentTaskId && hours > 0) throw new Error('Only subtasks can record hours. Parent totals are calculated from subtasks.');
 
     // Required-field validation.
     if (!taskName || !category || !priority ||
@@ -481,7 +482,7 @@ function updateTask(formData) {
     assertTaskVersion_(formData.expectedUpdatedAt, sheet.getRange(row, 13).getValue());
 
     const hours = formData.hours === undefined ? null : normalizeTaskHours_(formData.hours, taskId);
-    if (hours !== null) assertEditableTaskHours_(sheet, taskId);
+    if (hours !== null) assertEditableTaskHours_(sheet, taskId, row);
     const clients = formData.clients === undefined ? null : normalizeClients_(formData.clients);
     if (clients !== null && !hasClientsColumn_(sheet)) throw new Error('Run Upgrade Categories and Clients from the spreadsheet menu first.');
     let statusValues = null;
@@ -522,13 +523,14 @@ function updateTask(formData) {
 }
 
 // Updates status and actual work dates.
-function assertEditableTaskHours_(sheet, taskId, rows) {
+function assertEditableTaskHours_(sheet, taskId, rowNumber) {
   if (!hasHoursColumn_(sheet)) throw new Error('Run Upgrade Categories, Clients and Hours from the spreadsheet menu first.');
-  const parents = rows ? rows.map(values => [values[13]])
-    : sheet.getLastRow() > 1 ? sheet.getRange(2, 14, sheet.getLastRow() - 1, 1).getValues() : [];
+  const parents = sheet.getLastRow() > 1 ? sheet.getRange(2, 14, sheet.getLastRow() - 1, 1).getValues() : [];
   if (parents.some(values => String(values[0] || '').trim() === taskId)) {
     throw new Error('Parent hours are calculated from subtasks. Update the subtask hours instead.');
   }
+  const taskParentId = String(sheet.getRange(rowNumber || findTaskRow(sheet, taskId), 14).getValue() || '').trim();
+  if (!taskParentId) throw new Error('Only subtasks can record hours. Parent totals are calculated from subtasks.');
 }
 
 function updateTaskHours(taskId, value, expectedUpdatedAt) {
@@ -537,7 +539,7 @@ function updateTaskHours(taskId, value, expectedUpdatedAt) {
   lock.waitLock(10000);
   try {
     const selection = readTaskSelection_([taskId]);
-    assertEditableTaskHours_(selection.sheet, selection.ids[0], selection.rows);
+    assertEditableTaskHours_(selection.sheet, selection.ids[0], selection.selected[0].rowNumber);
     assertTaskVersion_(expectedUpdatedAt, selection.selected[0].values[12]);
     const row = selection.selected[0].rowNumber;
     selection.sheet.getRange(row, 16).setValue(hours);
@@ -687,6 +689,9 @@ function appendTasks_(sheet, records, existingRows) {
   if (lastRow + records.length > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), lastRow + records.length - sheet.getMaxRows());
   const withHours = hasHoursColumn_(sheet);
   if (!withHours && records.some(record => normalizeTaskHours_(record.hours) !== 0)) throw new Error('Run Upgrade Categories, Clients and Hours before recording hours.');
+  if (records.some(record => !String(record.parentTaskId || '').trim() && normalizeTaskHours_(record.hours) > 0)) {
+    throw new Error('Only subtasks can record hours. Parent totals are calculated from subtasks.');
+  }
   if (withHours) values.forEach((row, index) => row.push(normalizeTaskHours_(records[index].hours)));
   sheet.getRange(lastRow + 1, 1, records.length, withHours ? 16 : 15).setValues(values);
   sheet.getRange(lastRow + 1, 6, records.length, 2).setNumberFormat('mmm d, yyyy');

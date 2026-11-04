@@ -846,7 +846,7 @@ test('duplicate modal submission restores Save without reporting a server failur
   state.loaded = true;
   app.messages = [];
   vm.runInContext('Date.now=()=>1000; showToast=message=>messages.push(message);', app);
-  const payload = { taskName: 'Campaign', category: 'Scheduling', priority: 'Medium', startDate: '2026-11-01', endDate: '2026-11-15', description: '', parentTaskId: '', clients: [], hours: '' };
+  const payload = { taskName: 'Campaign', category: 'Scheduling', priority: 'Medium', startDate: '2026-11-01', endDate: '2026-11-15', description: '', parentTaskId: '', clients: [] };
   app.mutationRunner().withSuccessHandler(() => app.loadTasks()).createTask(payload);
   app.calls[0].success({ success: true });
   app.calls[1].success({ success: true, tasks: [] });
@@ -1052,33 +1052,43 @@ test('invoice periods support a custom timeline while preserving strict two-week
   assert.throws(() => app.context.normalizeInvoice_(invoiceDraft({ periodMode: 'custom', videoDateBasis: 'unknown' })), /valid invoice timeline/);
 });
 
-test('invoice counts match client and timeline, with explicit parent/subtask and completion rules', () => {
-  const app = client();
-  const video = (id, overrides = {}) => listTask(id, '', { category: 'Video editing', clients: ['Acme'], start: app.parseDate('2026-11-01'), end: app.parseDate('2026-11-05'), ...overrides });
-  const tasks = [video('VID-1'), video('VID-2', { parentTaskId: 'VID-1' }), video('VID-3', { clients: ['Other'] }),
-    video('VID-4', { clients: [] }), video('VID-5', { end: app.parseDate('2026-10-31') }), video('VID-6', { category: 'Scheduling' })];
-  const invoice = invoiceDraft({ periodStart: '2026-11-05', periodEnd: '2026-11-18' });
-  assert.deepEqual(Array.from(app.invoiceVideoCandidates(tasks, invoice), task => task.id), ['VID-2']);
-  assert.deepEqual(Array.from(app.invoiceVideoCandidates(tasks, { ...invoice, videoScope: 'topLevel' }), task => task.id), ['VID-1']);
-  assert.deepEqual(Array.from(app.invoiceVideoCandidates(tasks, { ...invoice, includeUnassigned: true }), task => task.id), ['VID-2', 'VID-4']);
-  tasks[1].status = 'Done'; tasks[1].actualEndDate = app.parseDate('2026-11-06');
-  assert.equal(app.invoiceVideoCandidates(tasks, { ...invoice, videoDateBasis: 'completed' }).length, 1);
-  assert.equal(app.invoiceVideoCandidates(tasks, { ...invoice, client: '' }).length, 0);
-});
-
-test('adding all matching invoice videos preserves hours, avoids duplicates and never infers hours from task duration', () => {
+test('invoice client selection is limited to known clients and new lines are always manual', () => {
   const app = client();
   const state = app.getState();
-  state.invoices.editor = invoiceDraft({ lines: [], defaultRate: 30 });
+  state.clientOptions = ['Acme'];
+  state.invoices.records = [];
+  state.invoices.settings = { defaultRate: 25 };
+  state.invoices.editor = invoiceDraft({ client: 'Acme', lines: [], defaultRate: 30 });
+  app.renderInvoices = () => {};
   state.tasks = [listTask('VID-1', '', { category: 'Video editing', clients: ['Acme'], start: app.parseDate('2026-11-03'), end: app.parseDate('2026-11-16'), duration: 14 })];
-  app.addMatchingInvoiceVideos();
+  app.setInvoiceClient('Unlisted client');
+  assert.equal(state.invoices.editor.client, 'Acme');
+  app.addInvoiceLine();
   assert.equal(state.invoices.editor.lines.length, 1);
+  assert.equal(state.invoices.editor.lines[0].taskId, '');
+  assert.equal(state.invoices.editor.lines[0].description, '');
   assert.equal(state.invoices.editor.lines[0].hours, '');
   assert.equal(state.invoices.editor.lines[0].rate, 30);
   state.invoices.editor.lines[0].hours = 3.5;
-  app.addMatchingInvoiceVideos();
-  assert.equal(state.invoices.editor.lines.length, 1);
+  app.addInvoiceLine();
+  assert.equal(state.invoices.editor.lines.length, 2);
+  assert.equal(state.invoices.editor.lines[1].taskId, '');
+  assert.equal(state.invoices.editor.lines[1].description, '');
   assert.equal(app.invoiceTotals(state.invoices.editor).minor, 10500);
+  assert.match(html, /label class="form-field">Client<select class="field-control" id="invoiceField-client" required/);
+  assert.doesNotMatch(html, /invoiceVideoPicker|addMatchingVideosBtn|invoiceVideoDateBasis|invoiceVideoScope|Add matching videos/);
+  assert.match(html, /id="addManualInvoiceLine" onclick="addInvoiceLine\(\)"/);
+  assert.match(html, /Your name \/ business/);
+});
+
+test('invoice draft preview shows only the total label and amount', () => {
+  const app = client();
+  app.getState().invoices.editor = invoiceDraft({ lines: [{ taskId: '', description: 'Manual work', hours: 2, rate: 30 }] });
+  app.updateInvoiceReadiness = () => {};
+  app.updateInvoicePreview();
+  const preview = app.elements.get('invoicePrintable').innerHTML;
+  assert.match(preview, /<span>Total<\/span>/);
+  assert.doesNotMatch(preview, /videos? · .* hours · Total/);
 });
 
 test('changing invoice timelines requires confirmation before discarding entered video hours', () => {
@@ -1119,10 +1129,11 @@ test('task hours roll up direct children exactly without rewriting dates or form
   app.context.initializeTaskHeaders_(app.sheet);
   const writes = app.writes.length;
   const tasks = app.context.getTasks().tasks;
-  assert.equal(tasks[0].hours, 9);
+  assert.equal(tasks[0].hours, 0);
   assert.equal(tasks[0].subtaskHours, 5.75);
   assert.equal(tasks[0].totalHours, 5.75);
   assert.equal(tasks[1].totalHours, 2.25);
+  assert.equal(app.rows[1][15], 9);
   assert.equal(app.writes.length, writes);
   assert.equal(app.rows[1][7], '=G2-F2+1');
 });
@@ -1174,23 +1185,34 @@ test('single and bulk hours-only writes never touch schedule, actual dates or Du
   assert.equal(app.rows[2][15], 0);
 });
 
-test('normal detail/drag updates preserve omitted hours and new subtasks start at zero', () => {
-  const parent = taskRow('VID-001'); parent[5] = new Date(2026, 10, 1); parent[6] = new Date(2026, 10, 10);
-  const app = server([parent]);
+test('only subtasks can log hours; parent legacy values stay stored but are ignored', () => {
+  const parent = taskRow('VID-001'); parent[5] = new Date(2026, 10, 1); parent[6] = new Date(2026, 10, 10); parent[15] = 9;
+  const child = taskRow('VID-002', 'VID-001'); child[5] = new Date(2026, 10, 1); child[6] = new Date(2026, 10, 10);
+  const standalone = taskRow('VID-003');
+  const app = server([parent, child, standalone]);
   app.context.initializeTaskHeaders_(app.sheet);
-  app.context.updateTaskHours('VID-001', 9, 0);
-  app.context.updateTask({ taskId: 'VID-001', taskName: 'Moved', category: 'Video editing', priority: 'High', startDate: '2026-11-02', endDate: '2026-11-11', expectedUpdatedAt: app.context.getTasks().tasks[0].updatedAt });
+  assert.equal(app.context.getTasks().tasks[0].hours, 0);
+  assert.equal(app.context.getTasks().tasks[0].totalHours, 0);
+  assert.throws(() => app.context.updateTaskHours('VID-001', 4, app.context.getTasks().tasks[0].updatedAt), /Parent hours are calculated from subtasks/);
+  const standaloneVersion = app.context.getTasks().tasks[2].updatedAt;
+  assert.throws(() => app.context.updateTaskHours('VID-003', 4, standaloneVersion), /Only subtasks can record hours/);
+  assert.throws(() => app.context.updateTask({ taskId: 'VID-003', taskName: 'Standalone', category: 'Video editing', priority: 'High', startDate: '2026-11-02', endDate: '2026-11-03', hours: 4, expectedUpdatedAt: standaloneVersion }), /Only subtasks can record hours/);
+  assert.throws(() => app.context.createTask({ taskName: 'Standalone', category: 'Video editing', priority: 'High', startDate: '2026-11-02', endDate: '2026-11-03', hours: 4 }), /Only subtasks can record hours/);
+  const childVersion = app.context.getTasks().tasks[1].updatedAt;
+  app.context.updateTaskHours('VID-002', 4, childVersion);
+  app.context.updateTask({ taskId: 'VID-002', taskName: 'Moved child', category: 'Video editing', priority: 'High', startDate: '2026-11-02', endDate: '2026-11-11', expectedUpdatedAt: app.context.getTasks().tasks[1].updatedAt });
+  assert.equal(app.context.getTasks().tasks[1].hours, 4);
+  assert.equal(app.context.getTasks().tasks[0].totalHours, 4);
   assert.equal(app.rows[1][15], 9);
   app.context.createSubtasks('VID-001', ['Step'], 2);
-  assert.equal(app.rows[2][15], 0);
-  assert.equal(app.rows[3][15], 0);
-  assert.equal(app.context.getTasks().tasks[0].totalHours, 0);
-  assert.equal(app.context.getTasks().tasks[0].hours, 9);
+  assert.equal(app.rows[4][15], 0);
+  assert.equal(app.rows[5][15], 0);
+  assert.equal(app.context.getTasks().tasks[0].totalHours, 4);
 });
 
 test('hour metrics and progress weight child hours and do not count parent totals twice', () => {
   const app = client();
-  const tasks = [listTask('VID-1', '', { hours: 9 }), listTask('VID-2', 'VID-1', { hours: 3, status: 'Done' }), listTask('VID-3', 'VID-1', { hours: 2 }), listTask('VID-4', '', { hours: 1.5, status: 'Done' })];
+  const tasks = [listTask('VID-1', '', { hours: 0 }), listTask('VID-2', 'VID-1', { hours: 3, status: 'Done' }), listTask('VID-3', 'VID-1', { hours: 2 }), listTask('VID-4', 'VID-5', { hours: 1.5, status: 'Done' }), listTask('VID-5', '', { hours: 0 })];
   app.applyTaskHourRollups(tasks);
   assert.equal(tasks[0].totalHours, 5);
   assert.equal(tasks[0].completedHours, 3);
@@ -1202,6 +1224,62 @@ test('hour metrics and progress weight child hours and do not count parent total
   assert.match(app.renderHoursProgress(3, 5), /value="60"/);
   assert.match(app.renderHoursProgress(0, 0), /value="0"/);
   assert.match(app.renderHoursProgress(3, 5), /3 \/ 5 hours/);
+});
+
+test('only subtasks expose editable hours and root legacy values are excluded from metrics', () => {
+  const app = client();
+  const state = app.getState();
+  const parent = listTask('VID-PARENT', '', { hours: 90 });
+  const child = listTask('VID-CHILD', 'VID-PARENT', { hours: 2 });
+  const standalone = listTask('VID-STANDALONE', '', { hours: 40 });
+  const tasks = [parent, child, standalone];
+  app.applyTaskHourRollups(tasks);
+  assert.equal(parent.hours, 0);
+  assert.equal(parent.totalHours, 2);
+  assert.equal(standalone.totalHours, 0);
+  assert.equal(app.taskHourMetrics(tasks, tasks).total, 2);
+
+  const hoursInput = { value: '', readOnly: false, removeAttribute() {} };
+  app.elements.set('taskHours', hoursInput);
+  app.elements.set('taskHoursLabel', { textContent: '' });
+  app.elements.set('taskHoursProgress', { innerHTML: '' });
+  app.updateTaskHoursControl(parent, true);
+  assert.equal(hoursInput.readOnly, true);
+  assert.equal(hoursInput.value, '2');
+  assert.equal(app.elements.get('taskHoursLabel').textContent, 'Total subtask hours (calculated)');
+  app.updateTaskHoursControl(child, true);
+  assert.equal(hoursInput.readOnly, false);
+  assert.equal(hoursInput.value, '2');
+
+  state.taskById = new Map(tasks.map(task => [task.id, task]));
+  state.childrenByParent = new Map([['VID-PARENT', [child]]]);
+  const attention = app.renderMetricsAttention({ attention: [
+    { task: parent, reason: 'Overdue now' }, { task: child, reason: 'Overdue now' }, { task: standalone, reason: 'Overdue now' }
+  ] });
+  assert.match(attention, /Add subtasks/);
+  assert.match(attention, /Edit subtasks/);
+  assert.match(attention, /metricHours-VID-CHILD/);
+  assert.doesNotMatch(attention, /metricHours-VID-PARENT|metricHours-VID-STANDALONE/);
+});
+
+test('new task hours become editable only after selecting a parent task', () => {
+  const app = client();
+  const input = { value: '5', readOnly: false, max: '10000' };
+  app.elements.set('taskHours', input);
+  app.elements.set('parentTaskId', { value: '' });
+  app.elements.set('taskHoursLabel', { textContent: '' });
+  app.elements.set('taskHoursProgress', { innerHTML: '' });
+  app.updateCreateTaskHoursControl(true);
+  assert.equal(input.readOnly, true);
+  assert.equal(input.value, '0');
+  app.elements.get('parentTaskId').value = 'VID-PARENT';
+  app.updateCreateTaskHoursControl();
+  assert.equal(input.readOnly, false);
+  assert.equal(input.value, '0');
+  app.elements.get('parentTaskId').value = '';
+  app.updateCreateTaskHoursControl();
+  assert.equal(input.readOnly, true);
+  assert.equal(input.value, '0');
 });
 
 test('editing only a subtask hours value routes through the hours-only endpoint', () => {
@@ -1435,7 +1513,7 @@ test('Metrics invoice review carries client/range without silently replacing an 
 
 test('metric charts expose numeric labels, escape names, and bound parent bars', () => {
   const app = client();
-  const tasks = Array.from({ length: 20 }, (_, index) => listTask('VID-' + index, '', { name: 'Client <script>' + index,
+  const tasks = Array.from({ length: 20 }, (_, index) => listTask('VID-' + index, 'PARENT-' + index, { name: 'Client <script>' + index,
     hours: index + 1, start: app.parseDate('2026-11-01'), end: app.parseDate('2026-11-04'), status: 'Done', actualEndDate: app.parseDate('2026-11-04') }));
   const range = app.dashboardRange('weekly', app.parseDate('2026-11-04'));
   const model = app.buildMetricsModel(tasks, range, '', app.parseDate('2026-11-04'), 'weekly');
@@ -1471,6 +1549,20 @@ function taskFormClient(transport = false) {
   }
   return app;
 }
+
+test('task detail saves send hours only for subtasks', () => {
+  for (const [parentTaskId, shouldIncludeHours] of [['', false], ['VID-PARENT', true]]) {
+    const app = taskFormClient(true);
+    const state = app.getState();
+    state.taskById.set('VID-1', listTask('VID-1', parentTaskId, { name: 'Video', category: 'Video editing', hours: 2,
+      start: app.parseDate('2026-11-04'), end: app.parseDate('2026-11-05'), clients: ['Acme'] }));
+    app.elements.get('taskHours').readOnly = !shouldIncludeHours;
+    state.taskBaseline = app.captureTaskForm();
+    app.saveTask({ preventDefault() {} });
+    assert.equal(app.calls[0].method, 'updateTask');
+    assert.equal(Object.prototype.hasOwnProperty.call(app.calls[0].args[0], 'hours'), shouldIncludeHours);
+  }
+});
 
 test('task dirty guards preserve edits on cancelled close and ignore calculated parent-hour changes', () => {
   const app = taskFormClient();
@@ -1537,7 +1629,7 @@ test('inline hours save uses the hours-only endpoint and clears drafts only afte
   const app = loadingClient();
   const state = app.getState();
   state.loaded = true;
-  state.taskById.set('VID-1', listTask('VID-1', '', { hours: 2 }));
+  state.taskById.set('VID-1', listTask('VID-1', 'VID-PARENT', { hours: 2 }));
   state.list.hourDrafts.set('VID-1', '3.5');
   app.elements.set('inlineHours-VID-1', { value: '3.5', checkValidity: () => true });
   app.messages = [];
@@ -1555,7 +1647,7 @@ test('inline hours failures retain entered values and do not alter the saved tas
   const app = loadingClient();
   const state = app.getState();
   state.loaded = true;
-  const task = listTask('VID-1', '', { hours: 2 });
+  const task = listTask('VID-1', 'VID-PARENT', { hours: 2 });
   state.taskById.set(task.id, task);
   state.list.hourDrafts.set(task.id, '4');
   app.elements.set('inlineHours-VID-1', { value: '4', checkValidity: () => true });

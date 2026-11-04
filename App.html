@@ -1180,7 +1180,7 @@
 
     <div class="form-field full" id="parentTaskField">
       <label for="parentTaskId">Parent task (optional)</label>
-      <select id="parentTaskId" onchange="copyParentClients()">
+      <select id="parentTaskId" onchange="copyParentClients();updateCreateTaskHoursControl()">
         <option value="">None — create a standalone task</option>
       </select>
     </div>
@@ -1215,7 +1215,7 @@
     </div>
 
     <div class="form-field full">
-      <label for="taskHours" id="taskHoursLabel">Hours</label>
+      <label for="taskHours" id="taskHoursLabel">Subtask hours only</label>
       <input id="taskHours" type="number" min="0" max="10000" step="0.01" value="0">
       <div id="taskHoursProgress"></div>
     </div>
@@ -1532,7 +1532,8 @@
         if (!state.taskById.has(id)) state.list.selected.delete(id);
       });
       state.list.hourDrafts.forEach((value, id) => {
-        if (!state.taskById.has(id) || state.childrenByParent.has(id)) state.list.hourDrafts.delete(id);
+        const task = state.taskById.get(id);
+        if (!task || !task.parentTaskId || state.childrenByParent.has(id)) state.list.hourDrafts.delete(id);
       });
       state.hasBackendTasks = state.tasks.length > 0;
       state.loaded = true;
@@ -2220,7 +2221,7 @@ html += `<div class="task-cell"
           ${childCount ? `<button class="group-toggle" aria-label="${list.collapsed.has(task.id) ? 'Expand' : 'Collapse'} subtasks of ${esc(task.name)}" aria-expanded="${!list.collapsed.has(task.id)}" onclick="toggleListGroup(${argument})">${list.collapsed.has(task.id) ? '&#9654;' : '&#9660;'}</button>` : '<span class="group-toggle"></span>'}
           <div><a href="#" onclick="openEdit(${argument});return false">${esc(task.name || 'Untitled task')}</a>
           <div class="task-meta">${esc(task.id)}${contextOnly ? ' · Parent context' : ''}${!child && task.parentTaskId && !state.taskById.has(task.parentTaskId) ? ' · Parent unavailable' : ''}${childCount ? ` · ${childCount} matching subtasks` : ''}</div></div></div></td>
-        <td>${esc(task.category)}</td><td class="client-cell">${esc((task.clients || []).join(', ') || 'Unassigned')}</td><td>${esc(task.priority)}</td><td>${state.childrenByParent.has(task.id) || contextOnly ? `<span title="Calculated from subtasks">${formatHours(task.totalHours || 0)} h</span>` : `<div class="inline-hours"><input class="field-control" id="inlineHours-${esc(task.id)}" type="number" min="0" max="10000" step="0.01" aria-label="Hours for ${esc(task.name)}" value="${esc(list.hourDrafts.has(task.id) ? list.hourDrafts.get(task.id) : task.hours || 0)}" ${busy ? 'disabled' : ''} oninput="state.list.hourDrafts.set(${argument},this.value);updateInlineHoursState(${argument})" onkeydown="if(event.key==='Enter'){event.preventDefault();saveInlineTaskHours(${argument})}"><button class="btn" id="inlineSave-${esc(task.id)}" ${busy ? 'disabled' : ''} title="Save hours for ${esc(task.name)}" onclick="saveInlineTaskHours(${argument})">Save</button></div><output class="inline-hours-note" id="inlineNote-${esc(task.id)}" aria-live="polite"></output>`}</td>
+        <td>${esc(task.category)}</td><td class="client-cell">${esc((task.clients || []).join(', ') || 'Unassigned')}</td><td>${esc(task.priority)}</td><td>${!task.parentTaskId || state.childrenByParent.has(task.id) || contextOnly ? `<span title="Calculated from subtasks">${formatHours(task.totalHours || 0)} h</span>` : `<div class="inline-hours"><input class="field-control" id="inlineHours-${esc(task.id)}" type="number" min="0" max="10000" step="0.01" aria-label="Hours for ${esc(task.name)}" value="${esc(list.hourDrafts.has(task.id) ? list.hourDrafts.get(task.id) : task.hours || 0)}" ${busy ? 'disabled' : ''} oninput="state.list.hourDrafts.set(${argument},this.value);updateInlineHoursState(${argument})" onkeydown="if(event.key==='Enter'){event.preventDefault();saveInlineTaskHours(${argument})}"><button class="btn" id="inlineSave-${esc(task.id)}" ${busy ? 'disabled' : ''} title="Save hours for ${esc(task.name)}" onclick="saveInlineTaskHours(${argument})">Save</button></div><output class="inline-hours-note" id="inlineNote-${esc(task.id)}" aria-live="polite"></output>`}</td>
         <td><select class="field-control row-status" aria-label="Status for ${esc(task.name)}" ${busy || contextOnly ? 'disabled' : ''} onchange="changeInlineStatus(${argument},this)">
           ${['To Do', 'In Progress', 'Blocked', 'Done'].map(status => `<option ${task.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select></td>
         <td>${displayDate(task.start)}</td><td>${displayDate(task.end)}</td></tr>`;
@@ -2537,9 +2538,9 @@ html += `<div class="task-cell"
     const overdue = clientTasks.filter(task => task.status !== 'Done' && task.end && task.end < today);
     const blocked = scoped.filter(task => task.status === 'Blocked');
     const dueToday = clientTasks.filter(task => task.status !== 'Done' && task.end && dateKey(task.end) === dateKey(today));
-    const missingHours = scopedLeaves.filter(task => task.category === 'Video editing' && task.status === 'Done' && !Number(task.hours || 0));
+    const missingHours = scopedLeaves.filter(task => task.parentTaskId && task.category === 'Video editing' && task.status === 'Done' && !Number(task.hours || 0));
     const hourGroups = new Map();
-    scopedLeaves.forEach(task => {
+    scopedLeaves.filter(task => task.parentTaskId).forEach(task => {
       const parent = byId.get(task.parentTaskId) || task;
       if (!hourGroups.has(parent.id)) hourGroups.set(parent.id, { id: parent.id, name: parent.name, units: 0, completedUnits: 0, ids: [] });
       const group = hourGroups.get(parent.id);
@@ -2778,9 +2779,10 @@ html += `<div class="task-cell"
     if (!model.attention.length) return '<div class="metrics-zero">No overdue, blocked, due-today, or missing-hour tasks for this client and scope.</div>';
     return `<div class="table-wrap"><table><thead><tr><th>Task</th><th>Attention</th><th>Due</th><th>Quick actions</th></tr></thead><tbody>${model.attention.slice(0, 8).map(({ task, reason }) => {
       const parent = state.taskById.get(task.parentTaskId);
+      const topLevel = !task.parentTaskId;
       const hasChildren = state.childrenByParent.has(task.id);
       const argument = esc(JSON.stringify(task.id));
-      return `<tr><td class="metrics-attention-name"><button class="subtask-link" onclick="openEdit(${argument})">${esc(task.name || task.id)}</button><div class="task-meta">${esc(task.id)}${parent ? ' · ' + esc(parent.name) : ''}</div></td><td><span class="pill ${reason === 'Overdue now' ? 'blocked' : ''}">${reason}</span></td><td>${displayDate(task.end, true)}</td><td><div class="metrics-task-actions"><select class="field-control" data-metric-command aria-label="Status for ${esc(task.name)}" onchange="updateSelectedStatuses([${argument}],this.value)">${['To Do', 'In Progress', 'Blocked', 'Done'].map(status => `<option ${task.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select>${hasChildren ? `<button class="btn" onclick="openEdit(${argument})">Edit subtasks</button>` : `<input class="field-control" id="metricHours-${esc(task.id)}" aria-label="Hours for ${esc(task.name)}" type="number" min="0" max="10000" step="0.01" value="${esc(task.hours || 0)}"><button class="btn" data-metric-command onclick="saveMetricsHours(${argument})">Save hours</button>`}</div></td></tr>`;
+      return `<tr><td class="metrics-attention-name"><button class="subtask-link" onclick="openEdit(${argument})">${esc(task.name || task.id)}</button><div class="task-meta">${esc(task.id)}${parent ? ' · ' + esc(parent.name) : ''}</div></td><td><span class="pill ${reason === 'Overdue now' ? 'blocked' : ''}">${reason}</span></td><td>${displayDate(task.end, true)}</td><td><div class="metrics-task-actions"><select class="field-control" data-metric-command aria-label="Status for ${esc(task.name)}" onchange="updateSelectedStatuses([${argument}],this.value)">${['To Do', 'In Progress', 'Blocked', 'Done'].map(status => `<option ${task.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select>${topLevel ? `<button class="btn" onclick="openEdit(${argument})">${hasChildren ? 'Edit subtasks' : 'Add subtasks'}</button>` : `<input class="field-control" id="metricHours-${esc(task.id)}" aria-label="Hours for ${esc(task.name)}" type="number" min="0" max="10000" step="0.01" value="${esc(task.hours || 0)}"><button class="btn" data-metric-command onclick="saveMetricsHours(${argument})">Save hours</button>`}</div></td></tr>`;
     }).join('')}</tbody></table></div>`;
   }
 
@@ -3363,14 +3365,15 @@ function createSubtask() {
     $('taskForm').reset();
     $('taskContext').hidden = true;
     $('taskHours').value = '0';
-    $('taskHours').readOnly = false;
+    $('taskHours').readOnly = true;
     $('taskHours').max = '10000';
-    $('taskHoursLabel').textContent = 'Hours';
+    $('taskHoursLabel').textContent = 'Subtask hours only';
     $('taskHoursProgress').innerHTML = '';
     $('taskModal').classList.remove('editing-task');
     renderClientPicker('taskClients', [], 'taskClientsControl');
 
     populateParentTaskOptions();
+    updateCreateTaskHoursControl(true);
 
     $('parentTaskField').style.display = 'block';
     $('subtasksPanel').style.display = 'none';
@@ -3529,7 +3532,7 @@ function populateParentTaskOptions() {
 
     const isEdit = Boolean(state.editId);
     const currentTask = isEdit ? state.taskById.get(state.editId) : null;
-    if (!currentTask || !state.childrenByParent.has(currentTask.id)) data.hours = $('taskHours').value;
+    if (isEdit ? Boolean(currentTask?.parentTaskId) : Boolean(data.parentTaskId)) data.hours = $('taskHours').value;
     if (isEdit) {
       data.taskId = state.editId;
       data.expectedUpdatedAt = currentTask.updatedAt;
@@ -3652,15 +3655,24 @@ function deleteCurrentTask() {
     if (parent) renderClientPicker('taskClients', parent.clients || [], 'taskClientsControl');
   }
 
+  function updateCreateTaskHoursControl(resetValue = false) {
+    const input = $('taskHours');
+    const isSubtask = Boolean($('parentTaskId').value);
+    const wasReadOnly = input.readOnly;
+    input.readOnly = !isSubtask;
+    if (!isSubtask || resetValue || wasReadOnly) input.value = '0';
+    input.max = '10000';
+    $('taskHoursLabel').textContent = isSubtask ? 'Hours' : 'Subtask hours only';
+    $('taskHoursProgress').innerHTML = '';
+  }
+
   function updateTaskHoursControl(task, resetValue = false) {
     const input = $('taskHours');
-    const wasReadOnly = input.readOnly;
-    const hasChildren = state.childrenByParent.has(task.id);
-    input.readOnly = hasChildren;
-    if (resetValue || hasChildren || wasReadOnly) input.value = String(task.totalHours || 0);
-    if (!resetValue && wasReadOnly && !hasChildren && state.taskBaseline) state.taskBaseline.hours = Number(task.hours || 0);
-    if (hasChildren) input.removeAttribute('max'); else input.max = '10000';
-    $('taskHoursLabel').textContent = hasChildren ? 'Total subtask hours (calculated)' : 'Hours';
+    const isSubtask = Boolean(task.parentTaskId);
+    input.readOnly = !isSubtask;
+    if (resetValue || !isSubtask) input.value = String(isSubtask ? task.hours || 0 : task.totalHours || 0);
+    if (isSubtask) input.max = '10000'; else input.removeAttribute('max');
+    $('taskHoursLabel').textContent = isSubtask ? 'Hours' : 'Total subtask hours (calculated)';
     $('taskHoursProgress').innerHTML = renderHoursProgress(task.completedHours || 0, task.totalHours || 0);
   }
 
@@ -3676,9 +3688,10 @@ function deleteCurrentTask() {
     });
     tasks.forEach(task => {
       const sum = sums.get(task.id);
+      if (!task.parentTaskId) task.hours = 0;
       task.subtaskHours = sum ? sum.units / 100 : 0;
-      task.totalHours = sum ? sum.units / 100 : Number(task.hours || 0);
-      task.completedHours = sum ? sum.completed / 100 : task.status === 'Done' ? Number(task.hours || 0) : 0;
+      task.totalHours = sum ? sum.units / 100 : task.parentTaskId ? Number(task.hours || 0) : 0;
+      task.completedHours = sum ? sum.completed / 100 : task.parentTaskId && task.status === 'Done' ? Number(task.hours || 0) : 0;
     });
   }
 
@@ -3687,7 +3700,7 @@ function deleteCurrentTask() {
     let total = 0;
     let completed = 0;
     tasks.forEach(task => {
-      if (parents.has(task.id)) return;
+      if (!task.parentTaskId || parents.has(task.id)) return;
       const units = Math.round(Number(task.hours || 0) * 100);
       total += units;
       if (task.status === 'Done') completed += units;
@@ -3898,59 +3911,17 @@ function deleteCurrentTask() {
     renderInvoices();
   }
 
-  function setInvoiceVideoFilter(key, value) {
-    const invoice = state.invoices.editor;
-    if (invoice.status !== 'Draft' || state.writing || state.syncing) return;
-    if (invoice.lines.length && !confirm('Changing video filters removes the current invoice lines. Continue?')) { renderInvoices(); return; }
-    invoice[key] = value;
-    invoice.lines = [];
-    state.invoices.dirty = true;
-    renderInvoices();
-  }
-
-  function invoiceVideoCandidates(tasks, invoice) {
-    const start = parseDate(invoice.periodStart);
-    const end = parseDate(invoice.periodEnd);
-    const client = String(invoice.client || '').trim().toLowerCase();
-    if (!client || !start || !end || end < start) return [];
-    const parents = new Set(tasks.map(task => task.parentTaskId).filter(Boolean));
-    const seen = new Set();
-    return tasks.filter(task => {
-      if (!task.id || seen.has(task.id) || task.category !== 'Video editing') return false;
-      const clients = task.clients || [];
-      if (!clients.some(name => name.toLowerCase() === client) && !(invoice.includeUnassigned && !clients.length)) return false;
-      const scope = invoice.videoScope || 'leaf';
-      if ((scope === 'leaf' && parents.has(task.id)) || (scope === 'topLevel' && task.parentTaskId)) return false;
-      if (invoice.videoDateBasis === 'completed') {
-        const completed = parseDate(task.actualEndDate);
-        if (task.status !== 'Done' || !completed || completed < start || completed > end) return false;
-      } else if (!task.start || !task.end || task.end < task.start || task.start > end || task.end < start) return false;
-      seen.add(task.id);
-      return true;
-    });
-  }
-
-  function addMatchingInvoiceVideos() {
-    const invoice = state.invoices.editor;
-    if (invoice.status !== 'Draft' || state.writing || state.syncing) return;
-    const existing = new Set(invoice.lines.map(line => line.taskId).filter(Boolean));
-    const videos = invoiceVideoCandidates(state.tasks, invoice).filter(task => !existing.has(task.id));
-    if (!videos.length) return;
-    if (invoice.lines.length + videos.length > 100) { showToast('The matching videos exceed the 100-line invoice limit. Choose a narrower timeline or add individual videos.'); return; }
-    invoice.lines.push(...videos.map(task => ({ taskId: task.id, description: task.name, hours: '', rate: invoice.defaultRate || '' })));
-    state.invoices.dirty = true;
-    renderInvoices();
-  }
-
   function setInvoiceClient(value) {
     const workspace = state.invoices;
     const invoice = workspace.editor;
+    const known = normalizeClientNames([...state.clientOptions, ...workspace.records.map(record => record.client), invoice.client]);
+    const selected = known.find(client => client.toLowerCase() === String(value || '').trim().toLowerCase());
+    if (!selected || selected === invoice.client) { renderInvoices(); return; }
     if (invoice.lines.length && !confirm('Changing the client removes the current invoice lines. Continue?')) {
       renderInvoices();
       return;
     }
-    const known = normalizeClientNames([...state.clientOptions, ...workspace.records.map(record => record.client)]);
-    invoice.client = known.find(client => client.toLowerCase() === value.trim().toLowerCase()) || value.trim();
+    invoice.client = selected;
     invoice.lines = [];
     const profile = workspace.records.find(record => record.client.toLowerCase() === invoice.client.toLowerCase() && record.currency === invoice.currency);
     invoice.defaultRate = profile ? profile.defaultRate : workspace.settings.defaultRate;
@@ -3974,12 +3945,10 @@ function deleteCurrentTask() {
     updateInvoicePreview();
   }
 
-  function addInvoiceLine(taskId = '') {
+  function addInvoiceLine() {
     const invoice = state.invoices.editor;
     if (invoice.lines.length >= 100) { showToast('An invoice can have up to 100 lines.'); return; }
-    if (taskId && invoice.lines.some(line => line.taskId === taskId)) { showToast('This video is already in this invoice.'); return; }
-    const task = state.taskById.get(taskId);
-    invoice.lines.push({ taskId, description: task ? task.name : '', hours: '', rate: invoice.defaultRate || '' });
+    invoice.lines.push({ taskId: '', description: '', hours: '', rate: invoice.defaultRate || '' });
     state.invoices.dirty = true;
     renderInvoices();
   }
@@ -4029,10 +3998,7 @@ function deleteCurrentTask() {
     const settings = workspace.settingsDraft;
     const readonly = invoice.status !== 'Draft';
     const currencies = ['USD', 'PHP', 'EUR', 'GBP', 'CAD', 'AUD'];
-    const clients = normalizeClientNames([...state.clientOptions, ...workspace.records.map(record => record.client)]);
-    const videos = invoiceVideoCandidates(state.tasks, invoice);
-    const existingVideos = new Set(invoice.lines.map(line => line.taskId).filter(Boolean));
-    const newVideoCount = videos.filter(task => !existingVideos.has(task.id)).length;
+    const clients = normalizeClientNames([...state.clientOptions, ...workspace.records.map(record => record.client), invoice.client]);
     const outstanding = workspace.records.filter(record => record.status === 'Issued');
     const paid = workspace.records.filter(record => record.status === 'Paid');
     const sums = records => currencies.map(currency => {
@@ -4068,24 +4034,16 @@ function deleteCurrentTask() {
           <div class="form-grid">
             <label class="form-field">Invoice number<input class="field-control" id="invoiceNumber" maxlength="40" value="${esc(invoice.number || '')}" placeholder="Automatic if blank" oninput="setInvoiceField('number',this.value)"></label>
             <label class="form-field">Invoice name<input class="field-control" id="invoiceName" maxlength="120" value="${esc(invoice.name || '')}" oninput="setInvoiceField('name',this.value)"></label>
-            <label class="form-field">Client<input class="field-control" id="invoiceField-client" list="invoiceClientNames" value="${esc(invoice.client)}" maxlength="100" onchange="setInvoiceClient(this.value)"><datalist id="invoiceClientNames">${clients.map(client => `<option value="${esc(client)}"></option>`).join('')}</datalist></label>
+            <label class="form-field">Client<select class="field-control" id="invoiceField-client" required onchange="setInvoiceClient(this.value)"><option value="" disabled ${invoice.client ? '' : 'selected'}>Choose a client</option>${clients.map(client => `<option value="${esc(client)}" ${invoice.client === client ? 'selected' : ''}>${esc(client)}</option>`).join('')}</select></label>
             <label class="form-field">Currency<select class="field-control" id="invoiceField-currency" ${invoice.lines.length ? 'disabled' : ''} onchange="setInvoiceField('currency',this.value);renderInvoices()">${currencies.map(currency => `<option ${invoice.currency === currency ? 'selected' : ''}>${currency}</option>`).join('')}</select></label>
             <label class="form-field">Billing timeline<select class="field-control" id="invoicePeriodMode" onchange="setInvoiceRange('periodMode',this.value)"><option value="fortnight" ${(invoice.periodMode || 'fortnight') === 'fortnight' ? 'selected' : ''}>Two weeks</option><option value="custom" ${invoice.periodMode === 'custom' ? 'selected' : ''}>Custom dates</option></select></label>
             <label class="form-field">From<input class="field-control" id="invoicePeriodStart" type="date" value="${esc(invoice.periodStart)}" onchange="setInvoiceRange('periodStart',this.value)"></label>
             <label class="form-field">Through<input class="field-control" id="invoicePeriodEnd" type="date" value="${esc(invoice.periodEnd)}" ${(invoice.periodMode || 'fortnight') === 'fortnight' ? 'disabled' : ''} onchange="setInvoiceRange('periodEnd',this.value)"></label>
-            <label class="form-field">Count videos by<select class="field-control" id="invoiceVideoDateBasis" onchange="setInvoiceVideoFilter('videoDateBasis',this.value)"><option value="planned" ${invoice.videoDateBasis !== 'completed' ? 'selected' : ''}>Scheduled overlap</option><option value="completed" ${invoice.videoDateBasis === 'completed' ? 'selected' : ''}>Completed in range</option></select></label>
-            <label class="form-field">Video source<select class="field-control" id="invoiceVideoScope" onchange="setInvoiceVideoFilter('videoScope',this.value)"><option value="leaf" ${!invoice.videoScope || invoice.videoScope === 'leaf' ? 'selected' : ''}>Individual tasks (no subtasks)</option><option value="topLevel" ${invoice.videoScope === 'topLevel' ? 'selected' : ''}>Top-level tasks</option><option value="all" ${invoice.videoScope === 'all' ? 'selected' : ''}>All video tasks</option></select></label>
-            ${[['issueDate', 'Issue date', 'date'], ['dueDate', 'Due date', 'date'], ['senderName', 'From', 'text'], ['defaultRate', 'Hourly rate for new lines', 'number']].map(([key, label, type]) => `<label class="form-field">${label}<input class="field-control" id="invoiceField-${key}" type="${type}" ${type === 'number' ? 'min="0" max="1000000" step="0.01"' : 'maxlength="200"'} value="${esc(invoice[key])}" oninput="setInvoiceField('${key}',this.value)"></label>`).join('')}
+            ${[['issueDate', 'Issue date', 'date'], ['dueDate', 'Due date', 'date'], ['senderName', 'Your name / business', 'text'], ['defaultRate', 'Hourly rate for new lines', 'number']].map(([key, label, type]) => `<label class="form-field">${label}<input class="field-control" id="invoiceField-${key}" type="${type}" ${type === 'number' ? 'min="0" max="1000000" step="0.01"' : 'maxlength="200"'} value="${esc(invoice[key])}" oninput="setInvoiceField('${key}',this.value)"></label>`).join('')}
             ${[['senderDetails', 'Your address / contact'], ['clientDetails', 'Bill to address / contact'], ['notes', 'Payment details / notes']].map(([key, label]) => `<label class="form-field ${key === 'notes' ? 'full' : ''}">${label}<textarea class="field-control" maxlength="${key === 'notes' ? 1500 : 1000}" oninput="setInvoiceField('${key}',this.value)">${esc(invoice[key])}</textarea></label>`).join('')}
           </div>
-          <div class="invoice-toolbar" style="margin-top:18px"><output id="invoiceVideoCount" aria-live="polite"><strong>${videos.length} videos found</strong> · ${invoice.lines.length} invoice lines</output><span class="spacer"></span>
-            <label><input id="invoiceIncludeUnassigned" type="checkbox" ${invoice.includeUnassigned ? 'checked' : ''} onchange="setInvoiceVideoFilter('includeUnassigned',this.checked)"> Include unassigned</label>
-            <button class="btn btn-primary" id="addMatchingVideosBtn" ${!newVideoCount ? 'disabled' : ''} onclick="addMatchingInvoiceVideos()">Add ${newVideoCount} matching videos</button></div>
-          <div class="invoice-toolbar"><label>Video <select id="invoiceVideoPicker" class="field-control" style="max-width:260px"><option value="">Choose a matching video</option>${videos.map(task => `<option value="${esc(task.id)}">${esc(task.name)} (${esc(task.id)})${(task.clients || []).length ? '' : ' · Unassigned'}</option>`).join('')}</select></label>
-            <button class="btn" onclick="if($('invoiceVideoPicker').value)addInvoiceLine($('invoiceVideoPicker').value)">Add video</button>
-            <button class="btn" onclick="addInvoiceLine()">Add manual line</button>
-          </div>
-          <div class="table-wrap"><table class="invoice-lines"><thead><tr><th>Video / Description</th><th>Hours</th><th>Hourly rate</th><th>Amount</th><th></th></tr></thead><tbody>
+          <div class="invoice-toolbar" style="margin-top:18px"><span>${invoice.lines.length} invoice lines</span><span class="spacer"></span><button class="btn btn-primary" id="addManualInvoiceLine" onclick="addInvoiceLine()">Add manual line</button></div>
+          <div class="table-wrap"><table class="invoice-lines"><thead><tr><th>Description</th><th>Hours</th><th>Hourly rate</th><th>Amount</th><th></th></tr></thead><tbody>
             ${invoice.lines.map((line, index) => `<tr><td><input class="field-control description-input" id="invoiceLine-${index}-description" aria-label="Description line ${index + 1}" maxlength="200" value="${esc(line.description)}" oninput="setInvoiceLine(${index},'description',this.value)"><output class="invoice-field-error" id="invoiceError-${index}-description"></output>${line.taskId ? `<div class="task-meta">${esc(line.taskId)}</div>` : ''}</td>
               <td><input class="field-control" id="invoiceLine-${index}-hours" aria-label="Hours line ${index + 1}" type="number" min="0" max="10000" step="0.01" value="${esc(line.hours)}" oninput="setInvoiceLine(${index},'hours',this.value)"><output class="invoice-field-error" id="invoiceError-${index}-hours"></output></td>
               <td><input class="field-control" id="invoiceLine-${index}-rate" aria-label="Rate line ${index + 1}" type="number" min="0" max="1000000" step="0.01" value="${esc(line.rate)}" oninput="setInvoiceLine(${index},'rate',this.value)"><output class="invoice-field-error" id="invoiceError-${index}-rate"></output></td>
@@ -4115,7 +4073,7 @@ function deleteCurrentTask() {
     $('invoicePrintable').innerHTML = `<div class="invoice-paper-head"><div><h2>INVOICE</h2>${invoice.name ? `<h3>${esc(invoice.name)}</h3>` : ''}<strong>${esc(invoice.number || 'Unsaved draft')}</strong><div class="invoice-status">${esc(invoice.status)}</div></div><div>Issue date: ${displayDate(invoice.issueDate)}<br>Due: ${displayDate(invoice.dueDate)}<br>Period: ${displayDateRange(invoice.periodStart, invoice.periodEnd)}<br>Currency: ${esc(invoice.currency)}</div></div>
       <div class="invoice-paper-head"><div class="invoice-party"><strong>${esc(invoice.senderName || 'Your name / business')}</strong><br>${esc(invoice.senderDetails)}</div><div class="invoice-party">Bill to<br><strong>${esc(invoice.client || 'Client')}</strong><br>${esc(invoice.clientDetails)}</div></div>
       <table><thead><tr><th>Description</th><th class="amount">Hours</th><th class="amount">Rate</th><th class="amount">Amount</th></tr></thead><tbody>${invoice.lines.map(line => `<tr><td>${esc(line.description)}</td><td class="amount">${esc(line.hours)}</td><td class="amount">${esc(invoiceMoney(Number(line.rate || 0) * 100, invoice.currency))}</td><td class="amount">${invoiceAmount(line.hours, line.rate) === null ? 'Invalid amount' : esc(invoiceMoney(invoiceAmount(line.hours, line.rate), invoice.currency))}</td></tr>`).join('')}</tbody></table>
-      <div class="invoice-total"><span>${invoice.lines.length} ${invoice.lines.length === 1 ? 'video' : 'videos'} · ${totals.hoursUnits / 100} hours · Total</span><strong>${totals.invalid ? 'Check line amounts' : esc(invoiceMoney(totals.minor, invoice.currency))}</strong></div>
+      <div class="invoice-total"><span>Total</span><strong>${totals.invalid ? 'Check line amounts' : esc(invoiceMoney(totals.minor, invoice.currency))}</strong></div>
       ${invoice.notes ? `<div class="invoice-party" style="margin-top:20px">${esc(invoice.notes)}</div>` : ''}`;
     updateInvoiceReadiness();
   }
@@ -4252,7 +4210,7 @@ function deleteCurrentTask() {
 
   function invoiceIssueElement(issue) {
     if (issue.line !== null && issue.line !== undefined) return $('invoiceLine-' + issue.line + '-' + issue.field);
-    const ids = { number: 'invoiceNumber', periodStart: 'invoicePeriodStart', periodEnd: 'invoicePeriodEnd', lines: 'invoiceVideoPicker' };
+    const ids = { number: 'invoiceNumber', periodStart: 'invoicePeriodStart', periodEnd: 'invoicePeriodEnd', lines: 'addManualInvoiceLine' };
     return $(ids[issue.field] || 'invoiceField-' + issue.field);
   }
 
