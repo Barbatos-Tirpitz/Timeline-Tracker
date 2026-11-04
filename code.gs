@@ -158,7 +158,7 @@ function upgradeTaskDatabase() {
       if (withClients) readClients_(values[14], values[0]);
       if (withHours) normalizeTaskHours_(values[15], values[0]);
       const category = categoryForUpgrade_(String(values[2] || ''));
-      if (category !== values[2]) changes.push({ rowNumber: index + 2, category });
+      if (category !== values[2]) changes.push({ rowNumber: index + 2, category, updatedAt: values[12] });
     });
     if (!changes.length && withClients && withHours) {
       ss.toast('Database is already upgraded.', 'Task Manager', 5);
@@ -170,7 +170,7 @@ function upgradeTaskDatabase() {
     const now = new Date();
     contiguousRows_(changes).forEach(group => {
       sheet.getRange(group[0].rowNumber, 3, group.length, 1).setValues(group.map(record => [record.category]));
-      sheet.getRange(group[0].rowNumber, 13, group.length, 1).setValues(group.map(() => [now]));
+      sheet.getRange(group[0].rowNumber, 13, group.length, 1).setValues(group.map(record => [nextTaskUpdatedAt_(record.updatedAt, now)]));
     });
     ss.toast('Categories, Clients and Hours upgraded. Backup created.', 'Task Manager', 5);
   } finally {
@@ -479,7 +479,9 @@ function updateTask(formData) {
     }
 
     const row = findTaskRow(sheet, taskId);
-    assertTaskVersion_(formData.expectedUpdatedAt, sheet.getRange(row, 13).getValue());
+    const currentUpdatedAt = sheet.getRange(row, 13).getValue();
+    assertTaskVersion_(formData.expectedUpdatedAt, currentUpdatedAt);
+    const now = new Date();
 
     const hours = formData.hours === undefined ? null : normalizeTaskHours_(formData.hours, taskId);
     if (hours !== null) assertEditableTaskHours_(sheet, taskId, row);
@@ -491,7 +493,7 @@ function updateTask(formData) {
       statusValues = nextStatusValues_(
         sheet.getRange(row, 1, 1, 14).getValues()[0],
         formData.status,
-        new Date()
+        now
       );
     }
 
@@ -504,7 +506,7 @@ function updateTask(formData) {
     ]]);
 
     sheet.getRange(row, 9).setValue(description);
-    sheet.getRange(row, 13).setValue(new Date());
+    sheet.getRange(row, 13).setValue(statusValues ? statusValues.updatedAt : nextTaskUpdatedAt_(currentUpdatedAt, now));
     if (clients !== null) sheet.getRange(row, 15).setValue(JSON.stringify(clients));
     if (hours !== null) sheet.getRange(row, 16).setValue(hours);
 
@@ -540,10 +542,11 @@ function updateTaskHours(taskId, value, expectedUpdatedAt) {
   try {
     const selection = readTaskSelection_([taskId]);
     assertEditableTaskHours_(selection.sheet, selection.ids[0], selection.selected[0].rowNumber);
-    assertTaskVersion_(expectedUpdatedAt, selection.selected[0].values[12]);
+    const currentUpdatedAt = selection.selected[0].values[12];
+    assertTaskVersion_(expectedUpdatedAt, currentUpdatedAt);
     const row = selection.selected[0].rowNumber;
     selection.sheet.getRange(row, 16).setValue(hours);
-    selection.sheet.getRange(row, 13).setValue(new Date());
+    selection.sheet.getRange(row, 13).setValue(nextTaskUpdatedAt_(currentUpdatedAt));
     return { success: true, taskId: selection.ids[0], hours, message: selection.ids[0] + ' hours updated.' };
   } finally {
     lock.releaseLock();
@@ -551,7 +554,11 @@ function updateTaskHours(taskId, value, expectedUpdatedAt) {
 }
 
 function taskVersion_(value) {
-  return value instanceof Date && Number.isFinite(value.getTime()) ? value.getTime() : 0;
+  return value instanceof Date && Number.isFinite(value.getTime()) ? Math.floor(value.getTime() / 1000) * 1000 : 0;
+}
+
+function nextTaskUpdatedAt_(currentValue, now = new Date()) {
+  return new Date(Math.max(taskVersion_(now), taskVersion_(currentValue) + 1000));
 }
 
 function assertTaskVersion_(expected, currentValue) {
@@ -603,7 +610,7 @@ function nextStatusValues_(values, status, now) {
     status,
     actualStart: values[9] || (status === 'In Progress' || status === 'Done' ? now : ''),
     actualEnd: status === 'Done' ? now : values[4] === 'Done' ? '' : values[10],
-    updatedAt: now
+    updatedAt: nextTaskUpdatedAt_(values[12], now)
   };
 }
 
@@ -770,7 +777,7 @@ function updateSubtasks(parentTaskId, taskIds, patch) {
     formulas.forEach((row, rowIndex) => row.forEach((formula, columnIndex) => {
       if (formula) values[rowIndex][columnIndex] = formula;
     }));
-    const updatedAt = new Date();
+    const now = new Date();
     selection.selected.forEach(record => {
       const row = values[record.rowNumber - firstRow];
       if (patch.category !== undefined) row[2] = patch.category;
@@ -779,7 +786,7 @@ function updateSubtasks(parentTaskId, taskIds, patch) {
       if (end) row[6] = end;
       if (clients !== null) row[14] = JSON.stringify(clients);
       if (hours !== null) row[15] = hours;
-      row[12] = updatedAt;
+      row[12] = nextTaskUpdatedAt_(record.values[12], now);
     });
     range.setValues(values);
     return { success: true, taskIds: selection.ids, updated: selection.ids.length };
@@ -1314,7 +1321,8 @@ function setTaskParent(taskId, newParentTaskId) {
       .map((row, index) => ({
         rowNumber: index + 2,
         taskId: String(row[0] || '').trim(),
-        parentTaskId: String(row[13] || '').trim()
+        parentTaskId: String(row[13] || '').trim(),
+        updatedAt: row[12]
       }))
       .filter(row => row.parentTaskId === taskId);
 
@@ -1334,6 +1342,8 @@ function setTaskParent(taskId, newParentTaskId) {
     }
 
     const now = new Date();
+    const taskValues = rows.find(row => String(row[0] || '').trim() === taskId);
+    const taskUpdatedAt = taskValues ? taskValues[12] : sheet.getRange(taskRow, 13).getValue();
 
     // Update or clear the selected task's parent.
     const parentCell = sheet.getRange(taskRow, 14);
@@ -1352,12 +1362,12 @@ function setTaskParent(taskId, newParentTaskId) {
           .setValue(newParentTaskId);
 
         sheet.getRange(child.rowNumber, 13)
-          .setValue(now);
+          .setValue(nextTaskUpdatedAt_(child.updatedAt, now));
       });
     }
 
     // Update selected task timestamp.
-    sheet.getRange(taskRow, 13).setValue(now);
+    sheet.getRange(taskRow, 13).setValue(nextTaskUpdatedAt_(taskUpdatedAt, now));
 
     SpreadsheetApp.flush();
 

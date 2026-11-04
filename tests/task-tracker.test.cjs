@@ -364,6 +364,22 @@ test('task date inputs round-trip in the spreadsheet time zone', () => {
   assert.equal(app.context.parseTaskDate_('2026-02-30'), null);
 });
 
+test('task version tokens use spreadsheet-stable second precision', () => {
+  const child = taskRow('VID-002', 'VID-001');
+  child[12] = new Date('2026-11-04T12:34:56.789Z');
+  const app = server([taskRow('VID-001'), child]);
+  app.context.initializeTaskHeaders_(app.sheet);
+  const timestamp = new Date('2026-11-04T12:34:56.789Z');
+  const loadedVersion = app.context.getTasks().tasks[1].updatedAt;
+  assert.equal(loadedVersion, Date.parse('2026-11-04T12:34:56Z'));
+  app.rows[2][12] = new Date(loadedVersion);
+  assert.doesNotThrow(() => app.context.updateTaskHours('VID-002', 1, loadedVersion));
+  const nextVersion = app.context.getTasks().tasks[1].updatedAt;
+  assert.ok(nextVersion > loadedVersion);
+  assert.throws(() => app.context.updateTaskHours('VID-002', 2, loadedVersion), /changed since it was loaded/);
+  assert.equal(app.context.nextTaskUpdatedAt_(timestamp, timestamp).getTime(), loadedVersion + 1000);
+});
+
 test('spreadsheet Timeline sizing expands a fresh sheet to its date span', () => {
   const app = server([]);
   let columns = 26;
