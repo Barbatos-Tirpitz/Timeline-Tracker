@@ -10,9 +10,14 @@ const html = fs.readFileSync(path.join(root, 'App.html'), 'utf8');
 
 function client() {
   const elements = new Map();
+  const listeners = new Map();
   const context = vm.createContext({
     document: {
-      querySelectorAll: () => [], addEventListener() {},
+      querySelectorAll: () => [],
+      addEventListener(type, handler) {
+        if (!listeners.has(type)) listeners.set(type, []);
+        listeners.get(type).push(handler);
+      },
       getElementById(id) {
         if (!elements.has(id)) elements.set(id, { innerHTML: '', value: '', addEventListener() {} });
         return elements.get(id);
@@ -25,6 +30,7 @@ function client() {
   vm.runInContext(script, context);
   vm.runInContext('getState = () => state;', context);
   context.elements = elements;
+  context.listeners = listeners;
   return context;
 }
 
@@ -1549,6 +1555,136 @@ test('Biweekly labels retain existing 14-day period values and saved-preference 
   assert.ok(html.includes('value="fortnightly">Biweekly (14 days)</option>'));
   const range = app.dashboardRange('fortnightly', state.dashboard.anchor);
   assert.equal(app.dayDiff(range.start, range.end), 13);
+});
+
+test('edit-panel subtasks always order To Do, In Progress, Blocked and Done with stable ID ties', () => {
+  const app = client();
+  const tasks = [listTask('VID-10', 'VID-1', { status: 'Done' }), listTask('VID-8', 'VID-1', { status: 'Blocked' }),
+    listTask('VID-4', 'VID-1', { status: 'In Progress' }), listTask('VID-3', 'VID-1', { status: 'To Do' }),
+    listTask('VID-2', 'VID-1', { status: 'To Do' }), listTask('VID-99', 'other', { status: 'To Do' })];
+  assert.deepEqual(Array.from(app.orderedSubtasks('VID-1', tasks), task => task.id), ['VID-2', 'VID-3', 'VID-4', 'VID-8', 'VID-10']);
+  assert.equal(tasks[0].id, 'VID-10');
+});
+
+test('select visible in the edit panel uses status-sorted pages rather than sheet row order', () => {
+  const app = client();
+  const state = app.getState();
+  state.tasks = [...Array.from({ length: 26 }, (_, index) => listTask('VID-' + (index + 2), 'VID-1', { status: 'Done' })),
+    listTask('VID-90', 'VID-1', { status: 'To Do' }), listTask('VID-91', 'VID-1', { status: 'In Progress' })];
+  app.resetSubtaskPanel('VID-1');
+  app.selectPanelPage(true);
+  assert.equal(state.subtaskPanel.selected.size, 25);
+  assert.equal(state.subtaskPanel.selected.has('VID-90'), true);
+  assert.equal(state.subtaskPanel.selected.has('VID-91'), true);
+  assert.equal(state.subtaskPanel.selected.has('VID-27'), false);
+});
+
+test('status selection shortcuts cover all parent pages and replace rather than accumulate old selections', () => {
+  const app = client();
+  const state = app.getState();
+  state.tasks = [...Array.from({ length: 60 }, (_, index) => listTask('VID-' + (index + 2), 'VID-1', { status: index % 2 ? 'Done' : 'In Progress' })), listTask('OTHER', 'elsewhere', { status: 'In Progress' })];
+  app.resetSubtaskPanel('VID-1');
+  state.subtaskPanel.selectionStatus = 'In Progress';
+  app.selectPanelStatus();
+  assert.equal(state.subtaskPanel.selected.size, 30);
+  assert.equal(state.subtaskPanel.selected.has('OTHER'), false);
+  state.subtaskPanel.selectionStatus = 'Done';
+  app.selectPanelStatus();
+  assert.equal(state.subtaskPanel.selected.size, 30);
+  assert.equal(state.subtaskPanel.selected.has('VID-2'), false);
+  state.subtaskPanel.selectionStatus = 'all';
+  app.selectPanelStatus();
+  assert.equal(state.subtaskPanel.selected.size, 60);
+});
+
+test('All tasks status selection respects filters and never selects a context-only parent', () => {
+  const app = client();
+  const state = app.getState();
+  state.tasks = [listTask('VID-1'), listTask('VID-2', 'VID-1', { category: 'Revision', status: 'In Progress' }), listTask('VID-3', 'VID-1', { status: 'In Progress' })];
+  state.list.filters.category = 'Revision';
+  app.elements.set('taskSelectionStatus', { value: 'In Progress' });
+  app.selectTaskStatus();
+  assert.deepEqual(Array.from(state.list.selected), ['VID-2']);
+  state.writing = true;
+  state.list.filters.category = '';
+  app.selectTaskStatus();
+  assert.deepEqual(Array.from(state.list.selected), ['VID-2']);
+});
+
+test('UI foundation declares semantic tokens, readable defaults and protected timeline sizing', () => {
+  assert.match(html, /<html lang="en">/);
+  assert.match(html, /<title>Task Timeline Planner<\/title>/);
+  assert.match(html, /--control-height:\s*2\.75rem/);
+  assert.match(html, /font-variant-numeric:\s*tabular-nums/);
+  assert.match(html, /\.selection-hit\s*\{[^}]*min-width:\s*var\(--control-height\)/);
+  assert.match(html, /\.timeline \.task-cell, \.timeline \.day-cell\s*\{ height: 54px/);
+  assert.match(html, /isolation:\s*isolate/);
+});
+
+test('task dialog and navigation use accessible labels and retain dirty-safe backdrop handling', () => {
+  assert.match(html, /<dialog open class="modal" aria-modal="true" aria-labelledby="modalTitle"/);
+  assert.doesNotMatch(html, /id="taskModal" onclick=/);
+  for (const label of ['Search timeline tasks', 'Timeline status', 'Timeline category']) assert.ok(html.includes('aria-label="' + label + '"'));
+  assert.match(html, /class="task-title"[^>]*onclick="openEdit/);
+  assert.match(html, /if \(event.target === \$\('taskModal'\)\) closeModal\(\)/);
+  assert.match(html, /\.nav-text \{ display: block; font-size: 11px/);
+});
+
+test('dialog keyboard focus wraps at both boundaries and dismissal uses the guarded close function', () => {
+  const app = client();
+  const control = () => ({ matches: () => false, closest: () => null, getClientRects: () => [{}], focus() { app.document.activeElement = this; } });
+  const first = control();
+  const last = control();
+  const dialog = { querySelectorAll: () => [first, last], contains: element => element === first || element === last };
+  const modal = { classList: { contains: () => true }, querySelector: () => dialog };
+  app.elements.set('taskModal', modal);
+  const keydown = app.listeners.get('keydown')[0];
+  let prevented = 0;
+  app.document.activeElement = last;
+  keydown({ key: 'Tab', preventDefault() { prevented++; } });
+  assert.equal(app.document.activeElement, first);
+  keydown({ key: 'Tab', shiftKey: true, preventDefault() { prevented++; } });
+  assert.equal(app.document.activeElement, last);
+  assert.equal(prevented, 2);
+  let closes = 0;
+  app.closeModal = () => { closes++; };
+  keydown({ key: 'Escape' });
+  app.listeners.get('click')[0]({ target: modal });
+  app.listeners.get('click')[0]({ target: first });
+  assert.equal(closes, 2);
+});
+
+test('invoice field errors wait for interaction and follow the original line through removal', () => {
+  const app = client();
+  const state = app.getState();
+  state.invoices.editor = { client: 'Studio', senderName: 'Editor', currency: 'USD', status: 'Draft', periodStart: '2026-11-01', periodEnd: '2026-11-14', issueDate: '2026-11-01', dueDate: '2026-11-14', lines: [
+    { description: 'First', hours: '', rate: '' }, { description: 'Second', hours: '', rate: '' }
+  ] };
+  app.updateInvoiceReadiness();
+  assert.equal(app.elements.get('invoiceError-0-hours').textContent, '');
+  assert.equal(app.elements.get('issueInvoiceBtn').disabled, true);
+  app.touchInvoiceField({ field: 'hours', line: 0 });
+  assert.match(app.elements.get('invoiceError-0-hours').textContent, /positive hours/);
+  assert.equal(app.elements.get('invoiceError-0-rate').textContent, '');
+  state.invoices.editor.lines.shift();
+  app.updateInvoiceReadiness();
+  assert.equal(app.elements.get('invoiceError-0-hours').textContent, '');
+  app.revealInvoiceErrors(app.invoiceReadiness(state.invoices.editor));
+  assert.match(app.elements.get('invoiceError-0-rate').textContent, /positive hourly rate/);
+  state.invoices.editor = { ...state.invoices.editor, lines: [{ description: 'New', hours: '', rate: '' }] };
+  app.updateInvoiceReadiness();
+  assert.equal(app.elements.get('invoiceError-0-rate').textContent, '');
+});
+
+test('loading placeholders announce status, hide skeletons and honor reduced motion', () => {
+  const app = client();
+  for (const view of ['timeline', 'tasks', 'dashboard', 'invoices']) {
+    const markup = app.loadingMarkup(view);
+    assert.ok(markup.includes('loading-' + view));
+    assert.match(markup, /aria-busy="true"><output aria-live="polite">Loading/);
+    assert.match(markup, /class="loading-skeleton" aria-hidden="true"/);
+  }
+  assert.match(html, /\.loading:before \{ animation: none; \}/);
 });
 
 test('display dates use readable full and compact English months without changing stored date keys', () => {

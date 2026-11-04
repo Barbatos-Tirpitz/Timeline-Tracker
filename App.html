@@ -1,8 +1,9 @@
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <base target="_top">
+  <title>Task Timeline Planner</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
@@ -14,19 +15,40 @@
       --surface: #ffffff;
       --border: #e5e8ef;
       --text: #172b4d;
-      --muted: #6b778c;
+      --muted: #526179;
+      --control-border: #7a879b;
       --green: #22a06b;
       --red: #c9372c;
       --purple: #8270db;
       --sidebar-width: 224px;
       --task-width: 330px;
       --day-width: 38px;
+      --space-micro: 0.25rem;
+      --space-sm: 0.5rem;
+      --space-md: 1rem;
+      --space-lg: 1.5rem;
+      --space-xl: 2rem;
+      --text-caption: 0.75rem;
+      --text-body: 0.875rem;
+      --text-heading: 1.125rem;
+      --text-title: 1.5rem;
+      --radius-sm: 0.25rem;
+      --radius-md: 0.5rem;
+      --control-height: 2.75rem;
+      --focus-ring: #0055cc;
+      --z-bar: 2;
+      --z-task: 3;
+      --z-date: 4;
+      --z-corner: 5;
+      --z-sticky: 6;
+      --z-modal: 20;
+      --z-toast: 30;
     }
 
     .task-bar {
   position: absolute;
   display: block;
-  z-index: 2;
+  z-index: var(--z-bar);
   height: 20px;
   border-radius: 5px;
   overflow: hidden;
@@ -55,11 +77,18 @@
       font-family: Arial, Helvetica, sans-serif;
       color: var(--text);
       background: var(--bg);
-      font-size: 13px;
+      font-size: var(--text-body);
+      line-height: 1.5;
+      letter-spacing: 0;
     }
 
     button, input, select, textarea { font: inherit; }
     button { cursor: pointer; }
+    button, input, select, textarea, summary, a { -webkit-tap-highlight-color: transparent; }
+    :is(button, input, select, textarea, summary, a, [tabindex]):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+    :where(button, input, select, textarea):disabled { cursor: not-allowed; }
+    .field-control[aria-invalid="true"], .form-field :is(input, select, textarea)[aria-invalid="true"] { border-color: var(--red); }
+    .stat-number, .invoice-total, .amount, .hours-progress-summary, .metrics-bar-value, .date-label, .inline-hours input { font-variant-numeric: tabular-nums; }
 
     .app { display: flex; min-height: 100vh; }
 
@@ -68,10 +97,10 @@
       flex-shrink: 0;
       background: var(--navy);
       color: #dfe6f1;
-      padding: 22px 12px;
+      padding: var(--space-lg) var(--space-md);
       display: flex;
       flex-direction: column;
-      gap: 28px;
+      gap: var(--space-xl);
     }
 
     .brand {
@@ -98,19 +127,20 @@
       color: #9fadbc;
       padding: 0 12px;
       margin-bottom: 8px;
-      font-size: 10px;
+      font-size: var(--text-caption);
       font-weight: 700;
-      letter-spacing: 1px;
+      letter-spacing: 0;
       text-transform: uppercase;
     }
 
     .nav-item {
       width: 100%;
       border: 0;
-      border-radius: 6px;
+      border-radius: var(--radius-md);
       color: #dfe6f1;
       background: transparent;
-      padding: 11px 12px;
+      padding: var(--space-sm) var(--space-md);
+      min-height: var(--control-height);
       text-align: left;
       display: flex;
       align-items: center;
@@ -122,6 +152,8 @@
       background: #253858;
       color: white;
     }
+    .nav-item.active { box-shadow: inset 3px 0 0 #85b8ff; }
+    .sidebar :focus-visible { outline-color: #b3d4ff; }
 
     .nav-icon { width: 18px; text-align: center; }
 
@@ -130,7 +162,7 @@
       color: #9fadbc;
       padding: 12px;
       line-height: 1.6;
-      font-size: 11px;
+      font-size: var(--text-caption);
     }
 
     .main { min-width: 0; flex: 1; }
@@ -143,7 +175,8 @@
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      padding: 12px 28px;
+      padding: var(--space-md) var(--space-xl);
+      flex-wrap: wrap;
     }
 
     .breadcrumb { color: var(--muted); font-size: 12px; }
@@ -156,7 +189,7 @@
       flex-wrap: wrap;
     }
 
-    .content { padding: 28px; max-width: 1800px; margin: auto; }
+    .content { padding: var(--space-lg) var(--space-xl); max-width: 1800px; margin: auto; }
     .content, .invoice-paper { container-name: date-labels; container-type: inline-size; }
     .date-compact { display: none; }
     .date-label { overflow-wrap: normal; }
@@ -176,30 +209,44 @@
       justify-content: space-between;
       align-items: flex-start;
       gap: 16px;
-      margin-bottom: 22px;
+      margin-bottom: var(--space-lg);
     }
 
-    h1 { margin: 0 0 8px; font-size: 25px; letter-spacing: -0.6px; }
-    h2 { margin: 0; font-size: 16px; }
-    .subtitle { color: var(--muted); font-size: 13px; }
+    h1 { margin: 0 0 var(--space-sm); font-size: var(--text-title); letter-spacing: 0; line-height: 1.25; }
+    h2 { margin: 0; font-size: var(--text-heading); line-height: 1.25; }
+    .subtitle { color: var(--muted); font-size: var(--text-body); line-height: 1.5; }
 
     .btn {
-      border: 1px solid var(--border);
+      border: 1px solid var(--control-border);
       background: white;
       color: var(--text);
-      border-radius: 6px;
-      padding: 9px 13px;
+      border-radius: var(--radius-md);
+      min-height: var(--control-height);
+      padding: var(--space-sm) var(--space-md);
       font-weight: 600;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 7px;
+      gap: var(--space-sm);
+      transition: background-color .12s ease-out, border-color .12s ease-out;
     }
 
     .btn:hover { background: #f1f2f4; }
+    .btn:active:not(:disabled) { background: #e4e9f2; }
     .btn-primary { background: var(--blue); border-color: var(--blue); color: white; }
     .btn-primary:hover { background: #0055cc; }
-    .btn:disabled { opacity: .55; cursor: wait; }
+    .btn:disabled { opacity: 1; background: #edf0f4; border-color: #b8c2d0; color: #647084; cursor: not-allowed; }
+    .btn-primary:active:not(:disabled) { background: #0747a6; }
+    input[type="checkbox"][data-select-id], input[type="checkbox"][data-child-id],
+    #selectVisible, #selectPanelPage { width: 22px; height: 22px; min-width: 22px; accent-color: var(--blue); cursor: pointer; margin: 0; }
+    .selection-hit { display: inline-flex; min-width: var(--control-height); min-height: var(--control-height); align-items: center; justify-content: center; gap: var(--space-sm); cursor: pointer; }
+    .selection-hit:has(input:focus-visible) { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
+    .selection-hit input:focus-visible { outline: none; }
+    .selection-scope { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .selection-scope label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; }
+    .selection-scope select { min-width: 140px; max-width: 100%; }
+    .selection-scope .selection-caption { flex-basis: 100%; font-size: 11px; color: var(--muted); }
+    #bulkControls .selection-scope { padding: 0; border: 0; }
     #taskForm[aria-busy="true"] button { opacity: .55; cursor: wait; }
 
     .stats {
@@ -214,7 +261,7 @@
     .hours-progress.compact { display: inline-block; width: 45px; height: 5px; margin: 0 4px; vertical-align: middle; }
     .hours-progress-summary { margin: 12px 0; font-size: 12px; color: var(--muted); }
     #view-dashboard .panel { overflow: visible; }
-    .metrics-controls { position: sticky; top: 0; z-index: 6; background: var(--surface); padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .metrics-controls { position: sticky; top: 0; z-index: var(--z-sticky); background: var(--surface); padding: var(--space-md) 0; border-bottom: 1px solid var(--border); }
     .metrics-controls .zoom-switch { flex-wrap: wrap; max-width: 100%; }
     .metrics-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
     .metrics-tile { text-align: left; color: var(--text); min-width: 0; width: 100%; }
@@ -260,8 +307,8 @@
     .stat {
       background: white;
       border: 1px solid var(--border);
-      border-radius: 9px;
-      padding: 17px 18px;
+      border-radius: var(--radius-md);
+      padding: var(--space-md);
     }
 
     .stat-label { color: var(--muted); margin-bottom: 10px; }
@@ -271,7 +318,7 @@
     .panel {
       background: white;
       border: 1px solid var(--border);
-      border-radius: 9px;
+      border-radius: var(--radius-md);
       overflow: hidden;
     }
 
@@ -280,14 +327,14 @@
       justify-content: space-between;
       align-items: center;
       gap: 12px;
-      padding: 17px 20px;
+      padding: var(--space-md) var(--space-lg);
       border-bottom: 1px solid var(--border);
     }
 
     .panel-subtitle { color: var(--muted); font-size: 12px; margin-top: 5px; }
 
     .toolbar {
-      padding: 13px 16px;
+      padding: var(--space-md);
       border-bottom: 1px solid var(--border);
       justify-content: space-between;
       background: white;
@@ -296,12 +343,12 @@
     .filters { flex: 1; }
 
     .field-control {
-      border: 1px solid #c8d0dc;
-      border-radius: 5px;
+      border: 1px solid var(--control-border);
+      border-radius: var(--radius-md);
       background: white;
       color: var(--text);
-      padding: 9px 10px;
-      min-height: 36px;
+      padding: var(--space-sm) var(--space-md);
+      min-height: var(--control-height);
       outline: none;
     }
 
@@ -327,11 +374,13 @@
       background: transparent;
       padding: 7px 10px;
       color: var(--muted);
+      min-height: var(--control-height);
     }
 
     .zoom-btn.active { background: white; color: var(--blue); box-shadow: 0 1px 3px #091e4220; }
+    .zoom-btn:focus-visible { outline-offset: -3px; }
 
-    .timeline-shell { overflow: auto; max-height: 66vh; position: relative; }
+    .timeline-shell { overflow: auto; max-height: 66vh; position: relative; isolation: isolate; }
 
     .timeline {
       display: grid;
@@ -345,7 +394,7 @@
       position: sticky;
       top: 0;
       left: 0;
-      z-index: 5;
+      z-index: var(--z-corner);
       background: #f7f8fa;
       border-right: 1px solid var(--border);
       border-bottom: 1px solid var(--border);
@@ -361,7 +410,7 @@
       border-right: 1px solid #edf0f4;
       position: sticky;
       top: 0;
-      z-index: 4;
+      z-index: var(--z-date);
       min-height: 59px;
       display: flex;
       flex-direction: column;
@@ -429,7 +478,7 @@
       min-height: 54px;
       position: sticky;
       left: 0;
-      z-index: 3;
+      z-index: var(--z-task);
       background: white;
       border-right: 1px solid var(--border);
       border-bottom: 1px solid var(--border);
@@ -437,6 +486,8 @@
       display: flex;
       align-items: center;
       gap: 10px;
+      font-size: 13px;
+      line-height: 1.25;
     }
 
     .task-cell:hover { background: #f7f8fa; }
@@ -455,8 +506,16 @@
       text-overflow: ellipsis;
       font-weight: 600;
       cursor: pointer;
+      border: 0;
+      background: transparent;
+      padding: 0;
+      color: inherit;
+      display: block;
+      width: 100%;
+      text-align: left;
     }
     .task-title:hover { color: var(--blue); }
+    .task-title:focus-visible { outline-offset: -2px; }
     .task-meta { color: var(--muted); font-size: 11px; margin-top: 5px; }
     .task-cell .task-meta { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
     .client-picker { margin: 0; border: 1px solid var(--border); padding: 10px; min-width: 0; border-radius: 6px; }
@@ -491,7 +550,7 @@
       top: 17px;
       height: 20px;
       border-radius: 5px;
-      z-index: 2;
+      z-index: var(--z-bar);
       min-width: 4px;
       cursor: pointer;
       overflow: hidden;
@@ -556,7 +615,7 @@
     .timeline-spacer { grid-column: 1 / -1; pointer-events: none; }
     table { border-collapse: collapse; width: 100%; }
     th, td { text-align: left; padding: 13px 15px; border-bottom: 1px solid var(--border); }
-    th { background: #f7f8fa; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .4px; }
+    th { background: #f7f8fa; color: var(--muted); font-size: var(--text-caption); text-transform: uppercase; letter-spacing: 0; }
     td { background: white; }
     tr:last-child td { border-bottom: 0; }
 
@@ -705,7 +764,7 @@
       position: fixed;
       inset: 0;
       background: #091e4277;
-      z-index: 20;
+      z-index: var(--z-modal);
       display: none;
       align-items: center;
       justify-content: center;
@@ -714,17 +773,23 @@
 
     .modal-backdrop.open { display: flex; }
     .modal {
+      position: relative;
+      inset: auto;
+      margin: 0;
+      border: 0;
+      padding: 0;
+      color: inherit;
       width: 100%;
       max-width: 560px;
       max-height: 92vh;
       overflow: auto;
       background: white;
-      border-radius: 10px;
+      border-radius: var(--radius-md);
       box-shadow: 0 12px 40px #091e4240;
     }
 
     .modal-head {
-      padding: 20px 23px;
+      padding: var(--space-lg);
       border-bottom: 1px solid var(--border);
       display: flex;
       justify-content: space-between;
@@ -732,10 +797,10 @@
     }
 
     .modal-head h2 { font-size: 18px; }
-    .close-btn { border: 0; background: transparent; font-size: 22px; color: var(--muted); }
+    .close-btn { border: 0; background: transparent; font-size: 22px; color: var(--muted); min-width: var(--control-height); min-height: var(--control-height); }
 
     .modal-body {
-  padding: 26px 28px;
+  padding: var(--space-lg);
   }
 
   #timelineShell {
@@ -749,14 +814,14 @@
   .form-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 20px;
-    row-gap: 22px;
+    column-gap: var(--space-lg);
+    row-gap: var(--space-lg);
   }
 
   .form-field {
     display: flex;
     flex-direction: column;
-    gap: 9px;
+    gap: var(--space-sm);
     min-width: 0;
   }
 
@@ -773,10 +838,10 @@
   .form-field select,
   .form-field textarea {
     width: 100%;
-    min-height: 42px;
-    padding: 11px 12px;
-    border: 1px solid #c8d0dc;
-    border-radius: 6px;
+    min-height: var(--control-height);
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-md);
     outline: none;
     color: var(--text);
     background: white;
@@ -800,8 +865,8 @@
       display: flex;
       flex-wrap: wrap;
       justify-content: space-between;
-      gap: 10px;
-      padding: 15px 23px;
+      gap: var(--space-sm);
+      padding: var(--space-md) var(--space-lg);
       background: #f7f8fa;
       border-top: 1px solid var(--border);
     }
@@ -812,11 +877,11 @@
       position: fixed;
       bottom: 24px;
       right: 24px;
-      z-index: 30;
+      z-index: var(--z-toast);
       background: #172b4d;
       color: white;
-      border-radius: 7px;
-      padding: 13px 17px;
+      border-radius: var(--radius-md);
+      padding: var(--space-md);
       box-shadow: 0 5px 20px #091e4233;
       display: none;
       max-width: min(360px, calc(100vw - 48px));
@@ -881,9 +946,17 @@
     @keyframes toast-out { to { opacity: 0; } }
     @media (prefers-reduced-motion: reduce) {
       .toast.dismissing { animation-duration: 1ms; }
+      .loading:before { animation: none; }
+      .btn { transition: none; }
     }
 
-    .loading { padding: 60px 20px; text-align: center; color: var(--muted); }
+    .loading { padding: var(--space-lg); min-height: 260px; display: grid; align-content: start; gap: var(--space-md); color: var(--muted); }
+    .loading-skeleton { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); gap: var(--space-lg) var(--space-md); }
+    .loading-skeleton span { height: 12px; background: var(--border); border-radius: var(--radius-sm); }
+    .loading-skeleton span:nth-child(odd) { width: 70%; }
+    .loading-dashboard .loading-skeleton { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .loading-dashboard .loading-skeleton span { height: 64px; width: 100%; }
+    .loading-invoices .loading-skeleton { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .loading:before {
       content: "";
       display: block;
@@ -893,7 +966,7 @@
       border-top-color: var(--blue);
       border-radius: 50%;
       animation: spin .8s linear infinite;
-      margin: 0 auto 14px;
+      margin: 0;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -901,10 +974,12 @@
       :root { --sidebar-width: 68px; --task-width: 260px; --day-width: 32px; }
       .sidebar { padding: 18px 8px; }
       .brand { padding: 0 10px; }
-      .brand-text, .nav-label, .nav-text, .sidebar-footer { display: none; }
-      .nav-item { justify-content: center; padding: 12px 5px; }
-      .content { padding: 18px; }
-      .topbar { padding: 12px 18px; }
+      .brand-text, .nav-label, .sidebar-footer { display: none; }
+      .nav-item { justify-content: center; flex-direction: column; padding: var(--space-sm) var(--space-micro); gap: var(--space-micro); }
+      .nav-text { display: block; font-size: 11px; line-height: 1.25; text-align: center; overflow-wrap: anywhere; }
+      #projectNav .nav-text { font-size: 10px; }
+      .content { padding: var(--space-md); }
+      .topbar { padding: var(--space-md); }
       .stats { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
       .toolbar { align-items: stretch; }
       .filters { width: 100%; }
@@ -915,11 +990,11 @@
       .page-heading { flex-direction: column; }
       .form-grid { grid-template-columns: 1fr; }
       .form-field.full { grid-column: auto; }
-      .content { padding: 12px; }
+      .content { padding: var(--space-md); }
       .stats { gap: 8px; }
       .stat { padding: 12px; }
       .stat-number { font-size: 22px; }
-      .topbar { padding: 12px; }
+      .topbar { padding: var(--space-md); }
     }
   </style>
 </head>
@@ -934,11 +1009,11 @@
 
     <div>
       <div class="nav-label">Workspace</div>
-      <button class="nav-item active" data-view="timeline">
-        <span class="nav-icon">▥</span><span class="nav-text">Timeline</span>
+      <button class="nav-item active" data-view="timeline" aria-label="Timeline" title="Timeline" aria-current="page">
+        <span class="nav-icon" aria-hidden="true">▥</span><span class="nav-text">Timeline</span>
       </button>
-      <button class="nav-item" data-view="tasks">
-        <span class="nav-icon">☷</span><span class="nav-text">All tasks</span>
+      <button class="nav-item" data-view="tasks" aria-label="All tasks" title="All tasks">
+        <span class="nav-icon" aria-hidden="true">☷</span><span class="nav-text">All tasks</span>
       </button>
       <button class="nav-item" data-view="dashboard" aria-label="Metrics" title="Metrics">
         <span class="nav-icon" aria-hidden="true">▦</span><span class="nav-text">Metrics</span>
@@ -950,7 +1025,7 @@
 
     <div>
       <div class="nav-label">Project</div>
-      <button class="nav-item active" id="projectNav">
+      <button class="nav-item" id="projectNav" title="Task Timeline" onclick="switchView('timeline')">
         <span class="nav-icon">◈</span><span class="nav-text">Task Timeline</span>
       </button>
     </div>
@@ -994,23 +1069,23 @@
               <div class="panel-subtitle" id="timelineSubtitle">Task schedules and progress at a glance</div>
             </div>
             <div class="range-controls">
-              <button class="btn" onclick="moveRange(-1)">←</button>
+              <button class="btn" onclick="moveRange(-1)" aria-label="Previous timeline period" title="Previous period">←</button>
               <button class="btn" onclick="goToday()">Today</button>
-              <button class="btn" onclick="moveRange(1)">→</button>
+              <button class="btn" onclick="moveRange(1)" aria-label="Next timeline period" title="Next period">→</button>
             </div>
           </div>
 
           <div class="toolbar">
             <div class="filters">
-              <input class="field-control search" id="search" placeholder="⌕  Search tasks..." oninput="scheduleSearch('timeline')">
-              <select class="field-control" id="statusFilter" onchange="render()">
+              <input class="field-control search" id="search" aria-label="Search timeline tasks" placeholder="Search tasks..." oninput="scheduleSearch('timeline')">
+              <select class="field-control" id="statusFilter" aria-label="Timeline status" onchange="render()">
                 <option value="">All statuses</option>
                 <option>To Do</option>
                 <option>In Progress</option>
                 <option>Blocked</option>
                 <option>Done</option>
               </select>
-              <select class="field-control" id="categoryFilter" onchange="render()">
+              <select class="field-control" id="categoryFilter" aria-label="Timeline category" onchange="render()">
                 <option value="">All categories</option>
               </select>
               <select class="field-control" id="clientFilter" aria-label="Timeline client" onchange="render()"><option value="">All clients</option></select>
@@ -1024,7 +1099,7 @@
           </div>
 
           <div class="timeline-shell" id="timelineShell">
-            <div class="loading">Loading your tasks...</div>
+            <div class="loading" aria-busy="true"><output aria-live="polite">Loading your tasks...</output></div>
           </div>
 
           <div class="legend">
@@ -1082,8 +1157,8 @@
   </main>
 </div>
 
-<div class="modal-backdrop" id="taskModal" onclick="if(event.target===this)closeModal()">
-  <div class="modal">
+<div class="modal-backdrop" id="taskModal">
+  <dialog open class="modal" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal-head">
       <h2 id="modalTitle">Create task</h2>
       <button class="close-btn" onclick="closeModal()" aria-label="Close">×</button>
@@ -1203,9 +1278,8 @@
           <button type="submit" class="btn btn-primary" id="saveBtn">Create task</button>
         </div>
       </div>
-      </div>
     </form>
-  </div>
+  </dialog>
 </div>
 
 <button type="button" class="toast" id="toast" onclick="dismissToast()" onanimationend="finishToastDismiss(event)" aria-label="Dismiss notification" aria-describedby="toastMessage" title="Dismiss notification">
@@ -1497,13 +1571,17 @@
     }
     if (!state.loaded) {
       const target = { timeline: 'timelineShell', tasks: 'taskTable', dashboard: 'dashboardContent' }[state.activeView];
-      $(target).innerHTML = state.loading ? '<div class="loading">Loading tasks...</div>'
+      $(target).innerHTML = state.loading ? loadingMarkup(state.activeView)
         : '<div class="empty"><strong>Tasks could not be loaded</strong>Use Retry to reconnect.</div>';
       return;
     }
     if (state.activeView === 'timeline') render();
     else if (state.activeView === 'tasks') renderTaskTable();
     else renderDashboard();
+  }
+
+  function loadingMarkup(view) {
+    return `<div class="loading loading-${esc(view)}" aria-busy="true"><output aria-live="polite">Loading ${view === 'invoices' ? 'invoices' : 'tasks'}...</output><div class="loading-skeleton" aria-hidden="true">${'<span></span>'.repeat(8)}</div></div>`;
   }
 
   function scheduleSearch(view) {
@@ -1879,7 +1957,7 @@ html += `<div class="task-cell"
         <div class="task-color" style="background:${barColor(t.status)}"></div>
         
         <div class="task-info">
-          <div class="task-title" title="${esc(t.name)}" onclick="openEdit('${esc(t.id)}')">${esc(t.name || 'Untitled task')}</div>
+          <button type="button" class="task-title" title="${esc(t.name)}" onclick="openEdit(${esc(JSON.stringify(t.id))})">${esc(t.name || 'Untitled task')}</button>
           <div class="task-meta" title="${esc(formatHours(t.completedHours || 0) + ' / ' + formatHours(t.totalHours || 0) + ' h on completed work · ' + ((t.clients || []).join(', ') || 'Unassigned'))}">${esc(t.id)} · ${formatHours(t.totalHours || 0)} h ${renderHoursProgress(t.completedHours || 0, t.totalHours || 0, true)} · ${esc(t.category)} · ${esc((t.clients || []).join(', ') || 'Unassigned')}</div>
         </div>
       </div>`;
@@ -2123,7 +2201,7 @@ html += `<div class="task-cell"
     if (state.activeView !== 'tasks' || !state.loaded) return;
     const list = state.list;
     const focus = list.metricFocus;
-    const filters = focus ? { ...list.filters, taskIds: new Set(metricsFocusIds(state.tasks, focus, parseDate(state.spreadsheetToday) || new Date())) } : list.filters;
+    const filters = taskListFilters();
     const { groups, matchingCount } = taskGroups(state.tasks, filters, list.sort, list.direction);
     $('metricTaskFocus').hidden = !focus;
     $('metricTaskFocus').innerHTML = focus ? `${esc(focus.label)} · ${displayDateRange(focus.start, focus.end)} <button class="btn" onclick="clearMetricTaskFocus()">Clear metric filter</button>` : '';
@@ -2135,7 +2213,7 @@ html += `<div class="task-cell"
       if (!contextOnly) list.visibleIds.push(task.id);
       const argument = esc(JSON.stringify(task.id));
       return `<tr class="${contextOnly ? 'context-row' : ''}">
-        <td><input type="checkbox" data-select-id="${esc(task.id)}" aria-label="Select ${esc(task.name)}" ${contextOnly || busy ? 'disabled' : ''} ${list.selected.has(task.id) && !contextOnly ? 'checked' : ''} onchange="selectTask(${argument},this.checked)"></td>
+        <td><label class="selection-hit"><input type="checkbox" data-select-id="${esc(task.id)}" aria-label="Select ${esc(task.name)}" ${contextOnly || busy ? 'disabled' : ''} ${list.selected.has(task.id) && !contextOnly ? 'checked' : ''} onchange="selectTask(${argument},this.checked)"></label></td>
         <td><div class="list-task ${child ? 'child' : ''}">
           ${childCount ? `<button class="group-toggle" aria-label="${list.collapsed.has(task.id) ? 'Expand' : 'Collapse'} subtasks of ${esc(task.name)}" aria-expanded="${!list.collapsed.has(task.id)}" onclick="toggleListGroup(${argument})">${list.collapsed.has(task.id) ? '&#9654;' : '&#9660;'}</button>` : '<span class="group-toggle"></span>'}
           <div><a href="#" onclick="openEdit(${argument});return false">${esc(task.name || 'Untitled task')}</a>
@@ -2165,7 +2243,7 @@ html += `<div class="task-cell"
     const invalidRange = list.filters.from && list.filters.to && list.filters.to < list.filters.from;
     $('taskTable').innerHTML = invalidRange
       ? '<div class="empty" role="alert"><strong>Invalid date range</strong>Through date must be on or after From date.</div>'
-      : rows ? `<table><thead><tr><th><input type="checkbox" id="selectVisible" aria-label="Select visible matching tasks" onchange="selectVisibleTasks(this.checked)" ${busy ? 'disabled' : ''}></th>
+      : rows ? `<table><thead><tr><th><label class="selection-hit" title="Select visible matching tasks only"><input type="checkbox" id="selectVisible" aria-label="Select visible matching tasks" onchange="selectVisibleTasks(this.checked)" ${busy ? 'disabled' : ''}></label></th>
         ${columns.map(([key, title]) => `<th aria-sort="${list.sort === key ? list.direction === 1 ? 'ascending' : 'descending' : 'none'}"><button class="sort-button" onclick="sortTasks('${key}')">${title}${list.sort === key ? list.direction === 1 ? ' &#8593;' : ' &#8595;' : ''}</button></th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>`
       : '<div class="empty"><strong>No tasks found</strong>Create a task or change the filters.</div>';
     $('taskPagination').innerHTML = `<span class="page-summary">${matchingCount} matching tasks · ${groups.length} groups · Page ${list.page} / ${pageCount}</span>
@@ -2342,11 +2420,39 @@ html += `<div class="task-cell"
     const busy = state.writing || state.syncing;
     const blocker = deletionBlocker([...list.selected], state.tasks);
     const previousStatus = $('bulkStatus')?.value || 'To Do';
-    $('bulkControls').innerHTML = `<strong class="page-summary">${list.selected.size} selected</strong>
+    const selectionStatus = $('taskSelectionStatus')?.value || 'all';
+    const selectionCount = selectionTaskIds(state.tasks.filter(task => taskMatches(task, taskListFilters())), selectionStatus).length;
+    $('bulkControls').innerHTML = `<div class="selection-scope"><label>Select tasks<select class="field-control" id="taskSelectionStatus" ${busy ? 'disabled' : ''} onchange="updateSelectionControls();$('taskSelectionStatus').focus()">${selectionOptions(selectionStatus, 'All matching tasks')}</select></label>
+      <button class="btn" ${busy || !selectionCount ? 'disabled' : ''} onclick="selectTaskStatus()">Select ${selectionCount} matching</button><span class="selection-caption">Current filters · includes other pages and collapsed matching rows</span></div>
+      <strong class="page-summary">${list.selected.size} selected across pages</strong>
       <label>Status <select class="field-control" id="bulkStatus" ${busy ? 'disabled' : ''}>${['To Do', 'In Progress', 'Blocked', 'Done'].map(status => `<option ${status === previousStatus ? 'selected' : ''}>${status}</option>`).join('')}</select></label>
       <button class="btn" onclick="applyBulkStatus()" ${busy || !list.selected.size ? 'disabled' : ''}>Update selected</button>
       <span title="${blocker ? 'Select every subtask before deleting a parent.' : 'Delete selected tasks'}"><button class="btn" onclick="deleteSelectedTasks()" ${busy || !list.selected.size || blocker ? 'disabled' : ''}>Delete selected</button></span>
       <button class="btn" onclick="state.list.selected.clear();selectVisibleTasks(false)" ${busy || !list.selected.size ? 'disabled' : ''}>Clear selection</button>`;
+  }
+
+  function taskListFilters() {
+    const list = state.list;
+    return list.metricFocus ? { ...list.filters, taskIds: new Set(metricsFocusIds(state.tasks, list.metricFocus, parseDate(state.spreadsheetToday) || new Date())) } : list.filters;
+  }
+
+  function selectionTaskIds(tasks, status) {
+    if (!['all', 'To Do', 'In Progress', 'Blocked', 'Done'].includes(status)) return [];
+    return [...new Set(tasks.filter(task => status === 'all' || task.status === status).map(task => task.id))];
+  }
+
+  function selectionOptions(value, allLabel) {
+    return [['all', allLabel], ...['To Do', 'In Progress', 'Blocked', 'Done'].map(status => [status, status])]
+      .map(([key, label]) => `<option value="${esc(key)}" ${key === value ? 'selected' : ''}>${esc(label)}</option>`).join('');
+  }
+
+  function selectTaskStatus() {
+    if (state.writing || state.syncing) return;
+    const status = $('taskSelectionStatus').value || 'all';
+    const tasks = state.tasks.filter(task => taskMatches(task, taskListFilters()));
+    state.list.selected = new Set(selectionTaskIds(tasks, status));
+    document.querySelectorAll('[data-select-id]').forEach(input => { input.checked = !input.disabled && state.list.selected.has(input.dataset.selectId); });
+    updateSelectionControls();
   }
 
   function changeInlineStatus(id, select) {
@@ -2678,8 +2784,10 @@ html += `<div class="task-cell"
   function switchView(view) {
     if (view !== state.activeView && state.taskBaseline && !closeModal()) return;
     state.activeView = view;
-    document.querySelectorAll('.nav-item[data-view]').forEach(b =>
-      b.classList.toggle('active', b.dataset.view === view));
+    document.querySelectorAll('.nav-item[data-view]').forEach(b => {
+      b.classList.toggle('active', b.dataset.view === view);
+      if (b.dataset.view === view) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
     document.querySelectorAll('.view').forEach(v =>
       v.classList.toggle('active', v.id === `view-${view}`));
 
@@ -2764,13 +2872,16 @@ html += `<div class="task-cell"
     }
 
     // CASE 2: The selected task is a parent.
-    const children = state.tasks.filter(
-      t => t.parentTaskId === task.id
-    );
+    const children = orderedSubtasks(task.id);
     const subtaskState = state.subtaskPanel;
     const childIds = new Set(children.map(child => child.id));
     subtaskState.selected.forEach(id => { if (!childIds.has(id)) subtaskState.selected.delete(id); });
     const pages = Math.max(1, Math.ceil(children.length / 25));
+    if (subtaskState.pendingCreatedIds?.length) {
+      const firstCreated = children.findIndex(child => subtaskState.pendingCreatedIds.includes(child.id));
+      if (firstCreated >= 0) subtaskState.page = Math.floor(firstCreated / 25) + 1;
+      subtaskState.pendingCreatedIds = [];
+    }
     subtaskState.page = Math.max(1, Math.min(pages, subtaskState.page));
     const displayedChildren = children.slice((subtaskState.page - 1) * 25, subtaskState.page * 25);
 
@@ -2786,7 +2897,7 @@ html += `<div class="task-cell"
 
     const childRows = displayedChildren.map(child => `
       <div class="subtask-row ${subtaskState.selected.has(child.id) ? 'is-selected' : ''}">
-      <input type="checkbox" data-child-id="${esc(child.id)}" aria-label="Select subtask ${esc(child.name)}" ${subtaskState.selected.has(child.id) ? 'checked' : ''} onchange="selectPanelSubtask(${esc(JSON.stringify(child.id))},this.checked)">
+      <label class="selection-hit"><input type="checkbox" data-child-id="${esc(child.id)}" aria-label="Select subtask ${esc(child.name)}" ${subtaskState.selected.has(child.id) ? 'checked' : ''} onchange="selectPanelSubtask(${esc(JSON.stringify(child.id))},this.checked)"></label>
         <div class="subtask-info">
           <button type="button" class="subtask-link"
             onclick="openEdit('${esc(child.id)}')">
@@ -2830,8 +2941,9 @@ html += `<div class="task-cell"
         <h4 id="existingSubtasksHeading">Existing subtasks (${children.length})</h4>
       ${
         children.length
-          ? `<div class="subtask-bulk">
-              <label><input id="selectPanelPage" type="checkbox" onchange="selectPanelPage(this.checked)"> Select visible</label>
+          ? `<div class="selection-scope"><label>Select subtasks<select class="field-control" id="panelSelectionStatus" onchange="state.subtaskPanel.selectionStatus=this.value;updatePanelSelection()">${selectionOptions(subtaskState.selectionStatus || 'all', 'All subtasks')}</select></label><button type="button" class="btn" id="panelSelectMatching" onclick="selectPanelStatus()">Select matching</button><span class="selection-caption">This parent · includes all subtask pages</span></div>
+            <div class="subtask-bulk">
+              <label class="selection-hit"><input id="selectPanelPage" type="checkbox" onchange="selectPanelPage(this.checked)"> Select visible</label>
               <strong id="panelSelectionCount"></strong>
               <select id="panelBulkStatus" class="field-control" aria-label="Selected subtask status" onchange="state.subtaskPanel.status=this.value">${['To Do', 'In Progress', 'Blocked', 'Done'].map(status => `<option ${subtaskState.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select>
               <button type="button" class="btn" data-child-action onclick="runPanelSubtaskAction('status')">Update status</button>
@@ -2949,6 +3061,7 @@ function createSubtask() {
   const creationKey = JSON.stringify([panel.draft, panel.quantity]);
   mutationRunner().withSuccessHandler(result => {
     panel.lastCreated = result.created;
+    panel.pendingCreatedIds = result.taskIds || [];
     panel.createdDraftKey = creationKey;
     panel.page = Math.max(1, Math.ceil(((state.childrenByParent.get(parent.id) || []).length + result.created) / 25));
     showToast(`Created ${result.created} subtasks under ${taskLabel(parent)}.`);
@@ -3009,9 +3122,16 @@ function createSubtask() {
       $('taskStatus').value !== parent.status || JSON.stringify(normalizeClientNames(state.clientSelections.taskClients || [])) !== JSON.stringify(normalizeClientNames(parent.clients || []));
   }
 
+  function orderedSubtasks(parentId, tasks = state.tasks) {
+    const statuses = ['To Do', 'In Progress', 'Blocked', 'Done'];
+    const rank = status => { const index = statuses.indexOf(status); return index < 0 ? statuses.length : index; };
+    return tasks.filter(task => task.parentTaskId === parentId).sort((first, second) =>
+      rank(first.status) - rank(second.status) || first.id.localeCompare(second.id, undefined, { numeric: true }));
+  }
+
   function updatePanelSelection() {
     const panel = state.subtaskPanel;
-    const children = state.tasks.filter(task => task.parentTaskId === panel.parentId);
+    const children = orderedSubtasks(panel.parentId);
     const visible = children.slice((panel.page - 1) * 25, panel.page * 25);
     const count = visible.filter(child => panel.selected.has(child.id)).length;
     const header = $('selectPanelPage');
@@ -3019,7 +3139,12 @@ function createSubtask() {
       header.checked = visible.length > 0 && count === visible.length;
       header.indeterminate = count > 0 && count < visible.length;
     }
-    if ($('panelSelectionCount')) $('panelSelectionCount').textContent = `${panel.selected.size} selected`;
+    if ($('panelSelectionCount')) $('panelSelectionCount').textContent = `${panel.selected.size} selected across pages`;
+    if ($('panelSelectMatching')) {
+      const count = selectionTaskIds(children, panel.selectionStatus || 'all').length;
+      $('panelSelectMatching').textContent = `Select ${count} matching`;
+      $('panelSelectMatching').disabled = !count || state.writing || state.syncing;
+    }
     document.querySelectorAll('[data-child-action]').forEach(button => { button.disabled = !panel.selected.size || state.writing || state.syncing; });
     document.querySelectorAll('[data-child-id]').forEach(input => {
       input.closest('.subtask-row').classList.toggle('is-selected', panel.selected.has(input.dataset.childId));
@@ -3036,9 +3161,17 @@ function createSubtask() {
   function selectPanelPage(checked) {
     if (state.writing || state.syncing) return;
     const panel = state.subtaskPanel;
-    state.tasks.filter(task => task.parentTaskId === panel.parentId).slice((panel.page - 1) * 25, panel.page * 25).forEach(task => {
+    orderedSubtasks(panel.parentId).slice((panel.page - 1) * 25, panel.page * 25).forEach(task => {
       if (checked) panel.selected.add(task.id); else panel.selected.delete(task.id);
     });
+    document.querySelectorAll('[data-child-id]').forEach(input => { input.checked = panel.selected.has(input.dataset.childId); });
+    updatePanelSelection();
+  }
+
+  function selectPanelStatus() {
+    if (state.writing || state.syncing) return;
+    const panel = state.subtaskPanel;
+    panel.selected = new Set(selectionTaskIds(orderedSubtasks(panel.parentId), panel.selectionStatus || 'all'));
     document.querySelectorAll('[data-child-id]').forEach(input => { input.checked = panel.selected.has(input.dataset.childId); });
     updatePanelSelection();
   }
@@ -3884,7 +4017,7 @@ function deleteCurrentTask() {
     if (!workspace.loaded) {
       $('invoiceWorkspace').innerHTML = workspace.error
         ? `<div class="data-notice error" role="alert">${esc(workspace.error)} <button class="btn" onclick="loadInvoiceWorkspace(state.syncing)">Retry</button></div>`
-        : '<div class="loading">Loading invoices...</div>';
+        : loadingMarkup('invoices');
       if (!workspace.loading && !workspace.error) loadInvoiceWorkspace();
       return;
     }
@@ -4002,7 +4135,7 @@ function deleteCurrentTask() {
     if (state.writing || state.syncing) return;
     if (status === 'Issued') {
       const readiness = invoiceReadiness(state.invoices.editor, state.invoices.records);
-      if (!readiness.ready) { updateInvoiceReadiness(); showToast(readiness.issues[0].message); focusInvoiceIssue(readiness.issues[0]); return; }
+      if (!readiness.ready) { revealInvoiceErrors(readiness); showToast(readiness.issues[0].message); focusInvoiceIssue(readiness.issues[0]); return; }
     }
     if (status === 'Issued' && !confirm('Issue this invoice? Its saved line items will become read-only.')) return;
     const document = { ...state.invoices.editor, lines: state.invoices.editor.lines.map(line => ({ ...line })), status };
@@ -4121,9 +4254,28 @@ function deleteCurrentTask() {
 
   function focusInvoiceIssue(issue) {
     if (issue.invoiceId) { openSavedInvoice(issue.invoiceId); return; }
+    touchInvoiceField(issue);
     const input = invoiceIssueElement(issue);
-    input?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    input?.scrollIntoView?.({ block: 'center', behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 'instant' : 'smooth' });
     input?.focus?.();
+  }
+
+  function invoiceTouchedFields(issue) {
+    const workspace = state.invoices;
+    if (workspace.validation?.editor !== workspace.editor) workspace.validation = { editor: workspace.editor, touched: new WeakMap() };
+    const owner = issue.line === null || issue.line === undefined ? workspace.editor : workspace.editor.lines[issue.line];
+    if (!workspace.validation.touched.has(owner)) workspace.validation.touched.set(owner, new Set());
+    return workspace.validation.touched.get(owner);
+  }
+
+  function touchInvoiceField(issue) {
+    invoiceTouchedFields(issue).add(issue.field);
+    updateInvoiceReadiness();
+  }
+
+  function revealInvoiceErrors(readiness) {
+    readiness.issues.forEach(issue => invoiceTouchedFields(issue).add(issue.field));
+    updateInvoiceReadiness();
   }
 
   function updateInvoiceReadiness() {
@@ -4135,10 +4287,12 @@ function deleteCurrentTask() {
     const fields = ['client', 'senderName', 'currency', 'periodStart', 'periodEnd', 'issueDate', 'dueDate', 'number'];
     fields.forEach(field => {
       const input = invoiceIssueElement({ field, line: null });
-      if (input?.setAttribute) input.setAttribute('aria-invalid', String(readiness.issues.some(issue => issue.line === null && issue.field === field)));
+      const visible = invoiceTouchedFields({ field, line: null }).has(field);
+      if (input?.setAttribute) input.setAttribute('aria-invalid', String(visible && readiness.issues.some(issue => issue.line === null && issue.field === field)));
     });
     invoice.lines.forEach((line, index) => ['description', 'hours', 'rate'].forEach(field => {
-      const issues = readiness.issues.filter(issue => issue.line === index && issue.field === field);
+      const issues = invoiceTouchedFields({ field, line: index }).has(field)
+        ? readiness.issues.filter(issue => issue.line === index && issue.field === field) : [];
       const output = $('invoiceError-' + index + '-' + field);
       if (output) output.textContent = issues.map(issue => issue.message).join(' ');
       const input = invoiceIssueElement({ field, line: index });
@@ -4154,6 +4308,7 @@ function deleteCurrentTask() {
     const invoice = state.invoices.editor;
     const readiness = invoiceReadiness(invoice, state.invoices.records);
     if (!readiness.ready) {
+      revealInvoiceErrors(readiness);
       showToast(readiness.issues[0].message);
       return false;
     }
@@ -4373,7 +4528,28 @@ function deleteCurrentTask() {
   }
 
   document.addEventListener('keydown', e => {
+    if (e.key === 'Tab' && $('taskModal').classList.contains('open')) {
+      const dialog = $('taskModal').querySelector('dialog');
+      const focusable = [...dialog.querySelectorAll('button, input, select, textarea, summary, a[href], [tabindex]:not([tabindex="-1"])')]
+        .filter(element => !element.matches(':disabled') && !element.closest('[inert]') && element.getClientRects().length);
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first) { e.preventDefault(); dialog.focus(); }
+      else if (e.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+    }
     if (e.key === 'Escape') closeModal();
+  });
+  document.addEventListener('click', event => {
+    if (event.target === $('taskModal')) closeModal();
+  });
+  document.addEventListener('focusout', event => {
+    const input = event.target;
+    if (!input.closest?.('#invoiceEditorFields') || !state.invoices.editor) return;
+    const line = input.id.match(/^invoiceLine-(\d+)-(description|hours|rate)$/);
+    const field = { invoiceNumber: 'number', invoicePeriodStart: 'periodStart', invoicePeriodEnd: 'periodEnd' }[input.id]
+      || (input.id.startsWith('invoiceField-') ? input.id.slice('invoiceField-'.length) : '');
+    if (line || field) touchInvoiceField({ field: line ? line[2] : field, line: line ? Number(line[1]) : null });
   });
   document.addEventListener('input', event => {
     if (event.target.matches('input[type="date"]')) refreshDateInputLabels();

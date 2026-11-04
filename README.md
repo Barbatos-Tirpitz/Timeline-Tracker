@@ -71,6 +71,12 @@ Work in Progress!!
 | Metrics Workspace | Daily, weekly, biweekly, monthly, and yearly task/hour summaries |
 | Invoices | Biweekly hourly billing, saved client copies, paid tracking, PDF print and CSV export |
 
+## Interface and Accessibility
+
+The interface uses shared spacing, typography, control, focus, and layering styles across its workspaces. Controls and selection targets have larger hit areas, the mobile navigation keeps visible labels, and keyboard focus remains visible. The task editor uses a labelled native dialog with guarded dismissal and contained keyboard focus. Loading states announce progress, reduced-motion preferences are respected, and invoice field errors appear after interaction while readiness checks continue to prevent invalid issuance.
+
+The UI refinements were informed by the [UI Design Cheat Sheet](https://www.designyourway.net/cs/ui-design-cheat-sheet/). They preserve the existing light theme, timeline geometry, status ordering, and manually dismissed notifications. These improvements are not a claim of full WCAG conformance.
+
 ## Task Hierarchy
 
 The application supports a parent-child task structure.
@@ -141,11 +147,15 @@ Native date pickers retain the browser/operating system format, with a readable 
 
 Inside a parent task, enter one subtask name per line to create 1-100 subtasks together (200 characters per name). Empty lines are ignored; repeated names create distinct IDs. New children copy saved parent category, priority, planned dates, and clients, with To Do status. Save pending parent edits before creating children.
 
-Quantity per name multiplies each entered name: two names at quantity three create six subtasks with distinct IDs. The preview and create button show the exact total; the expanded batch cannot exceed 100. Names and quantity remain after creation so another click appends another batch without replacing existing children. Clear names explicitly clears the draft. The panel opens the last child page after creation and reports the resulting total.
+Quantity per name multiplies each entered name: two names at quantity three create six subtasks with distinct IDs. The preview and create button show the exact total; the expanded batch cannot exceed 100. Names and quantity remain after creation so another click appends another batch without replacing existing children. Clear names explicitly clears the draft. The panel opens the page containing the first new subtask in status order and reports the resulting total.
 
 Creation, existing subtasks, bulk editing, and collapsed Parent management have separate sections. Bulk-field toggles preserve the creation draft and field focus; the apply action shows the number of fields and selected subtasks.
 
 The subtask panel displays 25 children per page. Selection persists across its pages, is separate from All tasks selection, and resets when changing the selected task or closing the dialog. Select visible never includes another page automatically.
+
+Edit-panel subtasks always sort **To Do > In Progress > Blocked > Done**, with natural task-ID ordering within a status, before pagination. Status updates refresh that order without changing task details. The visible-page checkbox follows the same sorted slice.
+
+Selection checkboxes are 22px with 40px label hit areas. The Select subtasks control offers All subtasks, To Do, In Progress, Blocked and Done; Select matching replaces the selection with every matching child of that parent across all pages. The separate Select visible checkbox selects only the current page. Selection counts explicitly include other pages, and backend scope/deletion checks still apply.
 
 Selected children support status updates, confirmed deletion, and bulk edits to category, priority, clients, hours per subtask, and planned dates. Each edit field has an explicit Apply switch: unchecked fields remain unchanged. Applying Clients replaces assignments; applying an empty selection clears them. A single planned-date edit preserves the other date and is validated against every selected task before writes.
 
@@ -190,7 +200,7 @@ Leaf tasks/subtasks have inline Hours inputs with explicit Save (or Enter), Unsa
 - Sort by task ID, name, category, clients, priority, status, start, or end date. Undated tasks sort last in either direction.
 - Pages contain 25 parent groups by default (25/50/100 options). Each expanded parent shows up to 25 matching children, with its own child-page controls.
 - A matching child keeps its parent visible as context without including nonmatching siblings. Context-only parents cannot be selected or updated inline.
-- Parent checkboxes select only that task. The header checkbox selects only the matching rows currently displayed, never collapsed children or other pages.
+- Parent checkboxes select only that task. The header checkbox selects only the matching rows currently displayed, never collapsed children or other pages. Select tasks offers All matching tasks or one status; its Select matching action explicitly selects all matching records under the current filters, including other pages and collapsed matching rows. It replaces the prior selection and never includes context-only parents that fail the filters.
 - Selection persists across pages and collapse changes, clears when filters change, and removes deleted IDs after refresh. The selected count includes selections on other pages.
 - Inline status changes and bulk status updates do not cascade through the hierarchy.
 - Bulk deletion requires explicit selection of every existing subtask before selecting a parent for deletion. No children are automatically included. The server rechecks this rule before writing, and deletion requires confirmation.
