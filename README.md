@@ -39,6 +39,80 @@ Create, edit, search, and filter tasks while keeping their details organized.
 
 ## Features
 
+| Feature | Description |
+|---|---|
+| Task Management | Create, edit, update, and delete tasks |
+| Grouped Task List | Sort and paginate parent groups, with separate pages for large child lists |
+| Bulk Actions | Update selected statuses or explicitly selected tasks together |
+| Bulk Subtasks | Create, update, and delete selected children from the parent task panel |
+| Client Assignments | Assign multiple clients independently of task categories |
+| Subtask Client Tags | Display each child's clients, Unassigned, and expandable additional names |
+| Gantt Timeline | Visualize tasks against a calendar |
+| Drag Scheduling | Reschedule individual tasks through drag-and-drop |
+| Task Hierarchy | Organize work using parent tasks and subtasks |
+| Collapse / Expand | Show or hide subtasks in the timeline |
+| Progress Tracking | Monitor task completion and status |
+| Search and Filters | Find tasks based on available criteria |
+| Metrics Workspace | Daily, weekly, biweekly, monthly, and yearly task/hour summaries |
+| Invoices | Biweekly hourly billing, saved client copies, paid tracking, PDF print and CSV export |
+
+## Interface and Accessibility
+
+The interface uses shared spacing, typography, control, focus, and layering styles across its workspaces. Controls and selection targets have larger hit areas, the mobile navigation keeps visible labels, and keyboard focus remains visible. The task editor uses a labelled native dialog with guarded dismissal and contained keyboard focus. Loading states announce progress, reduced-motion preferences are respected, and invoice field errors appear after interaction while readiness checks continue to prevent invalid issuance.
+
+The UI refinements were informed by the [UI Design Cheat Sheet](https://www.designyourway.net/cs/ui-design-cheat-sheet/). They preserve the existing light theme, timeline geometry, status ordering, and manually dismissed notifications. These improvements are not a claim of full WCAG conformance.
+
+## Task Hierarchy
+
+The application supports a parent-child task structure.
+
+- Root tasks have no parent identifier.
+- Subtasks reference their parent using the Parent Task ID.
+- Parent and subtask schedules are independent; changing a child does not change its parent's dates.
+- Parent progress is calculated using the proportion of completed subtasks.
+- Subtasks can be collapsed or expanded in the timeline.
+
+**Current hierarchy depth:** One subtask level.
+
+## Hours and Hours Progress
+
+Only subtasks can store logged Hours, separate from planned start/end, actual work dates and the calendar-day Duration formula. Enter 0-10,000 hours with up to two decimals. New subtasks start at zero; their parent assignment enables the Hours input. Top-level tasks cannot log hours directly.
+
+Every top-level task shows a read-only total of its direct subtasks, including zero when it has none. This total is consistent in task details, All tasks, Timeline labels/tooltips, Metrics and collapsed/filtered views. Legacy Hours values stored on top-level rows are retained in the sheet but ignored by reads, rollups and metrics; they are never mixed with subtask hours.
+
+**Hours progress** is the hours on Done subtasks divided by total subtask hours, not the percentage of subtask counts. For example, a Done 3-hour child and an unfinished 2-hour child produce 3 / 5 hours and 60%. Zero total hours produces 0%, never a divide-by-zero value. Reopening a child reduces completed hours without erasing its recorded hours. Accessible progress bars appear in the parent details, frozen timeline labels and Hours logged metric. Existing task-count progress remains separate.
+
+Global and dashboard hour metrics sum subtask hours once, never parent rollups. Dashboard date/client filters apply to subtask records and use the full hierarchy to avoid double counting context parents. These are stored task totals for the selected schedule range, not dated work-session logs or prorated hours.
+
+Bulk Apply Hours assigns the same chosen value to every selected child, leaving unchecked fields unchanged. Hours-only saves write column P and Updated At only. They never alter timeline bar position/width/height, task dates, Duration formulas or invoice hours. Transfers/deletions change parent rollups on refresh but preserve the hours of remaining tasks. Invoice line hours and saved invoice snapshots stay independently controlled.
+
+Hours is stored in column P, after Clients in O. Existing/blank task hours read as zero without implicit writes. Before recording hours on an existing spreadsheet, run **Task Manager > Upgrade Categories, Clients and Hours (with backup)**. The upgrade rejects occupied P, preserves prior task columns/formulas, and creates a backup before adding the header. Deploy both frontend and backend together and verify the upgrade on a copied spreadsheet first.
+
+## Categories and Clients
+
+Task categories are **Graphic Design**, **Video editing**, **Scheduling**, and **Revision**. Clients are a separate optional field: a task may have several clients, or none (Unassigned). Revision is available on create/edit and bulk edits; adding it does not reclassify old tasks automatically.
+
+The Clients control offers reusable suggestions and an Add client action. Client names are trimmed and deduplicated case-insensitively; commas and quotes are valid parts of a name. Each task allows up to 50 client names of up to 100 characters. Suggestions come from current tasks, not a separate client registry.
+
+Client filters in All tasks, timeline, and dashboard match any assigned client. Sorting by Clients uses the alphabetically first client, keeps Unassigned last in either direction, and shows each task once. Parent/child grouping still takes precedence over a global flat sort. New subtasks initially copy saved parent clients; later parent edits or transfers do not overwrite their assignments.
+
+The Clients field is stored as a JSON string array in column O. Blank cells mean no clients. Existing columns A:N retain their positions. Malformed client JSON is reported rather than silently replaced.
+
+Subtask rows display their own client assignments as compact tags, independently of the parent's current clients. Two tags are shown initially; additional names are available in an expandable list. Unassigned appears when a child has no clients, including after clearing clients with bulk edit.
+
+## Metrics and Timeline Summary
+
+The former Dashboard is now the dedicated **Metrics** workspace. Sticky Daily, Weekly, Biweekly, Monthly, and Yearly controls, reference date, previous/next arrows, Today, and client filter determine its analysis period. Monthly remains the default. The last period/date/client is remembered locally when browser storage is permitted. These analytics belong inside Metrics rather than repeating at the top of every workspace.
+
+Four actionable tiles show actual completions in the selected period, recorded hours on scheduled work, current overdue work for the selected client, and blocked scheduled work. Parent/standalone and subtask counts are separated. Overdue is explicitly **now**, not a historical snapshot of the selected month.
+
+**Planned vs Actual Finish** compares each leaf task completed in the selected period with its planned end date. The result shows days early, on time, or late; tasks without either date are excluded. Late finishes appear first, with up to eight rows shown and a View completed action for the full list. Completion is scoped by actual completion date, so the planned end can fall outside the selected period. Parent containers are excluded to avoid counting the same work twice.
+
+**Hours by Parent Task** shows the five largest groups by recorded subtask hours in the schedule window, with a View work shortcut for the full set. Shared-client subtasks count once for the selected client filter; hours are not split or added again for parent rollups. These are stored task totals, not hours worked on each calendar day. Accurate daily time-spent charts require dated time entries, which are not implemented.
+
+**Needs Attention** prioritizes current overdue tasks, blocked work in the schedule window, work due today, and completed scheduled videos with zero recorded subtask hours. It shows at most eight rows, with View all, edit links, quick status changes and subtask-hour saves. Top-level tasks link to add or edit subtasks instead of exposing an hour input. Actions use the existing write/cooldown guards and one follow-up task refresh.
+
+Tiles and chart bars open All tasks with an explicit Metrics filter and the relevant client/date context. Parent context is retained without including unrelated siblings. The filter reevaluates task changes, can be cleared explicitly, and is removed when ordinary task filters are changed. Returning to Metrics preserves its period/client selection. Review for invoicing carries a selected client and period into an empty invoice draft; it does not mark anything billed or overwrite an unsaved invoice without confirmation.
 ### Tasks and scheduling
 
 - Create, update, and delete tasks; organize work with parent tasks and subtasks.
