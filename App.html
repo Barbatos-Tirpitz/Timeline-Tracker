@@ -208,11 +208,52 @@
       gap: 14px;
       margin-bottom: 22px;
     }
-    #stats { grid-template-columns: repeat(5, minmax(100px, 1fr)); }
-    @media (max-width: 900px) { #stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    #stats, .metrics-summary { grid-template-columns: repeat(5, minmax(100px, 1fr)); }
+    @media (max-width: 900px) { #stats, .metrics-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     .hours-progress { width: 100%; height: 7px; display: block; margin-top: 8px; accent-color: var(--green); }
     .hours-progress.compact { display: inline-block; width: 45px; height: 5px; margin: 0 4px; vertical-align: middle; }
     .hours-progress-summary { margin: 12px 0; font-size: 12px; color: var(--muted); }
+    #view-dashboard .panel { overflow: visible; }
+    .metrics-controls { position: sticky; top: 0; z-index: 6; background: var(--surface); padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .metrics-controls .zoom-switch { flex-wrap: wrap; max-width: 100%; }
+    .metrics-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
+    .metrics-tile { text-align: left; color: var(--text); min-width: 0; width: 100%; }
+    .metrics-tile:hover:not(:disabled) { border-color: #85b8ff; background: #f7fbff; }
+    .metrics-tile:disabled { cursor: default; }
+    .metrics-tile .stat-foot { line-height: 1.5; }
+    .metrics-tile .hours-progress { appearance: none; -webkit-appearance: none; border: 0; background: #e9edf3; border-radius: 4px; }
+    .metrics-charts { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 28px; }
+    .metrics-section { min-width: 0; border-top: 1px solid var(--border); padding: 20px 0; }
+    .metrics-section h3 { margin: 0; font-size: 15px; }
+    .metrics-section-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .metrics-caption { font-size: 11px; color: var(--muted); line-height: 1.5; }
+    .metrics-legend { display: flex; gap: 16px; font-size: 11px; color: var(--muted); margin: 14px 0; }
+    .metrics-legend span { display: inline-flex; gap: 6px; align-items: center; }
+    .metrics-legend i { width: 10px; height: 10px; display: inline-block; border-radius: 2px; }
+    .metrics-chart-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+    .metrics-buckets { display: grid; grid-template-columns: repeat(var(--bucket-count), minmax(36px, 1fr)); gap: 4px; min-width: max-content; }
+    .metrics-bucket { min-width: 0; text-align: center; }
+    .metrics-bar-pair { display: flex; justify-content: center; height: 176px; border-bottom: 1px solid var(--border); }
+    .metrics-count-bar { position: relative; width: 24px; height: 100%; border: 0; padding: 0; background: transparent; color: var(--text); }
+    .metrics-count-bar:hover { background: #f1f5f9; }
+    .metrics-count-bar:focus-visible, .metrics-parent:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+    .metrics-bar-fill { position: absolute; bottom: 0; left: 3px; right: 3px; height: var(--fill-height); border-radius: 3px 3px 0 0; background: #b58105; }
+    .metrics-count-bar.completed .metrics-bar-fill { background: #1f845a; }
+    .metrics-bar-value { position: absolute; bottom: calc(var(--fill-height) + 4px); left: 0; right: 0; font-size: 11px; font-weight: 700; }
+    .metrics-bucket-label { display: block; font-size: 10px; color: var(--muted); margin-top: 8px; line-height: 1.4; }
+    .metrics-parent { display: block; width: 100%; padding: 10px 0; text-align: left; border: 0; background: transparent; color: var(--text); }
+    .metrics-parent:hover { background: #f7f8fa; }
+    .metrics-parent-label { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; margin-bottom: 7px; }
+    .metrics-parent-label span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .metrics-parent-label strong { white-space: nowrap; }
+    .metrics-parent-track { display: block; height: 9px; background: #edf0f4; border-radius: 3px; overflow: hidden; }
+    .metrics-parent-fill { display: block; height: 100%; background: var(--blue); border-radius: 3px; }
+    .metrics-task-actions { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; min-width: 240px; }
+    .metrics-task-actions input { width: 85px; }
+    .metrics-attention-name { min-width: 180px; overflow-wrap: anywhere; }
+    .metrics-zero { padding: 34px 12px; color: var(--muted); font-size: 12px; text-align: center; }
+    @media (max-width: 900px) { .metrics-charts { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+    @media (max-width: 600px) { .metrics-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } .metrics-tile { padding: 12px; } }
     .hours-progress::-webkit-progress-bar { background: #e9edf3; border-radius: 4px; }
     .hours-progress::-webkit-progress-value { background: var(--green); border-radius: 4px; }
 
@@ -428,6 +469,9 @@
     .client-input { display: flex; gap: 8px; align-items: center; }
     .client-input input { min-width: 0; flex: 1; }
     .client-cell { min-width: 140px; max-width: 260px; overflow-wrap: anywhere; }
+    .inline-hours { display: flex; align-items: center; gap: 6px; min-width: 170px; }
+    .inline-hours input { width: 80px; }
+    .inline-hours-note { color: var(--muted); font-size: 10px; margin-top: 5px; }
     .subtask-bulk { margin: 14px 0; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .subtask-bulk select { max-width: 100%; }
 
@@ -795,6 +839,14 @@
     .invoice-lines input { width: 100%; min-width: 80px; }
     .invoice-lines .description-input { min-width: 180px; }
     .invoice-lines td { padding: 8px; vertical-align: top; }
+    .invoice-readiness { margin: 12px 0 18px; padding: 12px 14px; border-left: 3px solid var(--green); background: #f1f8f4; font-size: 12px; }
+    .invoice-readiness.pending { border-color: var(--red); background: #fff4f1; }
+    .invoice-readiness summary { cursor: pointer; font-weight: 700; }
+    .invoice-readiness ul { margin: 10px 0 0; padding-left: 18px; }
+    .invoice-readiness li { margin: 6px 0; }
+    .invoice-readiness button { color: var(--text); font-weight: 400; overflow-wrap: anywhere; }
+    .invoice-field-error { display: block; color: var(--red); font-size: 11px; line-height: 1.4; margin-top: 5px; }
+    .invoice-field-error:empty { display: none; }
     .invoice-paper { padding: 28px; border-top: 2px solid var(--text); background: white; overflow-wrap: anywhere; }
     .invoice-paper-head { display: flex; justify-content: space-between; gap: 18px; flex-wrap: wrap; margin-bottom: 24px; }
     .invoice-paper h2 { font-size: 24px; margin-bottom: 8px; }
@@ -888,8 +940,8 @@
       <button class="nav-item" data-view="tasks">
         <span class="nav-icon">☷</span><span class="nav-text">All tasks</span>
       </button>
-      <button class="nav-item" data-view="dashboard">
-        <span class="nav-icon">▦</span><span class="nav-text">Dashboard</span>
+      <button class="nav-item" data-view="dashboard" aria-label="Metrics" title="Metrics">
+        <span class="nav-icon" aria-hidden="true">▦</span><span class="nav-text">Metrics</span>
       </button>
       <button class="nav-item" data-view="invoices" aria-label="Invoices" title="Invoices">
         <span class="nav-icon" aria-hidden="true">&#36;</span><span class="nav-text">Invoices</span>
@@ -927,14 +979,14 @@
         </div>
       </section>
 
-      <section class="stats" id="stats">
+      <section class="view active" id="view-timeline">
+      <section class="stats" id="stats" aria-label="Timeline summary">
         <div class="stat"><div class="stat-label">Total tasks</div><div class="stat-number">—</div></div>
         <div class="stat"><div class="stat-label">In progress</div><div class="stat-number">—</div></div>
         <div class="stat"><div class="stat-label">Completed</div><div class="stat-number">—</div></div>
         <div class="stat"><div class="stat-label">Blocked</div><div class="stat-number">—</div></div>
       </section>
 
-      <section class="view active" id="view-timeline">
         <div class="panel">
           <div class="panel-heading">
             <div>
@@ -966,7 +1018,7 @@
             <div class="zoom-switch">
               <button class="zoom-btn active" data-zoom="day" onclick="setZoom('day')">Day</button>
               <button class="zoom-btn" data-zoom="week" onclick="setZoom('week')">Weekly</button>
-              <button class="zoom-btn" data-zoom="fortnight" onclick="setZoom('fortnight')" title="14 days">Fortnightly</button>
+              <button class="zoom-btn" data-zoom="fortnight" onclick="setZoom('fortnight')" title="14 days">Biweekly</button>
               <button class="zoom-btn" data-zoom="month" onclick="setZoom('month')">Monthly</button>
             </div>
           </div>
@@ -999,7 +1051,7 @@
               <label>Category<select class="field-control" id="taskCategoryFilter" onchange="changeTaskFilters()"><option value="">All categories</option></select></label>
               <label>Client<select class="field-control" id="taskClientFilter" onchange="changeTaskFilters()"><option value="">All clients</option></select></label>
               <label>Priority<select class="field-control" id="taskPriorityFilter" onchange="changeTaskFilters()"><option value="">All priorities</option><option>High</option><option>Medium</option><option>Low</option></select></label>
-              <label>Period<select class="field-control" id="taskPeriod" onchange="setTaskPeriod(this.value)"><option value="all">All dates</option><option value="weekly">Weekly</option><option value="fortnightly">Fortnightly (14 days)</option><option value="monthly">Monthly</option><option value="custom">Custom dates</option></select></label>
+              <label>Period<select class="field-control" id="taskPeriod" onchange="setTaskPeriod(this.value)"><option value="all">All dates</option><option value="weekly">Weekly</option><option value="fortnightly">Biweekly (14 days)</option><option value="monthly">Monthly</option><option value="custom">Custom dates</option></select></label>
               <label>Reference date<input class="field-control" type="date" id="taskPeriodAnchor" onchange="state.list.anchor=parseDate(this.value);if(!['all','custom'].includes(state.list.period))setTaskPeriod(state.list.period)"></label>
               <button class="btn" title="Previous period" aria-label="Previous task period" onclick="moveTaskPeriod(-1)">&#8592;</button>
               <button class="btn" title="Next period" aria-label="Next task period" onclick="moveTaskPeriod(1)">&#8594;</button>
@@ -1009,6 +1061,7 @@
             </div>
           </div>
           <div class="list-controls" id="bulkControls"></div>
+          <div class="data-notice" id="metricTaskFocus" hidden></div>
           <div class="table-wrap" id="taskTable"></div>
           <div class="list-controls" id="taskPagination"></div>
         </div>
@@ -1017,7 +1070,7 @@
       <section class="view" id="view-dashboard">
         <div class="panel">
           <div class="panel-heading">
-            <div><h2>Project overview</h2><div class="panel-subtitle">Current task status and workload.</div></div>
+            <div><h2>Period metrics</h2><div class="panel-subtitle">Tasks, hours, and completion.</div></div>
           </div>
           <div id="dashboardContent" style="padding:22px"></div>
         </div>
@@ -1166,6 +1219,8 @@
     zoom: 'day',
     anchor: null,
     editId: null,
+    taskBaseline: null,
+    taskReturnFocus: null,
     activeView: 'timeline',
     loaded: false,
     loading: false,
@@ -1189,6 +1244,7 @@
       period: 'all', anchor: null,
       page: 1, pageSize: 25, sort: 'id', direction: 1,
       collapsed: new Set(), childPages: new Map(), selected: new Set(), visibleIds: [],
+      hourDrafts: new Map(),
       filters: { search: '', status: '', category: '', client: '', priority: '', from: '', to: '' }
     },
     categories: [
@@ -1400,6 +1456,9 @@
       state.list.selected.forEach(id => {
         if (!state.taskById.has(id)) state.list.selected.delete(id);
       });
+      state.list.hourDrafts.forEach((value, id) => {
+        if (!state.taskById.has(id) || state.childrenByParent.has(id)) state.list.hourDrafts.delete(id);
+      });
       state.hasBackendTasks = state.tasks.length > 0;
       state.loaded = true;
       state.loading = false;
@@ -1423,6 +1482,7 @@
     $('taskForm').inert = state.writing || state.syncing;
     $('taskForm').setAttribute('aria-busy', String(state.writing || state.syncing));
     updateInvoiceBusy();
+    updateMetricsBusy();
     notice.hidden = !state.loading && !state.error && !state.writing;
     notice.classList.toggle('error', Boolean(state.error));
     notice.innerHTML = state.error
@@ -1540,12 +1600,18 @@
   }
 
   function renderStats(tasks = state.tasks, scope = 'Across all categories') {
+    $('stats').hidden = state.activeView !== 'timeline';
+    if (state.activeView !== 'timeline') return;
+    $('stats').innerHTML = statsMarkup(tasks, scope);
+  }
+
+  function statsMarkup(tasks, scope) {
     const count = status => tasks.filter(t => t.status === status).length;
     const total = tasks.length;
     const done = count('Done');
     const hours = taskHourMetrics(tasks);
 
-    $('stats').innerHTML = [
+    return [
       ['Total tasks', total, scope],
       ['In progress', count('In Progress'), 'Currently being worked on'],
       ['Completed', done, total ? `${Math.round(done / total * 100)}% of these tasks` : 'No tasks yet'],
@@ -1641,6 +1707,7 @@ function render(scrolling = false) {
 
   // Backend confirms whether the database contains tasks.
   if (!state.hasBackendTasks) {
+    renderStats([], 'No tasks yet');
     $('timelineShell').innerHTML = `
       <div class="empty">
         <strong>No tasks yet</strong>
@@ -1713,6 +1780,10 @@ filtered.forEach(t => {
           !t.end ||
           (t.start <= end && t.end >= start)
         );
+
+    const summaryTasks = state.zoom === 'day' ? filtered : filtered.filter(task =>
+      !task.start || !task.end || (task.start <= end && task.end >= start));
+    if (!scrolling) renderStats(summaryTasks, `${formatDisplayDate(start, true)} - ${formatDisplayDate(end, true)}`);
 
       const rowHeight = 54;
     const headerHeight = state.zoom === 'day' ? 59 : 54;
@@ -2051,7 +2122,11 @@ html += `<div class="task-cell"
   function renderTaskTable() {
     if (state.activeView !== 'tasks' || !state.loaded) return;
     const list = state.list;
-    const { groups, matchingCount } = taskGroups(state.tasks, list.filters, list.sort, list.direction);
+    const focus = list.metricFocus;
+    const filters = focus ? { ...list.filters, taskIds: new Set(metricsFocusIds(state.tasks, focus, parseDate(state.spreadsheetToday) || new Date())) } : list.filters;
+    const { groups, matchingCount } = taskGroups(state.tasks, filters, list.sort, list.direction);
+    $('metricTaskFocus').hidden = !focus;
+    $('metricTaskFocus').innerHTML = focus ? `${esc(focus.label)} · ${displayDateRange(focus.start, focus.end)} <button class="btn" onclick="clearMetricTaskFocus()">Clear metric filter</button>` : '';
     const pageCount = Math.max(1, Math.ceil(groups.length / list.pageSize));
     list.page = Math.min(pageCount, Math.max(1, list.page));
     list.visibleIds = [];
@@ -2065,7 +2140,7 @@ html += `<div class="task-cell"
           ${childCount ? `<button class="group-toggle" aria-label="${list.collapsed.has(task.id) ? 'Expand' : 'Collapse'} subtasks of ${esc(task.name)}" aria-expanded="${!list.collapsed.has(task.id)}" onclick="toggleListGroup(${argument})">${list.collapsed.has(task.id) ? '&#9654;' : '&#9660;'}</button>` : '<span class="group-toggle"></span>'}
           <div><a href="#" onclick="openEdit(${argument});return false">${esc(task.name || 'Untitled task')}</a>
           <div class="task-meta">${esc(task.id)}${contextOnly ? ' · Parent context' : ''}${!child && task.parentTaskId && !state.taskById.has(task.parentTaskId) ? ' · Parent unavailable' : ''}${childCount ? ` · ${childCount} matching subtasks` : ''}</div></div></div></td>
-        <td>${esc(task.category)}</td><td class="client-cell">${esc((task.clients || []).join(', ') || 'Unassigned')}</td><td>${esc(task.priority)}</td><td>${formatHours(task.totalHours || 0)} h</td>
+        <td>${esc(task.category)}</td><td class="client-cell">${esc((task.clients || []).join(', ') || 'Unassigned')}</td><td>${esc(task.priority)}</td><td>${state.childrenByParent.has(task.id) || contextOnly ? `<span title="Calculated from subtasks">${formatHours(task.totalHours || 0)} h</span>` : `<div class="inline-hours"><input class="field-control" id="inlineHours-${esc(task.id)}" type="number" min="0" max="10000" step="0.01" aria-label="Hours for ${esc(task.name)}" value="${esc(list.hourDrafts.has(task.id) ? list.hourDrafts.get(task.id) : task.hours || 0)}" ${busy ? 'disabled' : ''} oninput="state.list.hourDrafts.set(${argument},this.value);updateInlineHoursState(${argument})" onkeydown="if(event.key==='Enter'){event.preventDefault();saveInlineTaskHours(${argument})}"><button class="btn" id="inlineSave-${esc(task.id)}" ${busy ? 'disabled' : ''} title="Save hours for ${esc(task.name)}" onclick="saveInlineTaskHours(${argument})">Save</button></div><output class="inline-hours-note" id="inlineNote-${esc(task.id)}" aria-live="polite"></output>`}</td>
         <td><select class="field-control row-status" aria-label="Status for ${esc(task.name)}" ${busy || contextOnly ? 'disabled' : ''} onchange="changeInlineStatus(${argument},this)">
           ${['To Do', 'In Progress', 'Blocked', 'Done'].map(status => `<option ${task.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select></td>
         <td>${displayDate(task.start)}</td><td>${displayDate(task.end)}</td></tr>`;
@@ -2100,10 +2175,12 @@ html += `<div class="task-cell"
       <label>Sort <select class="field-control" aria-label="Sort tasks" onchange="sortTasks(this.value)">${[['id', 'Task ID'], ...columns].map(([key, title]) => `<option value="${key}" ${list.sort === key ? 'selected' : ''}>${title}</option>`).join('')}</select></label>
       <button class="btn" onclick="sortTasks(state.list.sort)" aria-label="Reverse sort direction">${list.direction === 1 ? '&#8593;' : '&#8595;'}</button>`;
     updateSelectionControls();
+    document.querySelectorAll('[id^="inlineHours-"]').forEach(input => updateInlineHoursState(input.id.slice('inlineHours-'.length)));
     refreshDateInputLabels();
   }
 
   function taskMatches(task, filters) {
+    if (filters.taskIds && !filters.taskIds.has(task.id)) return false;
     if (filters.from && filters.to && filters.to < filters.from) return false;
     if (filters.search && !(task.searchText || `${task.id} ${task.name} ${task.category} ${task.description}`.toLowerCase()).includes(filters.search)) return false;
     if (filters.status && task.status !== filters.status) return false;
@@ -2163,6 +2240,7 @@ html += `<div class="task-cell"
 
   function changeTaskFilters(customDates = false) {
     const list = state.list;
+    list.metricFocus = null;
     if (customDates) {
       list.period = 'custom';
       $('taskPeriod').value = 'custom';
@@ -2336,6 +2414,80 @@ html += `<div class="task-cell"
     renderDashboard();
   }
 
+  function buildMetricsModel(tasks, range, client, today, period) {
+    const parents = new Set(tasks.map(task => task.parentTaskId).filter(Boolean));
+    const byId = new Map(tasks.map(task => [task.id, task]));
+    const clientTasks = tasks.filter(task => clientMatches(task, client));
+    const scoped = dashboardTasks(tasks, range, client);
+    const leaves = clientTasks.filter(task => !parents.has(task.id));
+    const scopedLeaves = scoped.filter(task => !parents.has(task.id));
+    const inRange = value => {
+      const date = parseDate(value);
+      return date && date >= range.start && date <= range.end;
+    };
+    const completed = clientTasks.filter(task => task.status === 'Done' && inRange(task.actualEndDate));
+    const overdue = clientTasks.filter(task => task.status !== 'Done' && task.end && task.end < today);
+    const blocked = scoped.filter(task => task.status === 'Blocked');
+    const dueToday = clientTasks.filter(task => task.status !== 'Done' && task.end && dateKey(task.end) === dateKey(today));
+    const missingHours = scopedLeaves.filter(task => task.category === 'Video editing' && task.status === 'Done' && !Number(task.hours || 0));
+    const hourGroups = new Map();
+    scopedLeaves.forEach(task => {
+      const parent = byId.get(task.parentTaskId) || task;
+      if (!hourGroups.has(parent.id)) hourGroups.set(parent.id, { id: parent.id, name: parent.name, units: 0, completedUnits: 0, ids: [] });
+      const group = hourGroups.get(parent.id);
+      const units = Math.round(Number(task.hours || 0) * 100);
+      group.units += units;
+      if (task.status === 'Done') group.completedUnits += units;
+      group.ids.push(task.id);
+    });
+    const groups = [...hourGroups.values()].sort((first, second) => second.units - first.units || first.name.localeCompare(second.name, undefined, { numeric: true }));
+    const bucketSize = period === 'monthly' ? 7 : 1;
+    const buckets = [];
+    let cursor = new Date(range.start);
+    while (cursor <= range.end) {
+      const start = new Date(cursor);
+      const next = period === 'yearly' ? new Date(start.getFullYear(), start.getMonth() + 1, 1) : addDays(start, bucketSize);
+      const end = addDays(next, -1) > range.end ? new Date(range.end) : addDays(next, -1);
+      buckets.push({ key: dateKey(start), start, end, dueIds: [], completedIds: [] });
+      cursor = next;
+    }
+    const bucketIndex = date => {
+      if (!date || date < range.start || date > range.end) return -1;
+      return period === 'yearly' ? date.getMonth() - range.start.getMonth() : Math.floor(dayDiff(range.start, date) / bucketSize);
+    };
+    leaves.forEach(task => {
+      const dueIndex = bucketIndex(task.end);
+      if (dueIndex >= 0) buckets[dueIndex].dueIds.push(task.id);
+      const completedIndex = task.status === 'Done' ? bucketIndex(parseDate(task.actualEndDate)) : -1;
+      if (completedIndex >= 0) buckets[completedIndex].completedIds.push(task.id);
+    });
+    const attention = [];
+    const seen = new Set();
+    [[overdue, 'Overdue now'], [blocked, 'Blocked'], [dueToday, 'Due today'], [missingHours, 'Needs hours']].forEach(([items, reason]) => {
+      items.slice().sort((first, second) => (first.end || today) - (second.end || today) || first.id.localeCompare(second.id)).forEach(task => {
+        if (seen.has(task.id)) return;
+        seen.add(task.id);
+        attention.push({ task, reason });
+      });
+    });
+    return { scoped, completed, overdue, blocked, dueToday, missingHours, groups, buckets, attention,
+      hours: taskHourMetrics(scoped, tasks), parents: scoped.filter(task => !task.parentTaskId).length,
+      subtasks: scoped.filter(task => task.parentTaskId).length };
+  }
+
+  function metricsFocusIds(tasks, focus, today) {
+    const range = { start: parseDate(focus.start), end: parseDate(focus.end) };
+    const model = buildMetricsModel(tasks, range, focus.client, today, focus.period);
+    if (focus.kind === 'completed') return model.completed.map(task => task.id);
+    if (focus.kind === 'overdue') return model.overdue.map(task => task.id);
+    if (focus.kind === 'blocked') return model.blocked.map(task => task.id);
+    if (focus.kind === 'hours') return model.groups.flatMap(group => group.ids);
+    if (focus.kind === 'attention') return model.attention.map(item => item.task.id);
+    if (focus.kind === 'parent') return model.groups.find(group => group.id === focus.key)?.ids || [];
+    const bucket = model.buckets.find(item => item.key === focus.key);
+    return focus.kind === 'dueBucket' ? bucket?.dueIds || [] : focus.kind === 'completedBucket' ? bucket?.completedIds || [] : [];
+  }
+
   function moveDashboardPeriod(direction) {
     const dashboard = state.dashboard;
     const { start } = dashboardRange(dashboard.period, dashboard.anchor);
@@ -2349,18 +2501,24 @@ html += `<div class="task-cell"
     if (state.activeView !== 'dashboard' || !state.loaded) return;
     const dashboard = state.dashboard;
     if (!dashboard.anchor) dashboard.anchor = parseDate(state.spreadsheetToday) || new Date();
+    persistMetricsPreferences();
     const range = dashboardRange(dashboard.period, dashboard.anchor);
-    const tasks = dashboardTasks(state.tasks, range, dashboard.client);
-    const rangeLabel = `${formatDisplayDate(range.start, true)} - ${formatDisplayDate(range.end, true)}`;
-    renderStats(tasks, rangeLabel);
-    const count = s => tasks.filter(t => t.status === s).length;
-    const total = tasks.length;
-    const pct = total ? Math.round(count('Done') / total * 100) : 0;
+    const today = parseDate(state.spreadsheetToday) || new Date();
+    const model = buildMetricsModel(state.tasks, range, dashboard.client, today, dashboard.period);
+    dashboard.model = model;
+    const total = model.scoped.length;
+    const completedParents = model.completed.filter(task => !task.parentTaskId).length;
+    const tiles = [
+      ['Completed', model.completed.length, `${completedParents} parent/standalone · ${model.completed.length - completedParents} subtasks`, 'completed'],
+      ['Recorded hours', formatHours(model.hours.total), `${formatHours(model.hours.completed)} h on completed work · scheduled scope`, 'hours'],
+      ['Overdue now', model.overdue.length, 'Current unfinished work · selected client', 'overdue'],
+      ['Blocked', model.blocked.length, 'Current status · scheduled scope', 'blocked']
+    ];
 
     $('dashboardContent').innerHTML = `
-      <div class="filters" style="margin-bottom:18px">
+      <div class="filters metrics-controls">
         <div class="zoom-switch" role="group" aria-label="Dashboard period">
-          ${['daily', 'weekly', 'fortnightly', 'monthly', 'yearly'].map(period => `<button type="button" class="zoom-btn ${dashboard.period === period ? 'active' : ''}" aria-pressed="${dashboard.period === period}" title="${period === 'fortnightly' ? '14 days' : period}" onclick="setDashboardPeriod('${period}')">${period[0].toUpperCase() + period.slice(1)}</button>`).join('')}
+          ${['daily', 'weekly', 'fortnightly', 'monthly', 'yearly'].map(period => `<button type="button" class="zoom-btn ${dashboard.period === period ? 'active' : ''}" aria-pressed="${dashboard.period === period}" title="${period === 'fortnightly' ? '14 days' : period}" onclick="setDashboardPeriod('${period}')">${period === 'fortnightly' ? 'Biweekly' : period[0].toUpperCase() + period.slice(1)}</button>`).join('')}
         </div>
         <button class="btn" aria-label="Previous dashboard period" title="Previous period" onclick="moveDashboardPeriod(-1)">&#8592;</button>
         <label>Date <input class="field-control" id="dashboardAnchor" type="date" value="${dateKey(dashboard.anchor)}" onchange="if(parseDate(this.value)){state.dashboard.anchor=parseDate(this.value);renderDashboard()}"></label>
@@ -2368,33 +2526,157 @@ html += `<div class="task-cell"
         <button class="btn" onclick="state.dashboard.anchor=parseDate(state.spreadsheetToday)||new Date();renderDashboard()">Today</button>
         <label>Client <select class="field-control" id="dashboardClient" onchange="state.dashboard.client=this.value;renderDashboard()">${clientFilterOptions(dashboard.client)}</select></label>
       </div>
-      <div class="panel-subtitle" style="margin-bottom:18px">${displayDateRange(range.start, range.end)} · ${total} scheduled tasks${dashboard.client ? ' · ' + esc(dashboard.client === 'unassigned' ? 'Unassigned' : dashboard.client.slice(7)) : ''}</div>
-      ${total ? '' : '<div class="subtask-empty">No tasks scheduled for this period.</div>'}
-      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px">
-        <strong>Overall completion</strong><strong>${pct}%</strong>
+      <div class="panel-subtitle" style="margin-top:14px">${displayDateRange(range.start, range.end)} · ${total} scheduled tasks · ${model.parents} parent/standalone · ${model.subtasks} subtasks${dashboard.client ? ' · ' + esc(dashboard.client === 'unassigned' ? 'Unassigned' : dashboard.client.slice(7)) : ''}</div>
+      <section class="metrics-tiles" id="dashboardMetrics" aria-label="Selected period metrics">${tiles.map(([label, value, note, kind]) => `<button type="button" class="stat metrics-tile" onclick="openMetricTasks('${kind}')"><div class="stat-label">${label}</div><div class="stat-number">${value}</div><div class="stat-foot">${note}</div>${kind === 'hours' ? renderHoursProgress(model.hours.completed, model.hours.total, false, false) : ''}</button>`).join('')}</section>
+      <div class="metrics-charts">
+        <section class="metrics-section" aria-labelledby="metricsDeliveryHeading"><div class="metrics-section-head"><h3 id="metricsDeliveryHeading">Due vs Completed</h3></div><div class="metrics-caption">Individual tasks · planned deadlines and actual completion dates</div>${renderMetricsDeliveryChart(model, dashboard.period)}</section>
+        <section class="metrics-section" aria-labelledby="metricsHoursHeading"><div class="metrics-section-head"><h3 id="metricsHoursHeading">Hours by Parent Task</h3><button class="subtask-link" onclick="openMetricTasks('hours')">View work</button></div><div class="metrics-caption">Recorded task totals · selected schedule window</div>${renderMetricsParentChart(model)}</section>
       </div>
-      <div style="height:10px;background:#e9edf3;border-radius:9px;overflow:hidden;margin-bottom:28px">
-        <div style="width:${pct}%;height:100%;background:#1f845a;border-radius:9px"></div>
-      </div>
-      ${['To Do','In Progress','Blocked','Done'].map(s => {
-        const n = count(s);
-        const percent = total ? n / total * 100 : 0;
-        return `<div style="margin:20px 0">
-          <div style="display:flex;justify-content:space-between;margin-bottom:8px">
-            <span class="pill" style="background-color:${barColor(s)};color:#fff">${esc(s)}</span>
-            <strong>${n}</strong>
-          </div>
-          <div style="height:7px;background:#edf0f4;border-radius:8px;overflow:hidden">
-            <div style="width:${percent}%;height:100%;background:${barColor(s)}"></div>
-          </div>
-        </div>`;
-      }).join('')}
-      <div class="invoice-dashboard"><strong>Biweekly invoices</strong><span class="subtitle">14-day billing periods</span><button class="btn" onclick="switchView('invoices')">Open invoices</button></div>
+      <section class="metrics-section" aria-labelledby="metricsAttentionHeading"><div class="metrics-section-head"><h3 id="metricsAttentionHeading">Needs Attention</h3><button class="subtask-link" onclick="openMetricTasks('attention')">View all (${model.attention.length})</button></div><div class="metrics-caption">Current overdue/due-today work; blocked and missing-hour work in the selected schedule window</div>${renderMetricsAttention(model)}</section>
+      <div class="invoice-dashboard"><strong>Invoice review</strong><span class="subtitle">${dashboard.client && dashboard.client !== 'unassigned' ? esc(dashboard.client.slice(7)) : 'Select a client to prepare a draft'}</span><button class="btn" data-metric-command data-metric-invoice="true" ${!dashboard.client || dashboard.client === 'unassigned' ? 'disabled' : ''} onclick="reviewMetricsInvoice()">Review for invoicing</button><button class="btn" onclick="switchView('invoices')">Saved invoices</button></div>
       `;
     refreshDateInputLabels();
+    updateMetricsBusy();
+  }
+
+  function persistMetricsPreferences() {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      localStorage.setItem('timeline.metrics.preferences', JSON.stringify({ period: state.dashboard.period, client: state.dashboard.client, anchor: dateKey(state.dashboard.anchor) }));
+    } catch { }
+  }
+
+  function restoreMetricsPreferences() {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      const saved = JSON.parse(localStorage.getItem('timeline.metrics.preferences') || 'null');
+      if (!saved || !['daily', 'weekly', 'fortnightly', 'monthly', 'yearly'].includes(saved.period)) return;
+      state.dashboard.period = saved.period;
+      state.dashboard.anchor = parseDate(saved.anchor);
+      state.dashboard.client = typeof saved.client === 'string' && (saved.client === '' || saved.client === 'unassigned' || saved.client.startsWith('client:')) ? saved.client : '';
+    } catch { }
+  }
+
+  function openMetricTasks(kind, key = '') {
+    const dashboard = state.dashboard;
+    const range = dashboardRange(dashboard.period, dashboard.anchor);
+    const labels = { completed: 'Actual completions', overdue: 'Overdue now', blocked: 'Blocked scheduled work', hours: 'Recorded-hour work', attention: 'Needs Attention', parent: 'Work by parent', dueBucket: 'Planned deadlines', completedBucket: 'Actual completions' };
+    const focus = { kind, key, label: labels[kind] || 'Metrics', start: dateKey(range.start), end: dateKey(range.end), client: dashboard.client, period: dashboard.period };
+    ['taskSearch', 'taskStatusFilter', 'taskCategoryFilter', 'taskPriorityFilter', 'taskDateFrom', 'taskDateTo'].forEach(id => { $(id).value = ''; });
+    $('taskClientFilter').value = dashboard.client;
+    $('taskPeriod').value = 'all';
+    $('taskPeriodAnchor').value = dateKey(dashboard.anchor);
+    state.list.filters = { search: '', status: '', category: '', priority: '', from: '', to: '', client: dashboard.client };
+    state.list.period = 'all';
+    state.list.anchor = new Date(dashboard.anchor);
+    state.list.metricFocus = focus;
+    state.list.page = 1;
+    state.list.childPages.clear();
+    state.list.collapsed.clear();
+    state.list.selected.clear();
+    switchView('tasks');
+  }
+
+  function clearMetricTaskFocus() {
+    state.list.metricFocus = null;
+    state.list.page = 1;
+    renderTaskTable();
+  }
+
+  function updateMetricsBusy() {
+    const busy = state.writing || state.syncing;
+    document.querySelectorAll('[data-metric-command]').forEach(control => {
+      control.disabled = busy || (control.dataset.metricInvoice === 'true' && (!state.dashboard.client || state.dashboard.client === 'unassigned'));
+    });
+  }
+
+  function saveMetricsHours(id) {
+    saveTaskHoursInput(id, $('metricHours-' + id));
+  }
+
+  function saveInlineTaskHours(id) {
+    saveTaskHoursInput(id, $('inlineHours-' + id), () => state.list.hourDrafts.delete(id));
+  }
+
+  function updateInlineHoursState(id) {
+    const input = $('inlineHours-' + id);
+    const task = state.taskById.get(id);
+    if (!input || !task) return;
+    const valid = input.checkValidity();
+    const changed = Number(input.value || 0) !== Number(task.hours || 0);
+    $('inlineSave-' + id).disabled = !valid || !changed || state.writing || state.syncing;
+    $('inlineNote-' + id).textContent = !valid ? 'Check hours' : changed ? 'Unsaved' : '';
+  }
+
+  function saveTaskHoursInput(id, input, onSaved = () => {}) {
+    if (state.writing || state.syncing) return;
+    const task = state.taskById.get(id);
+    if (!task || !input || !input.checkValidity()) { if (input) input.reportValidity(); return; }
+    mutationRunner().withSuccessHandler(() => {
+      onSaved();
+      showToast(`Updated hours for ${taskLabel(task)}.`);
+      loadTasks();
+    }).withFailureHandler(error => showToast(`Unable to update hours for ${taskLabel(task)}: ` + (error.message || error)))
+      .updateTaskHours(id, input.value);
+  }
+
+  function hasInlineHourChanges() {
+    for (const [id, value] of state.list.hourDrafts) {
+      const task = state.taskById.get(id);
+      if (task && Number(value || 0) !== Number(task.hours || 0)) return true;
+    }
+    return false;
+  }
+
+  function reviewMetricsInvoice() {
+    if (state.writing || state.syncing || !state.dashboard.client.startsWith('client:')) return;
+    const range = dashboardRange(state.dashboard.period, state.dashboard.anchor);
+    state.invoices.pendingMetricsDraft = { client: state.dashboard.client.slice(7), start: dateKey(range.start), end: dateKey(range.end) };
+    switchView('invoices');
+    openPendingMetricsInvoice();
+  }
+
+  function openPendingMetricsInvoice() {
+    const workspace = state.invoices;
+    if (!workspace.pendingMetricsDraft || !workspace.loaded || workspace.loading) return;
+    const draft = workspace.pendingMetricsDraft;
+    workspace.pendingMetricsDraft = null;
+    startNewInvoice(draft.client, draft.start, draft.end, dayDiff(parseDate(draft.start), parseDate(draft.end)) === 13 ? 'fortnight' : 'custom');
+  }
+
+  function renderMetricsDeliveryChart(model, period) {
+    const maximum = Math.max(0, ...model.buckets.flatMap(bucket => [bucket.dueIds.length, bucket.completedIds.length]));
+    if (!maximum) return '<div class="metrics-zero">No deadlines or actual completions in this period.</div>';
+    return `<div class="metrics-legend"><span><i style="background:#b58105"></i>Due</span><span><i style="background:#1f845a"></i>Completed</span></div><div class="metrics-chart-scroll"><div class="metrics-buckets" style="--bucket-count:${model.buckets.length}">${model.buckets.map(bucket => {
+      const label = period === 'yearly' ? COMPACT_MONTH_NAMES[bucket.start.getMonth()] : formatDisplayDate(bucket.start, true, false);
+      return `<div class="metrics-bucket"><div class="metrics-bar-pair">${[['dueIds', 'Due', 'dueBucket'], ['completedIds', 'Completed', 'completedBucket']].map(([key, title, kind]) => {
+        const count = bucket[key].length;
+        const height = count / maximum * 84;
+        const description = `${title}: ${count} tasks, ${formatDisplayDate(bucket.start)} - ${formatDisplayDate(bucket.end)}`;
+        return `<button type="button" class="metrics-count-bar ${kind === 'completedBucket' ? 'completed' : ''}" style="--fill-height:${height}%" title="${esc(description)}" aria-label="${esc(description)}" onclick="openMetricTasks('${kind}',${esc(JSON.stringify(bucket.key))})"><span class="metrics-bar-value">${count}</span><span class="metrics-bar-fill" aria-hidden="true"></span></button>`;
+      }).join('')}</div><span class="metrics-bucket-label">${esc(label)}${dateKey(bucket.start) !== dateKey(bucket.end) && period !== 'yearly' ? '<br>- ' + bucket.end.getDate() : ''}</span></div>`;
+    }).join('')}</div></div>`;
+  }
+
+  function renderMetricsParentChart(model) {
+    const groups = model.groups.filter(group => group.units > 0);
+    const maximum = Math.max(1, ...groups.map(group => group.units));
+    if (!groups.length) return '<div class="metrics-zero">No recorded hours in this schedule window.</div>';
+    return groups.slice(0, 5).map(group => `<button type="button" class="metrics-parent" onclick="openMetricTasks('parent',${esc(JSON.stringify(group.id))})" title="${esc(group.name)}: ${formatHours(group.units / 100)} hours" aria-label="${esc(group.name)}, ${formatHours(group.units / 100)} recorded hours"><span class="metrics-parent-label"><span>${esc(group.name || group.id)}</span><strong>${formatHours(group.units / 100)} h</strong></span><span class="metrics-parent-track" aria-hidden="true"><span class="metrics-parent-fill" style="width:${group.units / maximum * 100}%"></span></span><span class="metrics-caption">${formatHours(group.completedUnits / 100)} h on completed work</span></button>`).join('');
+  }
+
+  function renderMetricsAttention(model) {
+    if (!model.attention.length) return '<div class="metrics-zero">No overdue, blocked, due-today, or missing-hour tasks for this client and scope.</div>';
+    return `<div class="table-wrap"><table><thead><tr><th>Task</th><th>Attention</th><th>Due</th><th>Quick actions</th></tr></thead><tbody>${model.attention.slice(0, 8).map(({ task, reason }) => {
+      const parent = state.taskById.get(task.parentTaskId);
+      const hasChildren = state.childrenByParent.has(task.id);
+      const argument = esc(JSON.stringify(task.id));
+      return `<tr><td class="metrics-attention-name"><button class="subtask-link" onclick="openEdit(${argument})">${esc(task.name || task.id)}</button><div class="task-meta">${esc(task.id)}${parent ? ' · ' + esc(parent.name) : ''}</div></td><td><span class="pill ${reason === 'Overdue now' ? 'blocked' : ''}">${reason}</span></td><td>${displayDate(task.end, true)}</td><td><div class="metrics-task-actions"><select class="field-control" data-metric-command aria-label="Status for ${esc(task.name)}" onchange="updateSelectedStatuses([${argument}],this.value)">${['To Do', 'In Progress', 'Blocked', 'Done'].map(status => `<option ${task.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select>${hasChildren ? `<button class="btn" onclick="openEdit(${argument})">Edit subtasks</button>` : `<input class="field-control" id="metricHours-${esc(task.id)}" aria-label="Hours for ${esc(task.name)}" type="number" min="0" max="10000" step="0.01" value="${esc(task.hours || 0)}"><button class="btn" data-metric-command onclick="saveMetricsHours(${argument})">Save hours</button>`}</div></td></tr>`;
+    }).join('')}</tbody></table></div>`;
   }
 
   function switchView(view) {
+    if (view !== state.activeView && state.taskBaseline && !closeModal()) return;
     state.activeView = view;
     document.querySelectorAll('.nav-item[data-view]').forEach(b =>
       b.classList.toggle('active', b.dataset.view === view));
@@ -2404,14 +2686,13 @@ html += `<div class="task-cell"
     const titles = {
       timeline: ['Task Timeline', 'Plan, track, and deliver your video projects.'],
       tasks: ['All tasks', 'View and manage every task in your project.'],
-      dashboard: ['Dashboard', 'See your project progress at a glance.'],
+      dashboard: ['Metrics', 'Task and hours metrics.'],
       invoices: ['Invoices', 'Biweekly billing and client copies.']
     };
 
     $('pageTitle').textContent = titles[view][0];
     $('pageSubtitle').textContent = titles[view][1];
-    $('stats').hidden = view === 'invoices';
-    if (view !== 'dashboard') renderStats();
+    $('stats').hidden = view !== 'timeline';
     renderActiveView();
   }
 
@@ -2665,8 +2946,10 @@ function createSubtask() {
   }
   const panel = state.subtaskPanel;
   panel.draft = $('newSubtaskName').value;
+  const creationKey = JSON.stringify([panel.draft, panel.quantity]);
   mutationRunner().withSuccessHandler(result => {
     panel.lastCreated = result.created;
+    panel.createdDraftKey = creationKey;
     panel.page = Math.max(1, Math.ceil(((state.childrenByParent.get(parent.id) || []).length + result.created) / 25));
     showToast(`Created ${result.created} subtasks under ${taskLabel(parent)}.`);
     loadTasks();
@@ -2832,6 +3115,7 @@ function createSubtask() {
     const status = $('panelBulkStatus').value;
     const runner = mutationRunner().withSuccessHandler(() => {
       if (action === 'delete') ids.forEach(id => panel.selected.delete(id));
+      if (action === 'edit') panel.appliedPatchKey = JSON.stringify(patch);
       showToast(`${action === 'delete' ? 'Deleted' : action === 'status' ? 'Status set to ' + status + ' for' : 'Updated'} ${summary} under ${taskLabel(parent)}.`);
       loadTasks();
     }).withFailureHandler(error => showPanelError('Subtask update failed: ' + (error.message || error)));
@@ -2935,6 +3219,8 @@ function createSubtask() {
       showToast('Wait for tasks to finish loading.');
       return;
     }
+    if (!confirmTaskDiscard()) return;
+    if (!state.taskBaseline) state.taskReturnFocus = document.activeElement;
     state.editId = null;
 
     resetSubtaskPanel();
@@ -2974,6 +3260,7 @@ function createSubtask() {
 
     $('taskModal').classList.add('open');
     refreshDateInputLabels();
+    state.taskBaseline = captureTaskForm();
     $('taskName').focus();
   }
 
@@ -2992,6 +3279,8 @@ function populateParentTaskOptions() {
     if (state.writing || state.syncing) return;
     const t = state.tasks.find(t => t.id === id);
     if (!t) return;
+    if (!confirmTaskDiscard()) return;
+    if (!state.taskBaseline) state.taskReturnFocus = document.activeElement;
 
     state.editId = id;
     $('taskForm').reset();
@@ -3023,13 +3312,53 @@ function populateParentTaskOptions() {
     renderSubtaskPanel(t);
     $('taskModal').classList.add('open');
     refreshDateInputLabels();
+    state.taskBaseline = captureTaskForm();
+    $('taskName').focus();
   }
 
-  function closeModal() {
-    if (state.writing) return;
+  function captureTaskForm() {
+    return {
+      name: $('taskName').value.trim(), category: $('category').value, priority: $('priority').value,
+      start: $('startDate').value, end: $('endDate').value, description: $('description').value.trim(),
+      parent: state.editId ? null : $('parentTaskId').value,
+      status: state.editId ? $('taskStatus').value : null,
+      hours: $('taskHours').readOnly ? null : Number($('taskHours').value || 0),
+      clients: normalizeClientNames(state.clientSelections.taskClients || [])
+    };
+  }
+
+  function taskFormHasChanges(ignoreStatus = false) {
+    if (!state.taskBaseline) return false;
+    const current = captureTaskForm();
+    const baseline = { ...state.taskBaseline };
+    if ($('taskHours').readOnly) current.hours = baseline.hours;
+    if (ignoreStatus) current.status = baseline.status;
+    return JSON.stringify(current) !== JSON.stringify(baseline);
+  }
+
+  function hasPendingSubtaskWork() {
+    const panel = state.subtaskPanel;
+    const creationKey = JSON.stringify([panel.draft, panel.quantity]);
+    const patch = { ...panel.patch };
+    if (Object.prototype.hasOwnProperty.call(patch, 'clients')) patch.clients = state.clientSelections.bulkClients || [];
+    return Boolean(panel.draft.trim() && creationKey !== panel.createdDraftKey) ||
+      (Object.keys(patch).length > 0 && JSON.stringify(patch) !== panel.appliedPatchKey);
+  }
+
+  function confirmTaskDiscard() {
+    if (!state.taskBaseline || (!taskFormHasChanges() && !hasPendingSubtaskWork())) return true;
+    return confirm('Discard unsaved task or subtask changes?');
+  }
+
+  function closeModal(force = false) {
+    if (state.writing || (!force && !confirmTaskDiscard())) return false;
     $('taskModal').classList.remove('open');
     state.editId = null;
+    state.taskBaseline = null;
     resetSubtaskPanel();
+    if (state.taskReturnFocus?.isConnected) state.taskReturnFocus.focus();
+    state.taskReturnFocus = null;
+    return true;
   }
 
   function setSaving(saving) {
@@ -3076,7 +3405,8 @@ function populateParentTaskOptions() {
       .withRejectionHandler(() => setSaving(false))
       .withSuccessHandler(result => {
         setSaving(false);
-        closeModal();
+        state.taskBaseline = captureTaskForm();
+        if (!hasPendingSubtaskWork()) closeModal(true);
         showToast(`${isEdit ? 'Updated' : 'Created'} ${taskLabel({ name: data.taskName, id: data.taskId || result.taskId })}.`);
         loadTasks();
       })
@@ -3100,6 +3430,7 @@ function populateParentTaskOptions() {
     const id = state.editId;
     const status = $('taskStatus').value;
     const taskName = taskLabel(state.taskById.get(id) || { id });
+    const keepEditing = taskFormHasChanges(true) || hasPendingSubtaskWork();
     $('editStatusBtn').disabled = true;
     $('editStatusBtn').textContent = 'Updating…';
 
@@ -3111,7 +3442,8 @@ function populateParentTaskOptions() {
       .withSuccessHandler(() => {
         $('editStatusBtn').disabled = false;
         $('editStatusBtn').textContent = 'Update status';
-        closeModal();
+        if (state.taskBaseline) state.taskBaseline.status = status;
+        if (!keepEditing) closeModal(true);
         showToast(`Status set to ${status}: ${taskName}.`);
         loadTasks();
       })
@@ -3162,7 +3494,7 @@ function deleteCurrentTask() {
         return;
       }
 
-      closeModal();
+      closeModal(true);
       showToast(`Deleted ${taskLabel(task)}.`);
       loadTasks();
     })
@@ -3189,6 +3521,7 @@ function deleteCurrentTask() {
     const hasChildren = state.childrenByParent.has(task.id);
     input.readOnly = hasChildren;
     if (resetValue || hasChildren || wasReadOnly) input.value = String(task.totalHours || 0);
+    if (!resetValue && wasReadOnly && !hasChildren && state.taskBaseline) state.taskBaseline.hours = Number(task.hours || 0);
     if (hasChildren) input.removeAttribute('max'); else input.max = '10000';
     $('taskHoursLabel').textContent = hasChildren ? 'Total subtask hours (calculated)' : 'Hours';
     $('taskHoursProgress').innerHTML = renderHoursProgress(task.completedHours || 0, task.totalHours || 0);
@@ -3353,6 +3686,7 @@ function deleteCurrentTask() {
       if (!workspace.editor) workspace.editor = newInvoiceDocument();
       updateDataNotice();
       renderInvoices();
+      openPendingMetricsInvoice();
     }).withFailureHandler(fail).getInvoiceWorkspace();
     function fail(error) {
       if (request !== workspace.request) return;
@@ -3537,6 +3871,7 @@ function deleteCurrentTask() {
     const settings = $('invoiceSettingsFields');
     if (settings) settings.disabled = busy;
     document.querySelectorAll('[data-invoice-command]').forEach(button => { button.disabled = busy; });
+    if ($('issueInvoiceBtn')) $('issueInvoiceBtn').disabled = busy || state.invoices.editor?.status !== 'Draft' || !invoiceReadiness(state.invoices.editor, state.invoices.records).ready;
     if ($('invoicePdfDownloadBtn')) {
       $('invoicePdfDownloadBtn').disabled = busy || state.invoices.pdfBusy === true;
       $('invoicePdfDownloadBtn').textContent = state.invoices.pdfBusy ? 'Preparing PDF...' : 'Download PDF';
@@ -3591,18 +3926,19 @@ function deleteCurrentTask() {
           <button class="btn" data-invoice-command title="Previous billing period" aria-label="Previous invoice period" onclick="moveInvoiceCycle(-1)">&#8592;</button>
           <strong>${displayDateRange(invoice.periodStart, invoice.periodEnd)}</strong>
           <button class="btn" data-invoice-command title="Next billing period" aria-label="Next invoice period" onclick="moveInvoiceCycle(1)">&#8594;</button></div>
+        <div id="invoiceReadiness" aria-live="polite"></div>
         <fieldset id="invoiceEditorFields" class="invoice-fields" ${readonly ? 'disabled' : ''}>
           <div class="form-grid">
             <label class="form-field">Invoice number<input class="field-control" id="invoiceNumber" maxlength="40" value="${esc(invoice.number || '')}" placeholder="Automatic if blank" oninput="setInvoiceField('number',this.value)"></label>
             <label class="form-field">Invoice name<input class="field-control" id="invoiceName" maxlength="120" value="${esc(invoice.name || '')}" oninput="setInvoiceField('name',this.value)"></label>
-            <label class="form-field">Client<input class="field-control" list="invoiceClientNames" value="${esc(invoice.client)}" maxlength="100" onchange="setInvoiceClient(this.value)"><datalist id="invoiceClientNames">${clients.map(client => `<option value="${esc(client)}"></option>`).join('')}</datalist></label>
-            <label class="form-field">Currency<select class="field-control" ${invoice.lines.length ? 'disabled' : ''} onchange="setInvoiceField('currency',this.value);renderInvoices()">${currencies.map(currency => `<option ${invoice.currency === currency ? 'selected' : ''}>${currency}</option>`).join('')}</select></label>
+            <label class="form-field">Client<input class="field-control" id="invoiceField-client" list="invoiceClientNames" value="${esc(invoice.client)}" maxlength="100" onchange="setInvoiceClient(this.value)"><datalist id="invoiceClientNames">${clients.map(client => `<option value="${esc(client)}"></option>`).join('')}</datalist></label>
+            <label class="form-field">Currency<select class="field-control" id="invoiceField-currency" ${invoice.lines.length ? 'disabled' : ''} onchange="setInvoiceField('currency',this.value);renderInvoices()">${currencies.map(currency => `<option ${invoice.currency === currency ? 'selected' : ''}>${currency}</option>`).join('')}</select></label>
             <label class="form-field">Billing timeline<select class="field-control" id="invoicePeriodMode" onchange="setInvoiceRange('periodMode',this.value)"><option value="fortnight" ${(invoice.periodMode || 'fortnight') === 'fortnight' ? 'selected' : ''}>Two weeks</option><option value="custom" ${invoice.periodMode === 'custom' ? 'selected' : ''}>Custom dates</option></select></label>
             <label class="form-field">From<input class="field-control" id="invoicePeriodStart" type="date" value="${esc(invoice.periodStart)}" onchange="setInvoiceRange('periodStart',this.value)"></label>
             <label class="form-field">Through<input class="field-control" id="invoicePeriodEnd" type="date" value="${esc(invoice.periodEnd)}" ${(invoice.periodMode || 'fortnight') === 'fortnight' ? 'disabled' : ''} onchange="setInvoiceRange('periodEnd',this.value)"></label>
             <label class="form-field">Count videos by<select class="field-control" id="invoiceVideoDateBasis" onchange="setInvoiceVideoFilter('videoDateBasis',this.value)"><option value="planned" ${invoice.videoDateBasis !== 'completed' ? 'selected' : ''}>Scheduled overlap</option><option value="completed" ${invoice.videoDateBasis === 'completed' ? 'selected' : ''}>Completed in range</option></select></label>
             <label class="form-field">Video source<select class="field-control" id="invoiceVideoScope" onchange="setInvoiceVideoFilter('videoScope',this.value)"><option value="leaf" ${!invoice.videoScope || invoice.videoScope === 'leaf' ? 'selected' : ''}>Individual tasks (no subtasks)</option><option value="topLevel" ${invoice.videoScope === 'topLevel' ? 'selected' : ''}>Top-level tasks</option><option value="all" ${invoice.videoScope === 'all' ? 'selected' : ''}>All video tasks</option></select></label>
-            ${[['issueDate', 'Issue date', 'date'], ['dueDate', 'Due date', 'date'], ['senderName', 'From', 'text'], ['defaultRate', 'Hourly rate for new lines', 'number']].map(([key, label, type]) => `<label class="form-field">${label}<input class="field-control" type="${type}" ${type === 'number' ? 'min="0" max="1000000" step="0.01"' : 'maxlength="200"'} value="${esc(invoice[key])}" oninput="setInvoiceField('${key}',this.value)"></label>`).join('')}
+            ${[['issueDate', 'Issue date', 'date'], ['dueDate', 'Due date', 'date'], ['senderName', 'From', 'text'], ['defaultRate', 'Hourly rate for new lines', 'number']].map(([key, label, type]) => `<label class="form-field">${label}<input class="field-control" id="invoiceField-${key}" type="${type}" ${type === 'number' ? 'min="0" max="1000000" step="0.01"' : 'maxlength="200"'} value="${esc(invoice[key])}" oninput="setInvoiceField('${key}',this.value)"></label>`).join('')}
             ${[['senderDetails', 'Your address / contact'], ['clientDetails', 'Bill to address / contact'], ['notes', 'Payment details / notes']].map(([key, label]) => `<label class="form-field ${key === 'notes' ? 'full' : ''}">${label}<textarea class="field-control" maxlength="${key === 'notes' ? 1500 : 1000}" oninput="setInvoiceField('${key}',this.value)">${esc(invoice[key])}</textarea></label>`).join('')}
           </div>
           <div class="invoice-toolbar" style="margin-top:18px"><output id="invoiceVideoCount" aria-live="polite"><strong>${videos.length} videos found</strong> · ${invoice.lines.length} invoice lines</output><span class="spacer"></span>
@@ -3613,13 +3949,13 @@ function deleteCurrentTask() {
             <button class="btn" onclick="addInvoiceLine()">Add manual line</button>
           </div>
           <div class="table-wrap"><table class="invoice-lines"><thead><tr><th>Video / Description</th><th>Hours</th><th>Hourly rate</th><th>Amount</th><th></th></tr></thead><tbody>
-            ${invoice.lines.map((line, index) => `<tr><td><input class="field-control description-input" aria-label="Description line ${index + 1}" maxlength="200" value="${esc(line.description)}" oninput="setInvoiceLine(${index},'description',this.value)">${line.taskId ? `<div class="task-meta">${esc(line.taskId)}</div>` : ''}</td>
-              <td><input class="field-control" aria-label="Hours line ${index + 1}" type="number" min="0" max="10000" step="0.01" value="${esc(line.hours)}" oninput="setInvoiceLine(${index},'hours',this.value)"></td>
-              <td><input class="field-control" aria-label="Rate line ${index + 1}" type="number" min="0" max="1000000" step="0.01" value="${esc(line.rate)}" oninput="setInvoiceLine(${index},'rate',this.value)"></td>
+            ${invoice.lines.map((line, index) => `<tr><td><input class="field-control description-input" id="invoiceLine-${index}-description" aria-label="Description line ${index + 1}" maxlength="200" value="${esc(line.description)}" oninput="setInvoiceLine(${index},'description',this.value)"><output class="invoice-field-error" id="invoiceError-${index}-description"></output>${line.taskId ? `<div class="task-meta">${esc(line.taskId)}</div>` : ''}</td>
+              <td><input class="field-control" id="invoiceLine-${index}-hours" aria-label="Hours line ${index + 1}" type="number" min="0" max="10000" step="0.01" value="${esc(line.hours)}" oninput="setInvoiceLine(${index},'hours',this.value)"><output class="invoice-field-error" id="invoiceError-${index}-hours"></output></td>
+              <td><input class="field-control" id="invoiceLine-${index}-rate" aria-label="Rate line ${index + 1}" type="number" min="0" max="1000000" step="0.01" value="${esc(line.rate)}" oninput="setInvoiceLine(${index},'rate',this.value)"><output class="invoice-field-error" id="invoiceError-${index}-rate"></output></td>
               <td><output id="invoiceLineAmount${index}">${invoiceAmount(line.hours, line.rate) === null ? 'Invalid amount' : esc(invoiceMoney(invoiceAmount(line.hours, line.rate), invoice.currency))}</output></td>
               <td><button class="btn" aria-label="Remove invoice line ${index + 1}" title="Remove line" onclick="removeInvoiceLine(${index})">&#215;</button></td></tr>`).join('') || '<tr><td colspan="5">No invoice lines.</td></tr>'}
           </tbody></table></div>
-          <div class="invoice-toolbar" style="margin-top:16px"><button class="btn" onclick="saveCurrentInvoice('Draft')">Save draft</button><button class="btn btn-primary" onclick="saveCurrentInvoice('Issued')">Issue invoice</button></div>
+          <div class="invoice-toolbar" style="margin-top:16px"><button class="btn" onclick="saveCurrentInvoice('Draft')">Save draft</button><button class="btn btn-primary" id="issueInvoiceBtn" onclick="saveCurrentInvoice('Issued')">Issue invoice</button></div>
         </fieldset>
         <div class="invoice-toolbar">
           ${invoice.status === 'Issued' ? `<button class="btn" data-invoice-command onclick="setSavedInvoiceStatus('Paid')">Mark paid</button><button class="btn" data-invoice-command onclick="setSavedInvoiceStatus('Void')">Void invoice</button>` : ''}
@@ -3644,6 +3980,7 @@ function deleteCurrentTask() {
       <table><thead><tr><th>Description</th><th class="amount">Hours</th><th class="amount">Rate</th><th class="amount">Amount</th></tr></thead><tbody>${invoice.lines.map(line => `<tr><td>${esc(line.description)}</td><td class="amount">${esc(line.hours)}</td><td class="amount">${esc(invoiceMoney(Number(line.rate || 0) * 100, invoice.currency))}</td><td class="amount">${invoiceAmount(line.hours, line.rate) === null ? 'Invalid amount' : esc(invoiceMoney(invoiceAmount(line.hours, line.rate), invoice.currency))}</td></tr>`).join('')}</tbody></table>
       <div class="invoice-total"><span>${invoice.lines.length} ${invoice.lines.length === 1 ? 'video' : 'videos'} · ${totals.hoursUnits / 100} hours · Total</span><strong>${totals.invalid ? 'Check line amounts' : esc(invoiceMoney(totals.minor, invoice.currency))}</strong></div>
       ${invoice.notes ? `<div class="invoice-party" style="margin-top:20px">${esc(invoice.notes)}</div>` : ''}`;
+    updateInvoiceReadiness();
   }
 
   function renderInvoiceHistory() {
@@ -3663,6 +4000,10 @@ function deleteCurrentTask() {
 
   function saveCurrentInvoice(status) {
     if (state.writing || state.syncing) return;
+    if (status === 'Issued') {
+      const readiness = invoiceReadiness(state.invoices.editor, state.invoices.records);
+      if (!readiness.ready) { updateInvoiceReadiness(); showToast(readiness.issues[0].message); focusInvoiceIssue(readiness.issues[0]); return; }
+    }
     if (status === 'Issued' && !confirm('Issue this invoice? Its saved line items will become read-only.')) return;
     const document = { ...state.invoices.editor, lines: state.invoices.editor.lines.map(line => ({ ...line })), status };
     invoiceMutation().withSuccessHandler(result => {
@@ -3737,11 +4078,83 @@ function deleteCurrentTask() {
     }).deleteInvoiceDraft(invoice.id, invoice.revision);
   }
 
+  function invoiceReadiness(invoice, records = []) {
+    const issues = [];
+    const add = (field, message, line = null, invoiceId = '') => issues.push({ field, message, line, invoiceId });
+    if (!String(invoice.client || '').trim()) add('client', 'Choose the invoice client.');
+    if (!String(invoice.senderName || '').trim()) add('senderName', 'Enter your name or business.');
+    if (!['USD', 'PHP', 'EUR', 'GBP', 'CAD', 'AUD'].includes(invoice.currency)) add('currency', 'Choose a supported currency.');
+    const start = parseDate(invoice.periodStart);
+    const end = parseDate(invoice.periodEnd);
+    if (!start) add('periodStart', 'Choose a valid billing start date.');
+    if (!end || (start && end < start)) add('periodEnd', 'Choose a valid billing end date on or after the start.');
+    if (start && end && (invoice.periodMode || 'fortnight') === 'fortnight' && dayDiff(start, end) !== 13) add('periodEnd', 'Two-week invoices need 14 inclusive calendar days.');
+    if (!parseDate(invoice.issueDate)) add('issueDate', 'Choose a valid issue date.');
+    if (!parseDate(invoice.dueDate)) add('dueDate', 'Choose a valid due date.');
+    const number = String(invoice.number || '').trim();
+    if (number && (number.length > 40 || !/^[A-Za-z0-9][A-Za-z0-9 ._/-]*$/.test(number))) add('number', 'Use a valid invoice number (letters, digits, spaces, . _ / -).');
+    const duplicateNumber = number && records.find(record => record.id !== invoice.id && String(record.number || '').toLowerCase() === number.toLowerCase());
+    if (duplicateNumber) add('number', 'Invoice number already used: ' + duplicateNumber.number + '.', null, duplicateNumber.id);
+    const duplicatePeriod = invoice.status === 'Draft' && records.find(record => record.id !== invoice.id && ['Issued', 'Paid'].includes(record.status) &&
+      String(record.client || '').trim().toLowerCase() === String(invoice.client || '').trim().toLowerCase() &&
+      record.periodStart === invoice.periodStart && record.periodEnd === invoice.periodEnd);
+    if (duplicatePeriod) add('client', 'This client and period already has ' + duplicatePeriod.number + '.', null, duplicatePeriod.id);
+    if (!invoice.lines.length) add('lines', 'Add at least one video or invoice line.');
+    if (invoice.lines.length > 100) add('lines', 'Use at most 100 invoice lines.');
+    const seen = new Set();
+    invoice.lines.forEach((line, index) => {
+      const label = 'Line ' + (index + 1) + ': ';
+      if (!String(line.description || '').trim() || String(line.description).length > 200) add('description', label + 'enter a description (up to 200 characters).', index);
+      if (Number(line.hours) <= 0 || invoiceAmount(line.hours, 1) === null) add('hours', label + 'enter positive hours, up to 10000 with two decimals.', index);
+      if (Number(line.rate) <= 0 || invoiceAmount(1, line.rate) === null) add('rate', label + 'enter a positive hourly rate, up to 1000000 with two decimals.', index);
+      if (line.taskId && seen.has(line.taskId)) add('description', label + 'this video is listed more than once.', index);
+      if (line.taskId) seen.add(line.taskId);
+    });
+    return { ready: !issues.length, issues };
+  }
+
+  function invoiceIssueElement(issue) {
+    if (issue.line !== null && issue.line !== undefined) return $('invoiceLine-' + issue.line + '-' + issue.field);
+    const ids = { number: 'invoiceNumber', periodStart: 'invoicePeriodStart', periodEnd: 'invoicePeriodEnd', lines: 'invoiceVideoPicker' };
+    return $(ids[issue.field] || 'invoiceField-' + issue.field);
+  }
+
+  function focusInvoiceIssue(issue) {
+    if (issue.invoiceId) { openSavedInvoice(issue.invoiceId); return; }
+    const input = invoiceIssueElement(issue);
+    input?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    input?.focus?.();
+  }
+
+  function updateInvoiceReadiness() {
+    const invoice = state.invoices.editor;
+    if (!invoice) return;
+    const readiness = invoiceReadiness(invoice, state.invoices.records);
+    $('invoiceReadiness').innerHTML = `<details class="invoice-readiness ${readiness.ready ? '' : 'pending'}" ${readiness.ready ? '' : 'open'}><summary>${invoice.status !== 'Draft' ? esc(invoice.status) + ' invoice · saved copy' : readiness.ready ? 'Ready to issue' : `${readiness.issues.length} readiness ${readiness.issues.length === 1 ? 'check' : 'checks'} remaining`}</summary>${readiness.issues.length ? `<ul>${readiness.issues.slice(0, 8).map(issue => `<li><button type="button" class="subtask-link" onclick="focusInvoiceIssue(${esc(JSON.stringify(issue))})">${esc(issue.message)}${issue.invoiceId ? ' Open saved invoice' : ''}</button></li>`).join('')}</ul>${readiness.issues.length > 8 ? `<div>${readiness.issues.length - 8} more checks</div>` : ''}` : ''}</details>`;
+    if ($('issueInvoiceBtn')) $('issueInvoiceBtn').disabled = !readiness.ready || state.writing || state.syncing || invoice.status !== 'Draft';
+    const fields = ['client', 'senderName', 'currency', 'periodStart', 'periodEnd', 'issueDate', 'dueDate', 'number'];
+    fields.forEach(field => {
+      const input = invoiceIssueElement({ field, line: null });
+      if (input?.setAttribute) input.setAttribute('aria-invalid', String(readiness.issues.some(issue => issue.line === null && issue.field === field)));
+    });
+    invoice.lines.forEach((line, index) => ['description', 'hours', 'rate'].forEach(field => {
+      const issues = readiness.issues.filter(issue => issue.line === index && issue.field === field);
+      const output = $('invoiceError-' + index + '-' + field);
+      if (output) output.textContent = issues.map(issue => issue.message).join(' ');
+      const input = invoiceIssueElement({ field, line: index });
+      if (input?.setAttribute) {
+        input.setAttribute('aria-invalid', String(issues.length > 0));
+        if (issues.length) input.setAttribute('aria-describedby', 'invoiceError-' + index + '-' + field);
+        else input.removeAttribute('aria-describedby');
+      }
+    }));
+  }
+
   function invoiceReadyForCopy() {
     const invoice = state.invoices.editor;
-    if (!invoice.client.trim() || !invoice.senderName.trim() || !invoice.lines.length || invoice.lines.some(line =>
-      !line.description.trim() || !Number(line.hours) || !Number(line.rate) || invoiceAmount(line.hours, line.rate) === null)) {
-      showToast('Enter client, sender, descriptions, positive hours and rates before creating a client copy.');
+    const readiness = invoiceReadiness(invoice, state.invoices.records);
+    if (!readiness.ready) {
+      showToast(readiness.issues[0].message);
       return false;
     }
     return true;
@@ -3966,7 +4379,7 @@ function deleteCurrentTask() {
     if (event.target.matches('input[type="date"]')) refreshDateInputLabels();
   });
   window.addEventListener('beforeunload', event => {
-    if (!state.invoices.dirty && !state.invoices.billingDirty) return;
+    if (!state.invoices.dirty && !state.invoices.billingDirty && !taskFormHasChanges() && !hasInlineHourChanges() && !(state.taskBaseline && hasPendingSubtaskWork())) return;
     event.preventDefault();
     event.returnValue = '';
   });
@@ -3983,6 +4396,7 @@ function deleteCurrentTask() {
     if (state.activeView === 'timeline') render();
   });
 
+  restoreMetricsPreferences();
   loadTasks();
 </script>
 </body>
