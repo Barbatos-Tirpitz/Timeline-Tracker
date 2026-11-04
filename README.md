@@ -121,7 +121,7 @@ The former Dashboard is now the dedicated **Metrics** workspace. Sticky Daily, W
 
 Four actionable tiles show actual completions in the selected period, recorded hours on scheduled work, current overdue work for the selected client, and blocked scheduled work. Parent/standalone and subtask counts are separated. Overdue is explicitly **now**, not a historical snapshot of the selected month.
 
-**Due vs Completed** compares leaf-task planned deadlines with actual completion dates. Daily/weekly/biweekly views use day buckets, Monthly uses 7-day buckets, and Yearly uses calendar months. Counts appear as text on keyboard-operable bars; dense charts scroll within their container on mobile. Completion events can be included even when their planned dates were outside the period. Parent containers are excluded from this chart to avoid counting the same work twice.
+**Planned Finish vs Actual Completion** compares leaf-task planned end dates with actual dates marked Done. Planned-finish counts include tasks in every status, so they are not a count of unfinished work; a task can appear in both series. Daily/weekly/biweekly views use day buckets, Monthly uses 7-day buckets, and Yearly uses calendar months. Counts appear as text on keyboard-operable bars; dense charts scroll within their container on mobile. Completion events can be included even when their planned dates were outside the period. Parent containers are excluded from this chart to avoid counting the same work twice.
 
 **Hours by Parent Task** shows the five largest parent/standalone groups by recorded leaf-task hours in the schedule window, with a View work shortcut for the full set. Shared-client tasks count once for the selected client filter; hours are not split or added again for parent rollups. These are stored task totals, not hours worked on each calendar day. Accurate daily time-spent charts require dated time entries, which are not implemented.
 
@@ -141,7 +141,7 @@ The scheduled-scope caption and recorded-hour/blocked metrics use planned-date o
 
 Dates use named English months in task tables, timeline/dashboard ranges, invoice previews/history, and client copies. Wider areas show full names such as January and November; compact areas use Jan, Feb, March, April, May, June, July, Aug, Sep, Oct, Nov, Dec. Narrow timeline columns use compact labels, and printed invoices always use full month names. Full dates remain available in date tooltips.
 
-Native date pickers retain the browser/operating system format, with a readable month-name label alongside the chosen value. Storage, date inputs, filtering and billing calculations continue to use ISO calendar dates internally. This presentation change does not migrate or rewrite saved task/invoice dates.
+Native date pickers retain the browser/operating system format, with a readable month-name label alongside the chosen value. Storage, date inputs, filtering and billing calculations continue to use ISO calendar dates internally. Task date-only writes are parsed in the spreadsheet time zone and read back in that same zone to avoid off-by-one-day changes when Apps Script and spreadsheet time zones differ. This does not migrate or rewrite saved task/invoice dates.
 
 ## Bulk Subtasks
 
@@ -194,6 +194,8 @@ This is simple hourly invoicing, not a tax/accounting or automatic time-tracking
 ## All Tasks
 
 Leaf tasks/subtasks have inline Hours inputs with explicit Save (or Enter), Unsaved/Check hours state, and disabled unchanged saves. Parent hours remain calculated/read-only. Unsaved inline values survive paging, sorting, filter changes and refreshes until saved; missing tasks or tasks that become parents are pruned. Failed writes retain the draft value, then reconcile task data. Closing/reloading the page warns when unsaved inline values remain.
+
+Task detail, drag-reschedule, and single-task hour writes include the loaded Updated At version. If another session changes that task first, the server rejects the stale write instead of silently replacing the newer values; refresh/reopen before retrying. This protection does not make Google Sheets writes transactional, and status/deletion/bulk workflows retain their own validation and reconciliation behavior.
 
 - Search by task ID, name, category, description, or client. Filter by status, category, client, priority, and date range.
 - Date filters include tasks overlapping the range, including boundary dates. Undated tasks are excluded only when a date filter is active.

@@ -268,7 +268,26 @@ function taskRow(id, parent = '', status = 'To Do') {
   return [id, id, 'Video editing', 'Medium', status, '', '', '=G2-F2+1', '', '', '', '', '', parent, '[]'];
 }
 
-function server(records, missingSheet = false, failAfter = Infinity, documentLock = true) {
+function zonedParts(date, timezone) {
+  return Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+  }).formatToParts(date).filter(part => part.type !== 'literal').map(part => [part.type, Number(part.value)]));
+}
+
+function parseZonedDate(value, timezone) {
+  const [year, month, day] = value.split('-').map(Number);
+  const target = Date.UTC(year, month - 1, day);
+  let timestamp = target;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const parts = zonedParts(new Date(timestamp), timezone);
+    const represented = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+    timestamp += target - represented;
+  }
+  return new Date(timestamp);
+}
+
+function server(records, missingSheet = false, failAfter = Infinity, documentLock = true, timezone = 'UTC') {
   const headers = ['Task ID', 'Task Name', 'Category', 'Priority', 'Status', 'Start Date', 'End Date', 'Duration', 'Description', 'Actual Start', 'Actual End', 'Created At', 'Updated At', 'Parent Task ID', 'Clients'];
   const rows = [headers, ...records.map(row => row.slice())];
   let maxColumns = 15;
@@ -285,13 +304,17 @@ function server(records, missingSheet = false, failAfter = Infinity, documentLoc
       if (typeof row === 'string') return { setNumberFormat() { return this; } };
       return {
         getValues: () => Array.from({ length: height }, (_, offset) => Array.from({ length: width }, (_, index) => rows[row - 1 + offset]?.[column - 1 + index] ?? '')),
+        getFormulas: () => Array.from({ length: height }, (_, offset) => Array.from({ length: width }, (_, index) => {
+          const value = rows[row - 1 + offset]?.[column - 1 + index];
+          return typeof value === 'string' && value.startsWith('=') ? value : '';
+        })),
         getValue: () => rows[row - 1]?.[column - 1] ?? '',
         getDisplayValues: () => rows.slice(row - 1, row - 1 + height).map(values => values.slice(column - 1, column - 1 + width).map(String)),
         setValues(values) {
           assert.equal(values.length, height);
           values.forEach(valuesRow => assert.equal(valuesRow.length, width));
           if (writes.length === failAfter) throw new Error('Injected write failure');
-          writes.push({ row, column, values });
+          writes.push({ row, column, height, width, values });
           values.forEach((valuesRow, offset) => valuesRow.forEach((value, index) => {
             if (!rows[row - 1 + offset]) rows[row - 1 + offset] = Array(15).fill('');
             rows[row - 1 + offset][column - 1 + index] = value;
@@ -308,10 +331,17 @@ function server(records, missingSheet = false, failAfter = Infinity, documentLoc
     }
   };
   const ui = { answer: 'YES', Button: { YES: 'YES' }, ButtonSet: { YES_NO: 'YES_NO' }, alert() { return this.answer; } };
-  const spreadsheet = { getSheetByName: () => missingSheet ? null : sheet, getSpreadsheetTimeZone: () => 'UTC', toast() {} };
+  const spreadsheet = { getSheetByName: () => missingSheet ? null : sheet, getSpreadsheetTimeZone: () => timezone, toast() {} };
   const context = vm.createContext({
     Date,
-    Utilities: { formatDate: date => date.toISOString().slice(0, 10) },
+    Utilities: {
+      parseDate: (value, zone) => parseZonedDate(value, zone),
+      formatDate(date, zone, format) {
+        const parts = zonedParts(date, zone);
+        if (format === 'yyyy-MM-dd') return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
+        return date.toISOString().slice(0, 10);
+      }
+    },
     SpreadsheetApp: { getActiveSpreadsheet: () => spreadsheet, getUi: () => ui, flush() {} },
     LockService: {
       getDocumentLock: () => documentLock ? { waitLock() {}, releaseLock() { releases++; } } : null,
@@ -325,6 +355,32 @@ function server(records, missingSheet = false, failAfter = Infinity, documentLoc
 test('backend and frontend scripts parse', () => {
   new vm.Script(backend);
   new vm.Script(html.match(/<script>([\s\S]*?)<\/script>/)[1]);
+});
+
+test('task date inputs round-trip in the spreadsheet time zone', () => {
+  const app = server([], false, Infinity, true, 'Asia/Manila');
+  const parsed = app.context.parseTaskDate_('2026-11-04');
+  assert.equal(app.context.Utilities.formatDate(parsed, 'Asia/Manila', 'yyyy-MM-dd'), '2026-11-04');
+  assert.equal(app.context.parseTaskDate_('2026-02-30'), null);
+});
+
+test('spreadsheet Timeline sizing expands a fresh sheet to its date span', () => {
+  const app = server([]);
+  let columns = 26;
+  app.context.ensureTimelineColumns_({
+    getMaxColumns: () => columns,
+    insertColumnsAfter(after, count) {
+      assert.equal(after, 26);
+      columns += count;
+    }
+  }, 95);
+  assert.equal(columns, 95);
+  const timezone = 'UTC';
+  assert.equal(app.context.timelineDayCount_([
+    [new Date('2026-01-01T00:00:00Z'), new Date('2028-12-31T00:00:00Z')]
+  ], timezone), 1096);
+  assert.equal(app.context.timelineDayCount_([], timezone), 90);
+  assert.match(backend, /const timelineLastColumn = 5 \+ timelineDays/);
 });
 
 test('bulk deletion requires explicitly selected children before any write', () => {
@@ -376,13 +432,23 @@ test('status transitions preserve start and completion on no-op, clear completio
 
 test('modal detail save accepts optional status and validates it before writing', () => {
   const app = server([taskRow('VID-001')]);
-  const payload = { taskId: 'VID-001', taskName: 'Updated', category: 'Video editing', priority: 'High', startDate: '2026-11-03', endDate: '2026-11-05', status: 'Invalid' };
+  const payload = { taskId: 'VID-001', taskName: 'Updated', category: 'Video editing', priority: 'High', startDate: '2026-11-03', endDate: '2026-11-05', status: 'Invalid', expectedUpdatedAt: 0 };
   assert.throws(() => app.context.updateTask(payload), /Invalid status/);
   assert.equal(app.writes.length, 0);
   app.context.updateTask({ ...payload, status: 'Done' });
   assert.equal(app.rows[1][1], 'Updated');
   assert.equal(app.rows[1][4], 'Done');
   assert.equal(app.rows[1][7], '=G2-F2+1');
+});
+
+test('task detail updates reject stale revisions without overwriting newer fields', () => {
+  const app = server([taskRow('VID-001')]);
+  const stale = { taskId: 'VID-001', taskName: 'Stale name', category: 'Video editing', priority: 'High', startDate: '2026-11-03', endDate: '2026-11-05', expectedUpdatedAt: 0 };
+  app.context.updateTask({ ...stale, taskName: 'First save' });
+  const writes = app.writes.length;
+  assert.throws(() => app.context.updateTask(stale), /changed since it was loaded/);
+  assert.equal(app.rows[1][1], 'First save');
+  assert.equal(app.writes.length, writes);
 });
 
 test('partial write failures are errors, never successes, and release the lock for reconciliation', () => {
@@ -432,10 +498,10 @@ test('category upgrade is explicit and deterministic, and detail edits preserve 
   assert.equal(app.context.categoryForUpgrade_('Scheduling'), 'Scheduling');
   assert.throws(() => app.context.categoryForUpgrade_('Unknown'), /Unknown category/);
   app.rows[1][14] = '["Client A"]';
-  const payload = { taskId: 'VID-001', taskName: 'Updated', category: 'Scheduling', priority: 'High', startDate: '2026-11-03', endDate: '2026-11-05' };
+  const payload = { taskId: 'VID-001', taskName: 'Updated', category: 'Scheduling', priority: 'High', startDate: '2026-11-03', endDate: '2026-11-05', expectedUpdatedAt: 0 };
   app.context.updateTask(payload);
   assert.equal(app.rows[1][14], '["Client A"]');
-  app.context.updateTask({ ...payload, clients: [] });
+  app.context.updateTask({ ...payload, clients: [], expectedUpdatedAt: app.context.getTasks().tasks[0].updatedAt });
   assert.equal(app.rows[1][14], '[]');
   assert.equal(app.rows[1][7], '=G2-F2+1');
 });
@@ -471,6 +537,25 @@ test('bulk subtask patches validate every merged date and parent scope before wr
   assert.equal(app.rows[2][7], '=G2-F2+1');
   assert.equal(app.rows[2][5], child[5]);
   assert.throws(() => app.context.updateSubtasks('VID-001', ['VID-002'], {}), /at least one/);
+});
+
+test('multi-field bulk subtask patch commits selected rows in one write and preserves intervening rows', () => {
+  const parent = taskRow('VID-001');
+  const first = taskRow('VID-002', 'VID-001');
+  const untouched = taskRow('VID-003');
+  const last = taskRow('VID-004', 'VID-001');
+  const app = server([parent, first, untouched, last], false, 1);
+  app.context.initializeTaskHeaders_(app.sheet);
+  app.writes.length = 0;
+  app.context.updateSubtasks('VID-001', ['VID-002', 'VID-004'], { category: 'Revision', priority: 'High', hours: 2 });
+  assert.equal(app.writes.length, 1);
+  assert.equal(app.rows[2][2], 'Revision');
+  assert.equal(app.rows[2][3], 'High');
+  assert.equal(app.rows[2][15], 2);
+  assert.equal(app.rows[3][2], 'Video editing');
+  assert.equal(app.rows[3][7], untouched[7]);
+  assert.equal(app.rows[4][2], 'Revision');
+  assert.equal(app.rows[4][7], last[7]);
 });
 
 test('client filters are independent and client sorting uses the first alphabetical name with unassigned last', () => {
@@ -1066,20 +1151,26 @@ test('single and bulk hours-only writes never touch schedule, actual dates or Du
   const app = server([parent, first, second]);
   app.context.initializeTaskHeaders_(app.sheet);
   app.writes.length = 0;
-  app.context.updateTaskHours('VID-002', 2.25);
+  app.context.updateTaskHours('VID-002', 2.25, 0);
   assert.deepEqual(app.writes.map(write => write.column), [16, 13]);
   assert.equal(app.context.getTasks().tasks[0].totalHours, 2.25);
   app.writes.length = 0;
   app.context.updateSubtasks('VID-001', ['VID-002', 'VID-003'], { hours: 3.5 });
-  assert.deepEqual(app.writes.map(write => write.column), [16, 13]);
+  assert.equal(app.writes.length, 1);
+  assert.equal(app.writes[0].column, 1);
+  assert.equal(app.writes[0].width, 16);
+  assert.equal(app.writes[0].values[0][7], first[7]);
   assert.equal(app.context.getTasks().tasks[0].totalHours, 7);
   assert.equal(app.rows[2][5], first[5]);
   assert.equal(app.rows[2][6], first[6]);
   assert.equal(app.rows[2][7], '=G2-F2+1');
   const count = app.writes.length;
-  assert.throws(() => app.context.updateTaskHours('VID-001', 10), /calculated from subtasks/);
+  assert.throws(() => app.context.updateTaskHours('VID-001', 10, 0), /calculated from subtasks/);
   assert.equal(app.writes.length, count);
-  app.context.updateTaskHours('VID-002', 0);
+  const childVersion = app.context.getTasks().tasks[1].updatedAt;
+  app.context.updateTaskHours('VID-002', 0, childVersion);
+  assert.equal(app.rows[2][15], 0);
+  assert.throws(() => app.context.updateTaskHours('VID-002', 4, childVersion), /changed since it was loaded/);
   assert.equal(app.rows[2][15], 0);
 });
 
@@ -1087,8 +1178,8 @@ test('normal detail/drag updates preserve omitted hours and new subtasks start a
   const parent = taskRow('VID-001'); parent[5] = new Date(2026, 10, 1); parent[6] = new Date(2026, 10, 10);
   const app = server([parent]);
   app.context.initializeTaskHeaders_(app.sheet);
-  app.context.updateTaskHours('VID-001', 9);
-  app.context.updateTask({ taskId: 'VID-001', taskName: 'Moved', category: 'Video editing', priority: 'High', startDate: '2026-11-02', endDate: '2026-11-11' });
+  app.context.updateTaskHours('VID-001', 9, 0);
+  app.context.updateTask({ taskId: 'VID-001', taskName: 'Moved', category: 'Video editing', priority: 'High', startDate: '2026-11-02', endDate: '2026-11-11', expectedUpdatedAt: app.context.getTasks().tasks[0].updatedAt });
   assert.equal(app.rows[1][15], 9);
   app.context.createSubtasks('VID-001', ['Step'], 2);
   assert.equal(app.rows[2][15], 0);
@@ -1352,9 +1443,14 @@ test('metric charts expose numeric labels, escape names, and bound parent bars',
   assert.equal((parentChart.match(/class="metrics-parent"/g) || []).length, 5);
   assert.match(parentChart, /Client &lt;script&gt;/);
   assert.doesNotMatch(parentChart, /Client <script>/);
-  assert.match(app.renderMetricsDeliveryChart(model, 'weekly'), /Completed: 20 tasks/);
+  const deliveryChart = app.renderMetricsDeliveryChart(model, 'weekly');
+  assert.match(deliveryChart, /Planned finish: 20 tasks by planned end date/);
+  assert.match(deliveryChart, /Actual completion: 20 tasks marked Done/);
+  const singleTask = listTask('VID-SINGLE', '', { start: app.parseDate('2026-11-03'), end: app.parseDate('2026-11-05') });
+  const singleModel = app.buildMetricsModel([singleTask], range, '', app.parseDate('2026-11-04'), 'weekly');
+  assert.match(app.renderMetricsDeliveryChart(singleModel, 'weekly'), /Planned finish: 1 task by planned end date/);
   const empty = app.buildMetricsModel([], range, '', app.parseDate('2026-11-04'), 'weekly');
-  assert.match(app.renderMetricsDeliveryChart(empty, 'weekly'), /No deadlines or actual completions/);
+  assert.match(app.renderMetricsDeliveryChart(empty, 'weekly'), /No planned finish dates or actual completions/);
   assert.match(app.renderMetricsParentChart(empty), /No recorded hours/);
 });
 
