@@ -1410,8 +1410,12 @@ const INVOICE_CONFIG = {
   SHEET: 'Invoice_Master',
   SETTINGS_SHEET: 'Invoice_Settings',
   HEADERS: ['Invoice ID', 'Invoice Number', 'Client', 'Period Start', 'Period End', 'Currency', 'Status', 'Total Minor', 'Invoice JSON', 'Updated At', 'Revision'],
-  CURRENCIES: ['USD', 'PHP', 'EUR', 'GBP', 'CAD', 'AUD']
+  CURRENCIES: ['USD', 'PHP', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'KRW']
 };
+
+function currencyScale_(currency) {
+  return currency === 'JPY' || currency === 'KRW' ? 1 : 100;
+}
 
 function invoiceDateKey_(date) {
   return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
@@ -1423,12 +1427,15 @@ function invoiceText_(value, label, maximum) {
   return text;
 }
 
-function invoiceDecimal_(value, label, maximum) {
+function invoiceDecimal_(value, label, maximum, currency) {
   if (typeof value !== 'number' && typeof value !== 'string') throw new Error(label + ' must be a number.');
   const number = Number(value);
-  const units = Math.round(number * 100);
-  if (!Number.isFinite(number) || number < 0 || number > maximum || Math.abs(number * 100 - units) > 0.000001) {
-    throw new Error(label + ' must be a nonnegative number with at most two decimal places.');
+  currency = currency || 'USD';
+  const scale = currencyScale_(currency);
+  const units = Math.round(number * scale);
+  if (!Number.isFinite(number) || number < 0 || number > maximum || Math.abs(number * scale - units) > 0.000001) {
+    const precision = scale === 1 ? 'a whole number with no decimal places' : 'a number with at most two decimal places';
+    throw new Error(label + ' must be nonnegative and have ' + precision + ' for ' + currency + '.');
   }
   return units;
 }
@@ -1471,10 +1478,11 @@ function normalizeInvoice_(input) {
     if (taskId) seen.add(taskId);
     const description = invoiceText_(line.description, 'Line description', 200);
     const hoursUnits = invoiceDecimal_(line.hours, 'Hours on line ' + (index + 1), 10000);
-    const rateMinor = invoiceDecimal_(line.rate, 'Rate on line ' + (index + 1), 1000000);
+    const rateMinor = invoiceDecimal_(line.rate, 'Rate on line ' + (index + 1), 1000000, currency);
     if (!description) throw new Error('Enter a description for every invoice line.');
     if (status !== 'Draft' && (!hoursUnits || !rateMinor)) throw new Error('Enter positive hours and rates before issuing an invoice.');
-    return { taskId, description, hours: hoursUnits / 100, rate: rateMinor / 100, amountMinor: Math.round(hoursUnits * rateMinor / 100) };
+    const scale = currencyScale_(currency);
+    return { taskId, description, hours: hoursUnits / 100, rate: rateMinor / scale, amountMinor: Math.round(hoursUnits * rateMinor / 100) };
   });
   if (status !== 'Draft' && (!senderName || !lines.length)) throw new Error('Add your name or business and at least one line before issuing.');
   const invoice = {
@@ -1484,7 +1492,7 @@ function normalizeInvoice_(input) {
     senderName, senderDetails: invoiceText_(input.senderDetails, 'Sender details', 1000),
     clientDetails: invoiceText_(input.clientDetails, 'Client details', 1000),
     notes: invoiceText_(input.notes, 'Notes', 1500),
-    defaultRate: invoiceDecimal_(input.defaultRate || 0, 'Default rate', 1000000) / 100,
+    defaultRate: invoiceDecimal_(input.defaultRate || 0, 'Default rate', 1000000, currency) / currencyScale_(currency),
     lines, totalMinor: lines.reduce((total, line) => total + line.amountMinor, 0),
     revision: Number(input.revision || 0)
   };
@@ -1528,7 +1536,7 @@ function normalizeBillingSettings_(input) {
   if (!INVOICE_CONFIG.CURRENCIES.includes(input.currency)) throw new Error('Choose a supported currency.');
   return {
     anchor: input.anchor, currency: input.currency,
-    defaultRate: invoiceDecimal_(input.defaultRate || 0, 'Default hourly rate', 1000000) / 100,
+    defaultRate: invoiceDecimal_(input.defaultRate || 0, 'Default hourly rate', 1000000, input.currency) / currencyScale_(input.currency),
     senderName: invoiceText_(input.senderName, 'Your name or business', 200),
     senderDetails: invoiceText_(input.senderDetails, 'Sender details', 1000),
     paymentNotes: invoiceText_(input.paymentNotes, 'Payment notes', 1500)
@@ -1684,12 +1692,15 @@ function expenseText_(value, label, maximum) {
   return text;
 }
 
-function expenseAmountMinor_(value) {
+function expenseAmountMinor_(value, currency) {
   if (typeof value !== 'number' && typeof value !== 'string') throw new Error('Amount must be a number.');
   const amount = Number(value);
-  const minor = Math.round(amount * 100);
-  if (!Number.isFinite(amount) || amount <= 0 || amount > 10000000 || Math.abs(amount * 100 - minor) > 0.000001) {
-    throw new Error('Amount must be greater than zero, no more than 10000000, and have at most two decimal places.');
+  currency = currency || 'USD';
+  const scale = currencyScale_(currency);
+  const minor = Math.round(amount * scale);
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 10000000 || Math.abs(amount * scale - minor) > 0.000001) {
+    const precision = scale === 1 ? 'a whole number with no decimal places' : 'at most two decimal places';
+    throw new Error('Amount must be greater than zero, no more than 10000000, and have ' + precision + ' for ' + currency + '.');
   }
   return minor;
 }
@@ -1717,7 +1728,7 @@ function normalizeExpense_(input) {
   return {
     id, date, merchant, category,
     description: expenseText_(input.description, 'Description', 200),
-    amountMinor: expenseAmountMinor_(input.amount),
+    amountMinor: expenseAmountMinor_(input.amount, currency),
     currency, paymentMethod, status,
     notes: expenseText_(input.notes, 'Notes', 2000), receiptUrl, revision
   };
@@ -1756,7 +1767,7 @@ function expenseDateKey_(value) {
 function readExpenseRecord_(row) {
   const expense = normalizeExpense_({
     id: String(row[0]), date: expenseDateKey_(row[1]), merchant: row[2], category: row[3], description: row[4],
-    amount: Number(row[5]) / 100, currency: row[6], paymentMethod: row[7], status: row[8],
+    amount: Number(row[5]) / currencyScale_(row[6]), currency: row[6], paymentMethod: row[7], status: row[8],
     notes: row[9], receiptUrl: row[10], revision: Number(row[13])
   });
   if (!Number.isSafeInteger(Number(row[5])) || expense.amountMinor !== Number(row[5])) throw new Error('Stored expense amount is invalid.');
@@ -1825,5 +1836,299 @@ function deleteExpense(expenseId, revision) {
     return { success: true, message: 'Expense deleted.' };
   } finally {
     lock.releaseLock();
+  }
+}
+
+const EARNING_CONFIG = {
+  SHEET: 'Earning_Master',
+  HEADERS: ['Earning ID', 'Date', 'Payer', 'Category', 'Description', 'Amount Minor', 'Currency', 'Status', 'Notes', 'Created At', 'Updated At', 'Revision'],
+  CATEGORIES: ['Salary', 'Freelance', 'Business', 'Investments', 'Other'],
+  STATUSES: ['Pending', 'Received'],
+  CURRENCIES: INVOICE_CONFIG.CURRENCIES
+};
+
+function normalizeEarning_(input) {
+  if (!input || typeof input !== 'object') throw new Error('Earning details are required.');
+  const id = String(input.id || '');
+  if (id && !/^ERN-[a-zA-Z0-9-]{8,80}$/.test(id)) throw new Error('Invalid earning ID.');
+  const date = expenseText_(input.date, 'Date', 10);
+  if (!parseLocalDate(date) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Choose a valid earning date.');
+  const payer = expenseText_(input.payer, 'Payer', 120);
+  if (!payer) throw new Error('Enter a payer or income source.');
+  const category = String(input.category || '');
+  if (!EARNING_CONFIG.CATEGORIES.includes(category)) throw new Error('Choose a valid earning category.');
+  const currency = String(input.currency || '');
+  if (!EARNING_CONFIG.CURRENCIES.includes(currency)) throw new Error('Choose a supported earning currency.');
+  const status = input.status || 'Pending';
+  if (!EARNING_CONFIG.STATUSES.includes(status)) throw new Error('Choose a valid earning status.');
+  const revision = Number(input.revision || 0);
+  if (!Number.isSafeInteger(revision) || revision < 0) throw new Error('Invalid earning revision.');
+  return {
+    id, date, payer, category,
+    description: expenseText_(input.description, 'Description', 200),
+    amountMinor: expenseAmountMinor_(input.amount, currency), currency, status,
+    notes: expenseText_(input.notes, 'Notes', 2000), revision
+  };
+}
+
+function earningSheet_(create) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(EARNING_CONFIG.SHEET);
+  if (!sheet && create) sheet = ss.insertSheet(EARNING_CONFIG.SHEET);
+  if (!sheet) return null;
+  if (!sheet.getLastRow()) {
+    if (create) {
+      sheet.getRange(1, 1, 1, EARNING_CONFIG.HEADERS.length).setValues([EARNING_CONFIG.HEADERS]);
+      sheet.setFrozenRows(1);
+    }
+    return sheet;
+  }
+  const headers = sheet.getRange(1, 1, 1, EARNING_CONFIG.HEADERS.length).getValues()[0];
+  if (headers.join('|') !== EARNING_CONFIG.HEADERS.join('|')) throw new Error('Earning_Master headers do not match. No earning data was changed.');
+  return sheet;
+}
+
+function earningRows_() {
+  const sheet = earningSheet_(false);
+  return { sheet, rows: !sheet || sheet.getLastRow() < 2 ? [] : sheet.getRange(2, 1, sheet.getLastRow() - 1, EARNING_CONFIG.HEADERS.length).getValues() };
+}
+
+function readEarningRecord_(row) {
+  const currency = String(row[6]);
+  const earning = normalizeEarning_({
+    id: String(row[0]), date: expenseDateKey_(row[1]), payer: row[2], category: row[3], description: row[4],
+    amount: Number(row[5]) / currencyScale_(currency), currency, status: row[7], notes: row[8], revision: Number(row[11])
+  });
+  if (!Number.isSafeInteger(Number(row[5])) || earning.amountMinor !== Number(row[5])) throw new Error('Stored earning amount is invalid.');
+  return { ...earning, createdAt: String(row[9] || ''), updatedAt: String(row[10] || '') };
+}
+
+function getEarnings() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const records = earningRows_().rows.filter(row => row[0]).map(readEarningRecord_);
+  return {
+    success: true,
+    earnings: records.sort((first, second) => second.date.localeCompare(first.date) || second.updatedAt.localeCompare(first.updatedAt)),
+    today: Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd'),
+    categories: EARNING_CONFIG.CATEGORIES.slice(), statuses: EARNING_CONFIG.STATUSES.slice(), currencies: EARNING_CONFIG.CURRENCIES.slice()
+  };
+}
+
+function writeEarning_(sheet, row, earning) {
+  if (row > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), row - sheet.getMaxRows());
+  const date = parseTaskDate_(earning.date);
+  if (!date) throw new Error('Choose a valid earning date in the spreadsheet time zone.');
+  sheet.getRange(row, 1, 1, EARNING_CONFIG.HEADERS.length).setValues([[
+    earning.id, date, literalText_(earning.payer), literalText_(earning.category), literalText_(earning.description),
+    earning.amountMinor, earning.currency, earning.status, literalText_(earning.notes),
+    earning.createdAt, earning.updatedAt, earning.revision
+  ]]);
+  sheet.getRange(row, 2).setNumberFormat('mmm d, yyyy');
+}
+
+function saveEarning(input) {
+  const earning = normalizeEarning_(input);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const store = earningRows_();
+    const index = earning.id ? store.rows.findIndex(row => row[0] === earning.id) : -1;
+    if (earning.id && index < 0) throw new Error('Earning not found. Refresh the earnings list before saving.');
+    const current = index < 0 ? null : readEarningRecord_(store.rows[index]);
+    if (earning.revision !== (current ? current.revision : 0)) throw new Error('This earning changed in another session. Reopen it before updating.');
+    const now = new Date().toISOString();
+    earning.id = current ? current.id : 'ERN-' + Utilities.getUuid();
+    earning.revision = (current ? current.revision : 0) + 1;
+    earning.createdAt = current ? current.createdAt : now;
+    earning.updatedAt = now;
+    const sheet = earningSheet_(true);
+    writeEarning_(sheet, index < 0 ? sheet.getLastRow() + 1 : index + 2, earning);
+    return { success: true, earning, message: 'Earning saved.' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteEarning(earningId, revision) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const store = earningRows_();
+    const index = store.rows.findIndex(row => row[0] === earningId);
+    if (index < 0) throw new Error('Earning not found. Refresh the earnings list.');
+    const earning = readEarningRecord_(store.rows[index]);
+    if (earning.revision !== Number(revision)) throw new Error('This earning changed in another session. Refresh before deleting.');
+    store.sheet.deleteRows(index + 2, 1);
+    return { success: true, message: 'Earning deleted.' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+const RECURRING_CONFIG = {
+  SHEET: 'Recurring_Master',
+  HEADERS: ['Rule ID', 'Type', 'Name', 'Category', 'Description', 'Amount Minor', 'Currency', 'Frequency', 'Start Date', 'End Date', 'Status', 'Notes', 'Created At', 'Updated At', 'Revision'],
+  TYPES: ['Expense', 'Earning'],
+  FREQUENCIES: ['Weekly', 'Monthly', 'Quarterly', 'Yearly'],
+  STATUSES: ['Active', 'Paused']
+};
+
+function normalizeRecurringRule_(input) {
+  if (!input || typeof input !== 'object') throw new Error('Recurring rule details are required.');
+  const id = String(input.id || '');
+  if (id && !/^REC-[a-zA-Z0-9-]{8,80}$/.test(id)) throw new Error('Invalid recurring rule ID.');
+  const type = String(input.type || '');
+  if (!RECURRING_CONFIG.TYPES.includes(type)) throw new Error('Choose Expense or Earning for this rule.');
+  const name = expenseText_(input.name, 'Name', 120);
+  if (!name) throw new Error('Enter a name for this recurring item.');
+  const category = String(input.category || '');
+  const categories = type === 'Expense' ? EXPENSE_CONFIG.CATEGORIES : EARNING_CONFIG.CATEGORIES;
+  if (!categories.includes(category)) throw new Error('Choose a valid category for this recurring item.');
+  const currency = String(input.currency || '');
+  if (!INVOICE_CONFIG.CURRENCIES.includes(currency)) throw new Error('Choose a supported recurring currency.');
+  const frequency = String(input.frequency || '');
+  if (!RECURRING_CONFIG.FREQUENCIES.includes(frequency)) throw new Error('Choose a valid recurring frequency.');
+  const startDate = expenseText_(input.startDate, 'Start date', 10);
+  const endDate = expenseText_(input.endDate, 'End date', 10);
+  if (!parseLocalDate(startDate) || (endDate && !parseLocalDate(endDate))) throw new Error('Choose valid recurring dates.');
+  if (endDate && endDate < startDate) throw new Error('End date cannot precede start date.');
+  const status = input.status || 'Active';
+  if (!RECURRING_CONFIG.STATUSES.includes(status)) throw new Error('Choose Active or Paused.');
+  const revision = Number(input.revision || 0);
+  if (!Number.isSafeInteger(revision) || revision < 0) throw new Error('Invalid recurring rule revision.');
+  return {
+    id, type, name, category, description: expenseText_(input.description, 'Description', 200),
+    amountMinor: expenseAmountMinor_(input.amount, currency), currency, frequency, startDate, endDate, status,
+    notes: expenseText_(input.notes, 'Notes', 2000), revision
+  };
+}
+
+function recurringSheet_(create) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(RECURRING_CONFIG.SHEET);
+  if (!sheet && create) sheet = ss.insertSheet(RECURRING_CONFIG.SHEET);
+  if (!sheet) return null;
+  if (!sheet.getLastRow()) {
+    if (create) {
+      sheet.getRange(1, 1, 1, RECURRING_CONFIG.HEADERS.length).setValues([RECURRING_CONFIG.HEADERS]);
+      sheet.setFrozenRows(1);
+    }
+    return sheet;
+  }
+  const headers = sheet.getRange(1, 1, 1, RECURRING_CONFIG.HEADERS.length).getValues()[0];
+  if (headers.join('|') !== RECURRING_CONFIG.HEADERS.join('|')) throw new Error('Recurring_Master headers do not match. No recurring data was changed.');
+  return sheet;
+}
+
+function recurringRows_() {
+  const sheet = recurringSheet_(false);
+  return { sheet, rows: !sheet || sheet.getLastRow() < 2 ? [] : sheet.getRange(2, 1, sheet.getLastRow() - 1, RECURRING_CONFIG.HEADERS.length).getValues() };
+}
+
+function readRecurringRule_(row) {
+  const currency = String(row[6]);
+  const rule = normalizeRecurringRule_({
+    id: String(row[0]), type: row[1], name: row[2], category: row[3], description: row[4],
+    amount: Number(row[5]) / currencyScale_(currency), currency, frequency: row[7],
+    startDate: expenseDateKey_(row[8]), endDate: row[9] ? expenseDateKey_(row[9]) : '', status: row[10], notes: row[11], revision: Number(row[14])
+  });
+  if (!Number.isSafeInteger(Number(row[5])) || rule.amountMinor !== Number(row[5])) throw new Error('Stored recurring amount is invalid.');
+  return { ...rule, createdAt: String(row[12] || ''), updatedAt: String(row[13] || '') };
+}
+
+function getRecurringRules(type) {
+  if (type && !RECURRING_CONFIG.TYPES.includes(type)) throw new Error('Choose Expense or Earning for recurring rules.');
+  return { success: true, rules: recurringRows_().rows.filter(row => row[0]).map(readRecurringRule_).filter(rule => !type || rule.type === type).sort((first, second) => first.startDate.localeCompare(second.startDate)) };
+}
+
+function writeRecurringRule_(sheet, row, rule) {
+  if (row > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), row - sheet.getMaxRows());
+  const startDate = parseTaskDate_(rule.startDate);
+  const endDate = rule.endDate ? parseTaskDate_(rule.endDate) : '';
+  if (!startDate || (rule.endDate && !endDate)) throw new Error('Choose valid recurring dates in the spreadsheet time zone.');
+  sheet.getRange(row, 1, 1, RECURRING_CONFIG.HEADERS.length).setValues([[
+    rule.id, rule.type, literalText_(rule.name), literalText_(rule.category), literalText_(rule.description),
+    rule.amountMinor, rule.currency, rule.frequency, startDate, endDate, rule.status, literalText_(rule.notes),
+    rule.createdAt, rule.updatedAt, rule.revision
+  ]]);
+  sheet.getRange(row, 9, 1, 2).setNumberFormat('mmm d, yyyy');
+}
+
+function saveRecurringRule(input) {
+  const rule = normalizeRecurringRule_(input);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const store = recurringRows_();
+    const index = rule.id ? store.rows.findIndex(row => row[0] === rule.id) : -1;
+    if (rule.id && index < 0) throw new Error('Recurring rule not found. Refresh before saving.');
+    const current = index < 0 ? null : readRecurringRule_(store.rows[index]);
+    if (rule.revision !== (current ? current.revision : 0)) throw new Error('This recurring rule changed in another session. Reopen it before updating.');
+    const now = new Date().toISOString();
+    rule.id = current ? current.id : 'REC-' + Utilities.getUuid();
+    rule.revision = (current ? current.revision : 0) + 1;
+    rule.createdAt = current ? current.createdAt : now;
+    rule.updatedAt = now;
+    const sheet = recurringSheet_(true);
+    writeRecurringRule_(sheet, index < 0 ? sheet.getLastRow() + 1 : index + 2, rule);
+    return { success: true, rule, message: 'Recurring rule saved. Forecasts do not create transactions.' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteRecurringRule(ruleId, revision) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const store = recurringRows_();
+    const index = store.rows.findIndex(row => row[0] === ruleId);
+    if (index < 0) throw new Error('Recurring rule not found. Refresh the rules list.');
+    const rule = readRecurringRule_(store.rows[index]);
+    if (rule.revision !== Number(revision)) throw new Error('This recurring rule changed in another session. Refresh before deleting.');
+    store.sheet.deleteRows(index + 2, 1);
+    return { success: true, message: 'Recurring rule deleted.' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getFinanceExchangeRates(baseCurrency) {
+  baseCurrency = String(baseCurrency || 'USD').toUpperCase();
+  if (!INVOICE_CONFIG.CURRENCIES.includes(baseCurrency)) throw new Error('Choose a supported reporting currency.');
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const requestedOn = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+  const propertyKey = 'FINANCE_FX_DAILY_' + baseCurrency;
+  const properties = PropertiesService.getScriptProperties();
+  let saved = null;
+  try { saved = JSON.parse(properties.getProperty(propertyKey) || 'null'); } catch (_) {}
+  if (saved && saved.requestedOn === requestedOn && saved.rates && saved.base === baseCurrency) return { ...saved, cached: true, stale: false };
+
+  try {
+    const quotes = INVOICE_CONFIG.CURRENCIES.filter(currency => currency !== baseCurrency).join(',');
+    const url = 'https://api.frankfurter.dev/v2/rates?base=' + encodeURIComponent(baseCurrency) + '&quotes=' + encodeURIComponent(quotes);
+    const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    if (response.getResponseCode() !== 200) throw new Error('Daily exchange rate provider returned HTTP ' + response.getResponseCode() + '.');
+    const rows = JSON.parse(response.getContentText());
+    if (!Array.isArray(rows) || !rows.length) throw new Error('Daily exchange rate provider returned no rates.');
+    const rates = { [baseCurrency]: 1 };
+    rows.forEach(row => {
+      if (row.base === baseCurrency && INVOICE_CONFIG.CURRENCIES.includes(row.quote) && Number.isFinite(Number(row.rate)) && Number(row.rate) > 0) {
+        rates[row.quote] = Number(row.rate);
+      }
+    });
+    if (Object.keys(rates).length < 2) throw new Error('Daily exchange rate provider returned no usable quotes.');
+    const result = {
+      success: true, base: baseCurrency, rates,
+      rateDate: String(rows[0].date || ''), requestedOn,
+      source: 'Frankfurter daily mid-market rates'
+    };
+    try { properties.setProperty(propertyKey, JSON.stringify(result)); } catch (_) {}
+    return { ...result, cached: false, stale: false };
+  } catch (error) {
+    if (saved && saved.rates && saved.base === baseCurrency) {
+      return { ...saved, cached: true, stale: true, error: 'Could not refresh today’s exchange rates. Showing the last saved daily rates.' };
+    }
+    throw new Error('Daily exchange rates are unavailable: ' + (error.message || error));
   }
 }

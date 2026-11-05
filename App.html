@@ -596,7 +596,7 @@
 
     .view { display: none; }
     .view.active { display: block; }
-    #taskTopActions[hidden], #expenseTopActions[hidden] { display: none; }
+    #taskTopActions[hidden], #financeTopActions[hidden], .top-actions [hidden] { display: none; }
 
     .table-wrap { overflow: auto; }
     .list-filters { align-items: end; }
@@ -947,11 +947,15 @@
     .expense-period { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 8px; width: min(100%, 300px); }
     .expense-period .btn { width: 44px; padding-left: 0; padding-right: 0; }
     .expense-period strong { min-width: 0; text-align: center; font-size: 13px; white-space: nowrap; }
+    .finance-report-currency { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; }
+    .finance-report-currency select { width: 110px; }
+    .finance-fx-status { padding: 0 0 10px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+    .finance-fx-status.error { color: var(--red); }
     .expense-currency-block { border-top: 1px solid var(--border); padding: 16px 0 20px; }
     .expense-currency-heading { justify-content: flex-start; margin-bottom: 12px; }
     .expense-currency-heading h4 { margin: 0; font-size: 16px; }
     .expense-currency-heading span, .expense-quiet { color: var(--muted); font-size: 12px; }
-    .expense-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .expense-summary-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
     .expense-summary-grid > div { min-width: 0; border-top: 2px solid var(--border); padding-top: 8px; }
     .expense-summary-grid > div:first-child { border-color: var(--blue); }
     .expense-summary-grid > div:nth-child(2) { border-color: var(--green); }
@@ -960,20 +964,30 @@
     .expense-summary-grid strong { display: block; margin-top: 4px; font-size: 16px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
     .expense-status-block { margin-top: 16px; }
     .expense-status-block h5 { margin: 0 0 8px; font-size: 12px; }
-    .expense-status-chart { display: flex; width: 100%; height: 12px; overflow: hidden; border-radius: 6px; background: #e9edf3; }
-    .expense-status-chart span { display: block; height: 100%; }
-    .expense-status-chart .paid { background: var(--green); }
-    .expense-status-chart .pending { background: #c9372c; }
+    .expense-status-chart { width: 124px; height: 124px; border-radius: 50%; display: grid; place-items: center; flex: 0 0 auto; }
+    .expense-status-chart-hole { width: 78px; height: 78px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); color: var(--text); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .expense-status-content { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
     .expense-status-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 7px; color: var(--muted); font-size: 11px; }
     .expense-status-legend strong { color: var(--text); font-variant-numeric: tabular-nums; }
-    .expense-analysis-grid { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 18px; margin-top: 18px; }
+    .expense-analysis-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin-top: 18px; }
     .expense-analysis-grid > div { min-width: 0; }
+    .expense-analysis-grid > div:first-child { grid-column: span 2; }
     .expense-analysis-grid h5 { margin: 0 0 10px; font-size: 12px; }
-    .expense-trend { display: flex; flex-direction: column; gap: 8px; }
-    .expense-trend-item { min-width: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr) max-content; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; }
-    .expense-trend-track { height: 8px; border-radius: 4px; background: #e9edf3; overflow: hidden; }
-    .expense-trend-track span { display: block; height: 100%; background: var(--blue); border-radius: inherit; }
-    .expense-trend-item strong { color: var(--text); font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .expense-trend { min-width: 0; }
+    .expense-trend svg { display: block; width: 100%; height: 190px; overflow: visible; }
+    .expense-trend-grid { stroke: #dfe3eb; stroke-width: 1; }
+    .expense-trend-line { fill: none; stroke: var(--blue); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+    .expense-trend-line.income-series { stroke: var(--green); stroke-dasharray: 6 4; }
+    .expense-trend-point { fill: var(--surface); stroke: var(--blue); stroke-width: 2; }
+    .expense-trend-point.income-series { stroke: var(--green); }
+    .expense-trend-axis, .expense-trend-value { fill: var(--muted); font: 10px sans-serif; }
+    .expense-trend-value { fill: var(--text); font-variant-numeric: tabular-nums; }
+    .expense-trend-values { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 10px; margin-top: 4px; }
+    .expense-trend-values span { display: flex; flex-direction: column; gap: 2px; min-width: 0; color: var(--muted); font-size: 10px; }
+    .expense-trend-values strong { color: var(--text); font-size: 9px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .expense-trend-legend { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-bottom: 4px; color: var(--muted); font-size: 11px; }
+    .expense-trend-legend span::before { content: ''; display: inline-block; width: 14px; height: 3px; margin: 0 5px 3px 0; background: var(--blue); }
+    .expense-trend-legend span:last-child::before { background: var(--green); }
     .expense-breakdown-row { display: grid; grid-template-columns: minmax(56px, 1fr) minmax(48px, 1.2fr) max-content; gap: 7px; align-items: center; margin: 9px 0; font-size: 11px; }
     .expense-breakdown-row > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .expense-breakdown-row strong { font-variant-numeric: tabular-nums; font-size: 10px; }
@@ -999,8 +1013,9 @@
       .expense-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .expense-analysis-grid { grid-template-columns: minmax(0, 1fr); }
       .expense-analysis-grid > div:first-child { grid-column: auto; }
-      .expense-trend-item { grid-template-columns: 30px minmax(24px, 1fr) max-content; gap: 6px; }
-      .expense-trend-item strong { font-size: 9px; }
+      .expense-status-chart { width: 108px; height: 108px; }
+      .expense-status-chart-hole { width: 68px; height: 68px; }
+      .expense-trend svg { height: 170px; }
     }
     @media (max-width: 560px) {
       .invoice-layout { padding: 0 12px; }
@@ -1108,15 +1123,21 @@
     </div>
 
     <div class="workspace-group">
-      <button class="nav-item nav-group-trigger" id="expenseNav" type="button" title="Expense workspaces" aria-label="Expense workspaces" aria-expanded="true" aria-controls="expenseWorkspaceNav" onclick="toggleExpenseNav()">
-        <span class="nav-icon" aria-hidden="true">$</span><span class="nav-text">Expenses</span><span class="nav-chevron" aria-hidden="true">&#9662;</span>
+      <button class="nav-item nav-group-trigger" id="expenseNav" type="button" title="Finance workspaces" aria-label="Finance workspaces" aria-expanded="true" aria-controls="expenseWorkspaceNav" onclick="toggleExpenseNav()">
+        <span class="nav-icon" aria-hidden="true">$</span><span class="nav-text">Finance</span><span class="nav-chevron" aria-hidden="true">&#9662;</span>
       </button>
-      <nav class="workspace-nav" id="expenseWorkspaceNav" aria-label="Expense workspaces">
+      <nav class="workspace-nav" id="expenseWorkspaceNav" aria-label="Finance workspaces">
         <button class="nav-item" data-view="expenses" aria-label="Expenses" title="Expenses">
           <span class="nav-icon" aria-hidden="true">▤</span><span class="nav-text">Expenses</span>
         </button>
         <button class="nav-item" data-view="expenseDashboard" aria-label="Expense Dashboard" title="Expense Dashboard">
           <span class="nav-icon" aria-hidden="true">▥</span><span class="nav-text">Dashboard</span>
+        </button>
+        <button class="nav-item" data-view="earnings" aria-label="Earnings" title="Earnings">
+          <span class="nav-icon" aria-hidden="true">+</span><span class="nav-text">Earnings</span>
+        </button>
+        <button class="nav-item" data-view="recurring" aria-label="Recurring" title="Recurring">
+          <span class="nav-icon" aria-hidden="true">↻</span><span class="nav-text">Recurring</span>
         </button>
       </nav>
     </div>
@@ -1131,12 +1152,14 @@
     <header class="topbar">
       <div class="breadcrumb" id="breadcrumb">Multi Purpose Planner&nbsp; / &nbsp;<strong>Workspace</strong></div>
       <div class="top-actions" id="taskTopActions">
-        <button class="btn" onclick="loadTasks()">↻ Refresh</button>
-        <button class="btn btn-primary" onclick="openCreate()">＋ Add task</button>
+        <button class="btn" onclick="loadTasks()">↻ Refresh tasks</button>
+        <button class="btn btn-primary" onclick="openCreate()">＋ Add Task</button>
       </div>
-      <div class="top-actions" id="expenseTopActions" hidden>
-        <button class="btn" id="expenseRefreshBtn" onclick="loadExpenseWorkspace(state.syncing)" title="Refresh expenses">↻ Refresh expenses</button>
-        <button class="btn btn-primary" onclick="focusExpenseForm()">＋ Add Expense</button>
+      <div class="top-actions" id="financeTopActions" hidden>
+        <button class="btn" id="financeRefreshBtn" onclick="refreshFinanceData()">↻ Refresh Finance</button>
+        <button class="btn btn-primary" id="addExpenseAction" onclick="focusExpenseForm()" hidden>＋ Add Expense</button>
+        <button class="btn btn-primary" id="addEarningAction" onclick="focusEarningForm()" hidden>＋ Add Earning</button>
+        <button class="btn btn-primary" id="addRecurringAction" onclick="focusRecurringForm()" hidden>＋ Add Recurring Rule</button>
       </div>
     </header>
 
@@ -1264,7 +1287,7 @@
                     <label class="form-field">Date *<input class="field-control" id="expenseDate" type="date" required onchange="setExpenseField('date',this.value)"></label>
                     <label class="form-field">Merchant *<input class="field-control" id="expenseMerchant" maxlength="120" required oninput="setExpenseField('merchant',this.value)"></label>
                     <label class="form-field">Category *<select class="field-control" id="expenseCategory" required onchange="setExpenseField('category',this.value)"></select></label>
-                    <label class="form-field">Amount *<input class="field-control" id="expenseAmount" type="number" min="0.01" max="10000000" step="0.01" required oninput="setExpenseField('amount',this.value)"></label>
+                    <label class="form-field">Amount *<input class="field-control" id="expenseAmount" type="number" min="0.01" max="10000000" step="any" required oninput="setExpenseField('amount',this.value)"></label>
                     <label class="form-field">Currency *<select class="field-control" id="expenseCurrency" required onchange="setExpenseField('currency',this.value)"></select></label>
                     <label class="form-field">Payment method *<select class="field-control" id="expensePaymentMethod" required onchange="setExpenseField('paymentMethod',this.value)"></select></label>
                     <label class="form-field">Payment status *<select class="field-control" id="expenseStatus" required onchange="setExpenseField('status',this.value)"></select></label>
@@ -1298,6 +1321,65 @@
             <div><h2>Expense Dashboard</h2><div class="panel-subtitle">Visualize spending by month, currency, category, and merchant.</div></div>
           </div>
           <div id="expenseDashboard"></div>
+        </div>
+      </section>
+      <section class="view" id="view-earnings">
+        <div class="panel expense-workspace">
+          <div class="expense-toolbar"><div><h2>Earnings</h2><div class="panel-subtitle">Record income separately from expenses.</div></div></div>
+          <output id="earningNotice" class="data-notice" aria-live="polite" hidden></output>
+          <div class="expense-columns">
+            <section class="expense-form-section" aria-labelledby="earningFormTitle">
+              <form id="earningForm" onsubmit="saveEarningForm(event)">
+                <h3 id="earningFormTitle">Add an earning</h3>
+                <div id="earningFormError" class="invoice-field-error" role="alert"></div>
+                <fieldset id="earningFields" class="expense-fields"><div class="form-grid">
+                  <label class="form-field">Date *<input class="field-control" id="earningDate" type="date" required oninput="setEarningField('date',this.value)"></label>
+                  <label class="form-field">Payer / source *<input class="field-control" id="earningPayer" maxlength="120" required oninput="setEarningField('payer',this.value)"></label>
+                  <label class="form-field">Category *<select class="field-control" id="earningCategory" required onchange="setEarningField('category',this.value)"></select></label>
+                  <label class="form-field">Amount *<input class="field-control" id="earningAmount" type="number" min="0.01" max="10000000" step="any" required oninput="setEarningField('amount',this.value)"></label>
+                  <label class="form-field">Currency *<select class="field-control" id="earningCurrency" required onchange="setEarningField('currency',this.value)"></select></label>
+                  <label class="form-field">Status *<select class="field-control" id="earningStatus" required onchange="setEarningField('status',this.value)"></select></label>
+                  <label class="form-field full">Description<input class="field-control" id="earningDescription" maxlength="200" oninput="setEarningField('description',this.value)"></label>
+                  <label class="form-field full">Notes<textarea class="field-control" id="earningNotes" maxlength="2000" rows="3" oninput="setEarningField('notes',this.value)"></textarea></label>
+                </div><div class="expense-form-actions"><button class="btn" type="button" onclick="resetEarningForm()">Clear</button><button class="btn btn-primary" id="saveEarningBtn" type="submit">Save earning</button></div></fieldset>
+              </form>
+            </section>
+            <section class="expense-list-section" aria-labelledby="earningListTitle">
+              <div class="expense-list-heading"><h3 id="earningListTitle">Earning records</h3><span id="earningRecordCount" class="panel-subtitle"></span></div>
+              <div class="expense-filters"><label>Search<input class="field-control" id="earningSearch" type="search" placeholder="Payer or description" oninput="setEarningFilter('search',this.value)"></label><label>Category<select class="field-control" id="earningListCategory" onchange="setEarningFilter('category',this.value)"></select></label><label>Status<select class="field-control" id="earningListStatus" onchange="setEarningFilter('status',this.value)"></select></label><label>Currency<select class="field-control" id="earningListCurrency" onchange="setEarningFilter('currency',this.value)"></select></label></div>
+              <div class="table-wrap" id="earningTable"></div>
+            </section>
+          </div>
+        </div>
+      </section>
+      <section class="view" id="view-recurring">
+        <div class="panel expense-workspace">
+          <div class="expense-toolbar"><div><h2>Recurring</h2><div class="panel-subtitle">Forecast repeating expenses and earnings without auto-posting transactions.</div></div></div>
+          <output id="recurringNotice" class="data-notice" aria-live="polite" hidden></output>
+          <div class="expense-columns">
+            <section class="expense-form-section" aria-labelledby="recurringFormTitle">
+              <form id="recurringForm" onsubmit="saveRecurringForm(event)">
+                <h3 id="recurringFormTitle">Add a recurring rule</h3>
+                <div id="recurringFormError" class="invoice-field-error" role="alert"></div>
+                <fieldset id="recurringFields" class="expense-fields"><div class="form-grid">
+                  <label class="form-field">Type *<select class="field-control" id="recurringType" onchange="setRecurringType(this.value)"><option>Expense</option><option>Earning</option></select></label>
+                  <label class="form-field">Name *<input class="field-control" id="recurringName" maxlength="120" required oninput="setRecurringField('name',this.value)"></label>
+                  <label class="form-field">Category *<select class="field-control" id="recurringCategory" required onchange="setRecurringField('category',this.value)"></select></label>
+                  <label class="form-field">Amount *<input class="field-control" id="recurringAmount" type="number" min="0.01" max="10000000" step="any" required oninput="setRecurringField('amount',this.value)"></label>
+                  <label class="form-field">Currency *<select class="field-control" id="recurringCurrency" required onchange="setRecurringField('currency',this.value)"></select></label>
+                  <label class="form-field">Frequency *<select class="field-control" id="recurringFrequency" onchange="setRecurringField('frequency',this.value)"><option>Weekly</option><option>Monthly</option><option>Quarterly</option><option>Yearly</option></select></label>
+                  <label class="form-field">Starts *<input class="field-control" id="recurringStartDate" type="date" required oninput="setRecurringField('startDate',this.value)"></label>
+                  <label class="form-field">Ends<input class="field-control" id="recurringEndDate" type="date" oninput="setRecurringField('endDate',this.value)"></label>
+                  <label class="form-field">Status<select class="field-control" id="recurringStatus" onchange="setRecurringField('status',this.value)"><option>Active</option><option>Paused</option></select></label>
+                  <label class="form-field full">Notes<textarea class="field-control" id="recurringNotes" maxlength="2000" rows="3" oninput="setRecurringField('notes',this.value)"></textarea></label>
+                </div><div class="expense-form-actions"><button class="btn" type="button" onclick="resetRecurringForm()">Clear</button><button class="btn btn-primary" id="saveRecurringBtn" type="submit">Save recurring rule</button></div></fieldset>
+              </form>
+            </section>
+            <section class="expense-list-section" aria-labelledby="recurringListTitle">
+              <div class="expense-list-heading"><h3 id="recurringListTitle">Recurring rules</h3><span id="recurringRecordCount" class="panel-subtitle"></span></div>
+              <div class="table-wrap" id="recurringTable"></div>
+            </section>
+          </div>
         </div>
       </section>
     </div>
@@ -1462,6 +1544,11 @@
     dashboard: { period: 'monthly', anchor: null, client: '' },
     invoices: { loaded: false, loading: false, error: '', request: 0, records: [], settings: null, settingsRevision: 0, editor: null, dirty: false, historyClient: '', historyPage: 1 },
     expenses: { loaded: false, loading: false, error: '', formError: '', request: 0, records: [], today: '', categories: [], currencies: [], paymentMethods: [], statuses: [], editor: null, dirty: false, month: '', filters: { search: '', category: '', status: '', currency: '' } },
+    earnings: { loaded: false, loading: false, error: '', formError: '', request: 0, records: [], today: '', categories: [], currencies: [], statuses: [], editor: null, dirty: false, filters: { search: '', category: '', status: '', currency: '' } },
+    recurring: { loaded: false, loading: false, error: '', formError: '', request: 0, rules: [], editor: null, dirty: false },
+    financeRefreshing: false,
+    financeRefreshPending: new Set(),
+    financeFx: { base: 'USD', rates: null, rateDate: '', requestedOn: '', source: '', loaded: false, loading: false, stale: false, error: '', request: 0 },
     subtaskPanel: { parentId: null, page: 1, selected: new Set(), draft: '', quantity: 1, patch: {}, editOpen: false, status: 'To Do' },
     list: {
       period: 'all', anchor: null,
@@ -1732,6 +1819,9 @@
     $('taskForm').setAttribute('aria-busy', String(state.writing || state.syncing));
     updateInvoiceBusy();
     updateExpenseBusy();
+    updateEarningBusy();
+    updateRecurringBusy();
+    updateFinanceRefreshButton();
     updateMetricsBusy();
     const taskView = ['timeline', 'tasks', 'dashboard'].includes(state.activeView);
     notice.hidden = !taskView || (!state.loading && !state.error && !state.writing);
@@ -1741,11 +1831,106 @@
       : state.writing ? 'Saving changes...' : 'Refreshing tasks...';
   }
 
+  function updateFinanceRefreshButton() {
+    const button = $('financeRefreshBtn');
+    if (!button) return;
+    const financeLoading = state.expenses.loading || state.earnings.loading || state.recurring.loading || state.financeFx.loading;
+    button.disabled = state.writing || state.syncing || financeLoading || state.financeRefreshing;
+    button.textContent = state.financeRefreshing ? 'Refreshing Finance...' : '↻ Refresh Finance';
+  }
+
+  function refreshFinanceData() {
+    if (state.writing || state.syncing || state.expenses.loading || state.earnings.loading || state.recurring.loading || state.financeFx.loading) return;
+    state.financeRefreshing = true;
+    state.financeRefreshPending = new Set(['expenses', 'earnings', 'recurring', 'fx']);
+    updateFinanceRefreshButton();
+    loadExpenseWorkspace(true);
+    loadEarningWorkspace(true);
+    loadRecurringWorkspace(true);
+    loadFinanceExchangeRates(true);
+  }
+
+  function finishFinanceRefresh(key) {
+    if (!state.financeRefreshing) return;
+    state.financeRefreshPending.delete(key);
+    if (!state.financeRefreshPending.size) {
+      state.financeRefreshing = false;
+      updateFinanceRefreshButton();
+      if (state.activeView === 'expenseDashboard') renderExpenseWorkspace();
+    }
+  }
+
+  function financeBaseCurrencies() {
+    return ['USD', 'PHP', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'KRW'];
+  }
+
+  function setFinanceBaseCurrency(currency) {
+    if (!financeBaseCurrencies().includes(currency) || currency === state.financeFx.base) return;
+    state.financeFx.base = currency;
+    state.financeFx.loaded = false;
+    state.financeFx.error = '';
+    state.financeFx.stale = false;
+    loadFinanceExchangeRates(true);
+    if (state.activeView === 'expenseDashboard') renderExpenseDashboard();
+  }
+
+  function convertMinorToCurrency(minor, sourceCurrency, targetCurrency, rates) {
+    if (sourceCurrency === targetCurrency) return Math.round(minor);
+    const sourceUnitsPerTarget = Number(rates?.[sourceCurrency]);
+    if (!Number.isFinite(sourceUnitsPerTarget) || sourceUnitsPerTarget <= 0) return null;
+    const targetScale = currencyScale(targetCurrency);
+    return Math.round((minor / currencyScale(sourceCurrency)) / sourceUnitsPerTarget * targetScale);
+  }
+
+  function loadFinanceExchangeRates(force = false) {
+    const workspace = state.financeFx;
+    if (workspace.loading || (workspace.loaded && !force)) return;
+    const request = ++workspace.request;
+    workspace.loading = true;
+    workspace.error = '';
+    updateFinanceRefreshButton();
+    if (typeof google === 'undefined' || !google.script) {
+      fail(new Error('Apps Script connection unavailable. Use the deployed web app URL.'));
+      return;
+    }
+    google.script.run.withSuccessHandler(response => {
+      if (request !== workspace.request) return;
+      if (!response || !response.success || response.base !== workspace.base || !response.rates || typeof response.rates !== 'object') {
+        fail(new Error('The server returned unexpected exchange-rate data.'));
+        return;
+      }
+      workspace.rates = response.rates;
+      workspace.rateDate = response.rateDate || '';
+      workspace.requestedOn = response.requestedOn || '';
+      workspace.source = response.source || 'Daily exchange-rate reference';
+      workspace.stale = response.stale === true;
+      workspace.error = response.error || '';
+      workspace.loaded = true;
+      workspace.loading = false;
+      if (state.activeView === 'expenseDashboard') renderExpenseWorkspace();
+      finishFinanceRefresh('fx');
+      updateFinanceRefreshButton();
+    }).withFailureHandler(fail).getFinanceExchangeRates(workspace.base);
+
+    function fail(error) {
+      if (request !== workspace.request) return;
+      workspace.loading = false;
+      workspace.error = String(error.message || error);
+      workspace.loaded = false;
+      workspace.rates = null;
+      if (state.activeView === 'expenseDashboard') renderExpenseWorkspace();
+      finishFinanceRefresh('fx');
+      updateFinanceRefreshButton();
+    }
+  }
+
   function renderActiveView() {
     if (state.activeView === 'expenses' || state.activeView === 'expenseDashboard') {
       renderExpenseWorkspace();
       return;
     }
+    if (state.activeView === 'earnings') { renderEarnings(); return; }
+    if (state.activeView === 'recurring') { renderRecurringWorkspace(); return; }
     if (state.activeView === 'invoices') {
       renderInvoices();
       return;
@@ -1762,7 +1947,8 @@
   }
 
   function loadingMarkup(view) {
-    const label = view === 'invoices' ? 'invoices' : view === 'expenses' ? 'expenses' : 'tasks';
+    const labels = { invoices: 'invoices', expenses: 'expenses', expenseDashboard: 'expense dashboard', earnings: 'earnings', recurring: 'recurring rules' };
+    const label = labels[view] || 'tasks';
     return `<div class="loading loading-${esc(view)}" aria-busy="true"><output aria-live="polite">Loading ${label}...</output><div class="loading-skeleton" aria-hidden="true">${'<span></span>'.repeat(8)}</div></div>`;
   }
 
@@ -1785,7 +1971,10 @@
         return (...args) => {
           const invoiceCommand = ['saveInvoice', 'saveInvoiceSettings', 'changeInvoiceStatus', 'deleteInvoiceDraft'].includes(method);
           const expenseCommand = ['saveExpense', 'deleteExpense'].includes(method);
-          if (state.writing || state.syncing || (invoiceCommand ? !state.invoices.loaded : expenseCommand ? !state.expenses.loaded : !state.loaded)) {
+          const earningCommand = ['saveEarning', 'deleteEarning'].includes(method);
+          const recurringCommand = ['saveRecurringRule', 'deleteRecurringRule'].includes(method);
+          const targetLoaded = invoiceCommand ? state.invoices.loaded : expenseCommand ? state.expenses.loaded : earningCommand ? state.earnings.loaded : recurringCommand ? state.recurring.loaded : state.loaded;
+          if (state.writing || state.syncing || !targetLoaded) {
             failure(new Error('Wait for the current operation or refresh to finish.'));
             return;
           }
@@ -1811,6 +2000,14 @@
             state.expenses.request++;
             state.expenses.loading = false;
           }
+          if (earningCommand) {
+            state.earnings.request++;
+            state.earnings.loading = false;
+          }
+          if (recurringCommand) {
+            state.recurring.request++;
+            state.recurring.loading = false;
+          }
           state.writing = true;
           state.syncing = true;
           ++state.request;
@@ -1818,6 +2015,8 @@
           updateDataNotice();
           if (state.activeView === 'tasks') renderTaskTable();
           if (state.activeView === 'expenses' || state.activeView === 'expenseDashboard') updateExpenseBusy();
+          if (state.activeView === 'earnings') updateEarningBusy();
+          if (state.activeView === 'recurring') updateRecurringBusy();
           google.script.run.withSuccessHandler(result => {
             state.writing = false;
             if (!result || result.success !== true) {
@@ -2958,12 +3157,26 @@ html += `<div class="task-cell"
 
   function switchView(view) {
     const expenseViews = ['expenses', 'expenseDashboard'];
+    const financialViews = [...expenseViews, 'earnings', 'recurring'];
+    const taskViews = ['timeline', 'tasks', 'dashboard'];
     if (view !== state.activeView && expenseViews.includes(state.activeView) && state.expenses.dirty && !confirm('Discard the unsaved expense changes?')) return;
+    if (view !== state.activeView && state.activeView === 'earnings' && state.earnings.dirty && !confirm('Discard the unsaved earning changes?')) return;
+    if (view !== state.activeView && state.activeView === 'recurring' && state.recurring.dirty && !confirm('Discard the unsaved recurring rule changes?')) return;
     if (view !== state.activeView && state.taskBaseline && !closeModal()) return;
     if (view !== state.activeView && expenseViews.includes(state.activeView) && state.expenses.dirty) {
       state.expenses.dirty = false;
       state.expenses.editor = newExpenseDraft();
       state.expenses.formError = '';
+    }
+    if (view !== state.activeView && state.activeView === 'earnings' && state.earnings.dirty) {
+      state.earnings.dirty = false;
+      state.earnings.editor = newEarningDraft();
+      state.earnings.formError = '';
+    }
+    if (view !== state.activeView && state.activeView === 'recurring' && state.recurring.dirty) {
+      state.recurring.dirty = false;
+      state.recurring.editor = newRecurringDraft();
+      state.recurring.formError = '';
     }
     state.activeView = view;
     document.querySelectorAll('.nav-item[data-view]').forEach(b => {
@@ -2971,7 +3184,7 @@ html += `<div class="task-cell"
       if (b.dataset.view === view) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
     $('projectNav').classList.toggle('has-active-descendant', ['timeline', 'tasks', 'dashboard', 'invoices'].includes(view));
-    $('expenseNav').classList.toggle('has-active-descendant', expenseViews.includes(view));
+    $('expenseNav').classList.toggle('has-active-descendant', financialViews.includes(view));
     document.querySelectorAll('.view').forEach(v =>
       v.classList.toggle('active', v.id === `view-${view}`));
 
@@ -2981,15 +3194,19 @@ html += `<div class="task-cell"
       dashboard: ['Metrics', 'Task and hours metrics.'],
       invoices: ['Invoices', 'Biweekly billing and client copies.'],
       expenses: ['Expenses', 'Record and manage day-to-day spending.'],
-      expenseDashboard: ['Expense Dashboard', 'Visualize spending by month, currency, category, and merchant.']
+      expenseDashboard: ['Expense Dashboard', 'Compare earnings, expenses, and recurring forecasts by currency.'],
+      earnings: ['Earnings', 'Record income and track amounts received or pending.'],
+      recurring: ['Recurring', 'Manage repeating expense and earning forecasts.']
     };
 
     $('pageTitle').textContent = titles[view][0];
     $('pageSubtitle').textContent = titles[view][1];
     $('stats').hidden = view !== 'timeline';
-    const expenseView = expenseViews.includes(view);
-    $('taskTopActions').hidden = expenseView;
-    $('expenseTopActions').hidden = !expenseView;
+    $('taskTopActions').hidden = !taskViews.includes(view);
+    $('financeTopActions').hidden = !financialViews.includes(view);
+    $('addExpenseAction').hidden = view !== 'expenses';
+    $('addEarningAction').hidden = view !== 'earnings';
+    $('addRecurringAction').hidden = view !== 'recurring';
     $('breadcrumb').innerHTML = `Multi Purpose Planner&nbsp; / &nbsp;<strong>${esc(titles[view][0])}</strong>`;
     updateDataNotice();
     renderActiveView();
@@ -4142,7 +4359,7 @@ function deleteCurrentTask() {
     state.invoices.editor.lines[index][key] = value;
     state.invoices.dirty = true;
     const line = state.invoices.editor.lines[index];
-    const amount = invoiceAmount(line.hours, line.rate);
+    const amount = invoiceAmount(line.hours, line.rate, state.invoices.editor.currency);
     $('invoiceLineAmount' + index).textContent = amount === null ? 'Invalid amount' : invoiceMoney(amount, state.invoices.editor.currency);
     updateInvoicePreview();
   }
@@ -4163,7 +4380,7 @@ function deleteCurrentTask() {
 
   function invoiceTotals(invoice) {
     return invoice.lines.reduce((totals, line) => {
-      const amount = invoiceAmount(line.hours, line.rate);
+      const amount = invoiceAmount(line.hours, line.rate, invoice.currency);
       totals.invalid = totals.invalid || amount === null;
       totals.minor += amount === null ? 0 : amount;
       const hours = Number(line.hours);
@@ -4199,7 +4416,7 @@ function deleteCurrentTask() {
     const invoice = workspace.editor;
     const settings = workspace.settingsDraft;
     const readonly = invoice.status !== 'Draft';
-    const currencies = ['USD', 'PHP', 'EUR', 'GBP', 'CAD', 'AUD'];
+    const currencies = ['USD', 'PHP', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'KRW'];
     const clients = normalizeClientNames([...state.clientOptions, ...workspace.records.map(record => record.client), invoice.client]);
     const outstanding = workspace.records.filter(record => record.status === 'Issued');
     const paid = workspace.records.filter(record => record.status === 'Paid');
@@ -4223,7 +4440,7 @@ function deleteCurrentTask() {
       <details id="invoiceSettings" class="invoice-band" ${!workspace.settings.senderName || workspace.billingDirty ? 'open' : ''}>
         <summary><strong>Billing defaults</strong></summary>
         <fieldset id="invoiceSettingsFields" class="invoice-fields"><div class="form-grid" style="margin-top:16px">
-          ${[['anchor', 'Billing cycle starts', 'date'], ['currency', 'Currency', 'currency'], ['defaultRate', 'Default hourly rate', 'number'], ['senderName', 'Your name / business', 'text'], ['senderDetails', 'Your address / contact', 'textarea'], ['paymentNotes', 'Payment details / notes', 'textarea']].map(([key, label, type]) => `<label class="form-field">${label}${type === 'currency' ? `<select class="field-control" id="billing${key}" onchange="state.invoices.settingsDraft.${key}=this.value;state.invoices.billingDirty=true">${currencies.map(currency => `<option ${settings[key] === currency ? 'selected' : ''}>${currency}</option>`).join('')}</select>` : type === 'textarea' ? `<textarea class="field-control" id="billing${key}" oninput="state.invoices.settingsDraft.${key}=this.value;state.invoices.billingDirty=true">${esc(settings[key])}</textarea>` : `<input class="field-control" id="billing${key}" type="${type}" ${type === 'number' ? 'min="0" step="0.01" max="1000000"' : ''} value="${esc(settings[key])}" oninput="state.invoices.settingsDraft.${key}=this.value;state.invoices.billingDirty=true">`}</label>`).join('')}
+          ${[['anchor', 'Billing cycle starts', 'date'], ['currency', 'Currency', 'currency'], ['defaultRate', 'Default hourly rate', 'number'], ['senderName', 'Your name / business', 'text'], ['senderDetails', 'Your address / contact', 'textarea'], ['paymentNotes', 'Payment details / notes', 'textarea']].map(([key, label, type]) => `<label class="form-field">${label}${type === 'currency' ? `<select class="field-control" id="billing${key}" onchange="state.invoices.settingsDraft.${key}=this.value;state.invoices.billingDirty=true">${currencies.map(currency => `<option ${settings[key] === currency ? 'selected' : ''}>${currency}</option>`).join('')}</select>` : type === 'textarea' ? `<textarea class="field-control" id="billing${key}" oninput="state.invoices.settingsDraft.${key}=this.value;state.invoices.billingDirty=true">${esc(settings[key])}</textarea>` : `<input class="field-control" id="billing${key}" type="${type}" ${type === 'number' ? `min="0" step="${currencyScale(settings.currency)}" max="1000000"` : ''} value="${esc(settings[key])}" oninput="state.invoices.settingsDraft.${key}=this.value;state.invoices.billingDirty=true">`}</label>`).join('')}
         </div><div class="invoice-toolbar" style="margin-top:14px"><button class="btn" onclick="saveBillingDefaults()">Save billing defaults</button><button class="btn" onclick="resetBillingDefaults()">Reload saved defaults</button></div></fieldset>
       </details>
       <section id="invoiceEditor" class="invoice-band">
@@ -4241,15 +4458,15 @@ function deleteCurrentTask() {
             <label class="form-field">Billing timeline<select class="field-control" id="invoicePeriodMode" onchange="setInvoiceRange('periodMode',this.value)"><option value="fortnight" ${(invoice.periodMode || 'fortnight') === 'fortnight' ? 'selected' : ''}>Two weeks</option><option value="custom" ${invoice.periodMode === 'custom' ? 'selected' : ''}>Custom dates</option></select></label>
             <label class="form-field">From<input class="field-control" id="invoicePeriodStart" type="date" value="${esc(invoice.periodStart)}" onchange="setInvoiceRange('periodStart',this.value)"></label>
             <label class="form-field">Through<input class="field-control" id="invoicePeriodEnd" type="date" value="${esc(invoice.periodEnd)}" ${(invoice.periodMode || 'fortnight') === 'fortnight' ? 'disabled' : ''} onchange="setInvoiceRange('periodEnd',this.value)"></label>
-            ${[['issueDate', 'Issue date', 'date'], ['dueDate', 'Due date', 'date'], ['senderName', 'Your name / business', 'text'], ['defaultRate', 'Hourly rate for new lines', 'number']].map(([key, label, type]) => `<label class="form-field">${label}<input class="field-control" id="invoiceField-${key}" type="${type}" ${type === 'number' ? 'min="0" max="1000000" step="0.01"' : 'maxlength="200"'} value="${esc(invoice[key])}" oninput="setInvoiceField('${key}',this.value)"></label>`).join('')}
+            ${[['issueDate', 'Issue date', 'date'], ['dueDate', 'Due date', 'date'], ['senderName', 'Your name / business', 'text'], ['defaultRate', 'Hourly rate for new lines', 'number']].map(([key, label, type]) => `<label class="form-field">${label}<input class="field-control" id="invoiceField-${key}" type="${type}" ${type === 'number' ? `min="0" max="1000000" step="${currencyScale(invoice.currency)}"` : 'maxlength="200"'} value="${esc(invoice[key])}" oninput="setInvoiceField('${key}',this.value)"></label>`).join('')}
             ${[['senderDetails', 'Your address / contact'], ['clientDetails', 'Bill to address / contact'], ['notes', 'Payment details / notes']].map(([key, label]) => `<label class="form-field ${key === 'notes' ? 'full' : ''}">${label}<textarea class="field-control" maxlength="${key === 'notes' ? 1500 : 1000}" oninput="setInvoiceField('${key}',this.value)">${esc(invoice[key])}</textarea></label>`).join('')}
           </div>
           <div class="invoice-toolbar" style="margin-top:18px"><span>${invoice.lines.length} invoice lines</span><span class="spacer"></span><button class="btn btn-primary" id="addManualInvoiceLine" onclick="addInvoiceLine()">Add manual line</button></div>
           <div class="table-wrap"><table class="invoice-lines"><thead><tr><th>Description</th><th>Hours</th><th>Hourly rate</th><th>Amount</th><th></th></tr></thead><tbody>
             ${invoice.lines.map((line, index) => `<tr><td><input class="field-control description-input" id="invoiceLine-${index}-description" aria-label="Description line ${index + 1}" maxlength="200" value="${esc(line.description)}" oninput="setInvoiceLine(${index},'description',this.value)"><output class="invoice-field-error" id="invoiceError-${index}-description"></output>${line.taskId ? `<div class="task-meta">${esc(line.taskId)}</div>` : ''}</td>
               <td><input class="field-control" id="invoiceLine-${index}-hours" aria-label="Hours line ${index + 1}" type="number" min="0" max="10000" step="0.01" value="${esc(line.hours)}" oninput="setInvoiceLine(${index},'hours',this.value)"><output class="invoice-field-error" id="invoiceError-${index}-hours"></output></td>
-              <td><input class="field-control" id="invoiceLine-${index}-rate" aria-label="Rate line ${index + 1}" type="number" min="0" max="1000000" step="0.01" value="${esc(line.rate)}" oninput="setInvoiceLine(${index},'rate',this.value)"><output class="invoice-field-error" id="invoiceError-${index}-rate"></output></td>
-              <td><output id="invoiceLineAmount${index}">${invoiceAmount(line.hours, line.rate) === null ? 'Invalid amount' : esc(invoiceMoney(invoiceAmount(line.hours, line.rate), invoice.currency))}</output></td>
+              <td><input class="field-control" id="invoiceLine-${index}-rate" aria-label="Rate line ${index + 1}" type="number" min="0" max="1000000" step="${currencyScale(invoice.currency)}" value="${esc(line.rate)}" oninput="setInvoiceLine(${index},'rate',this.value)"><output class="invoice-field-error" id="invoiceError-${index}-rate"></output></td>
+              <td><output id="invoiceLineAmount${index}">${invoiceAmount(line.hours, line.rate, invoice.currency) === null ? 'Invalid amount' : esc(invoiceMoney(invoiceAmount(line.hours, line.rate, invoice.currency), invoice.currency))}</output></td>
               <td><button class="btn" aria-label="Remove invoice line ${index + 1}" title="Remove line" onclick="removeInvoiceLine(${index})">&#215;</button></td></tr>`).join('') || '<tr><td colspan="5">No invoice lines.</td></tr>'}
           </tbody></table></div>
           <div class="invoice-toolbar" style="margin-top:16px"><button class="btn" onclick="saveCurrentInvoice('Draft')">Save draft</button><button class="btn btn-primary" id="issueInvoiceBtn" onclick="saveCurrentInvoice('Issued')">Issue invoice</button></div>
@@ -4274,7 +4491,7 @@ function deleteCurrentTask() {
     const totals = invoiceTotals(invoice);
     $('invoicePrintable').innerHTML = `<div class="invoice-paper-head"><div><h2>INVOICE</h2>${invoice.name ? `<h3>${esc(invoice.name)}</h3>` : ''}<strong>${esc(invoice.number || 'Unsaved draft')}</strong><div class="invoice-status">${esc(invoice.status)}</div></div><div>Issue date: ${displayDate(invoice.issueDate)}<br>Due: ${displayDate(invoice.dueDate)}<br>Period: ${displayDateRange(invoice.periodStart, invoice.periodEnd)}<br>Currency: ${esc(invoice.currency)}</div></div>
       <div class="invoice-paper-head"><div class="invoice-party"><strong>${esc(invoice.senderName || 'Your name / business')}</strong><br>${esc(invoice.senderDetails)}</div><div class="invoice-party">Bill to<br><strong>${esc(invoice.client || 'Client')}</strong><br>${esc(invoice.clientDetails)}</div></div>
-      <table><thead><tr><th>Description</th><th class="amount">Hours</th><th class="amount">Rate</th><th class="amount">Amount</th></tr></thead><tbody>${invoice.lines.map(line => `<tr><td>${esc(line.description)}</td><td class="amount">${esc(line.hours)}</td><td class="amount">${esc(invoiceMoney(Number(line.rate || 0) * 100, invoice.currency))}</td><td class="amount">${invoiceAmount(line.hours, line.rate) === null ? 'Invalid amount' : esc(invoiceMoney(invoiceAmount(line.hours, line.rate), invoice.currency))}</td></tr>`).join('')}</tbody></table>
+      <table><thead><tr><th>Description</th><th class="amount">Hours</th><th class="amount">Rate</th><th class="amount">Amount</th></tr></thead><tbody>${invoice.lines.map(line => `<tr><td>${esc(line.description)}</td><td class="amount">${esc(line.hours)}</td><td class="amount">${esc(invoiceMoney(Number(line.rate || 0) * currencyScale(invoice.currency), invoice.currency))}</td><td class="amount">${invoiceAmount(line.hours, line.rate, invoice.currency) === null ? 'Invalid amount' : esc(invoiceMoney(invoiceAmount(line.hours, line.rate, invoice.currency), invoice.currency))}</td></tr>`).join('')}</tbody></table>
       <div class="invoice-total"><span>Total</span><strong>${totals.invalid ? 'Check line amounts' : esc(invoiceMoney(totals.minor, invoice.currency))}</strong></div>
       ${invoice.notes ? `<div class="invoice-party" style="margin-top:20px">${esc(invoice.notes)}</div>` : ''}`;
     updateInvoiceReadiness();
@@ -4402,8 +4619,8 @@ function deleteCurrentTask() {
     invoice.lines.forEach((line, index) => {
       const label = 'Line ' + (index + 1) + ': ';
       if (!String(line.description || '').trim() || String(line.description).length > 200) add('description', label + 'enter a description (up to 200 characters).', index);
-      if (Number(line.hours) <= 0 || invoiceAmount(line.hours, 1) === null) add('hours', label + 'enter positive hours, up to 10000 with two decimals.', index);
-      if (Number(line.rate) <= 0 || invoiceAmount(1, line.rate) === null) add('rate', label + 'enter a positive hourly rate, up to 1000000 with two decimals.', index);
+      if (Number(line.hours) <= 0 || invoiceAmount(line.hours, 1, invoice.currency) === null) add('hours', label + 'enter positive hours, up to 10000 with two decimals.', index);
+      if (Number(line.rate) <= 0 || invoiceAmount(1, line.rate, invoice.currency) === null) add('rate', label + 'enter a positive hourly rate, up to 1000000 with valid precision for ' + invoice.currency + '.', index);
       if (line.taskId && seen.has(line.taskId)) add('description', label + 'this video is listed more than once.', index);
       if (line.taskId) seen.add(line.taskId);
     });
@@ -4521,7 +4738,7 @@ function deleteCurrentTask() {
     const right = pdf.internal.pageSize.getWidth() - margin;
     const bottom = pdf.internal.pageSize.getHeight() - 20;
     let y = 22;
-    const money = minor => invoice.currency + ' ' + (minor / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const money = minor => invoice.currency + ' ' + (minor / currencyScale(invoice.currency)).toLocaleString('en-US', { minimumFractionDigits: currencyScale(invoice.currency) === 1 ? 0 : 2, maximumFractionDigits: currencyScale(invoice.currency) === 1 ? 0 : 2 });
     const ensureSpace = height => {
       if (y + height > bottom) { pdf.addPage(); y = 22; }
     };
@@ -4571,8 +4788,8 @@ function deleteCurrentTask() {
       pdf.text(description, margin, y);
       pdf.setFontSize(9);
       pdf.text(String(line.hours), 115, y, { align: 'right' });
-      pdf.text(money(Math.round(Number(line.rate) * 100)), 150, y, { align: 'right' });
-      pdf.text(money(invoiceAmount(line.hours, line.rate)), right, y, { align: 'right' });
+      pdf.text(money(Math.round(Number(line.rate) * currencyScale(invoice.currency))), 150, y, { align: 'right' });
+      pdf.text(money(invoiceAmount(line.hours, line.rate, invoice.currency)), right, y, { align: 'right' });
       y += height;
     });
     ensureSpace(25);
@@ -4614,8 +4831,8 @@ function deleteCurrentTask() {
     const invoice = state.invoices.editor;
     const rows = [['Invoice', invoice.number || 'Draft'], ['Invoice name', invoice.name || ''], ['Client', invoice.client], ['Status', invoice.status], ['Currency', invoice.currency],
       ['Period start', formatDisplayDate(invoice.periodStart)], ['Period end', formatDisplayDate(invoice.periodEnd)], ['Videos', invoice.lines.length], [], ['Description', 'Hours', 'Hourly rate', 'Amount'],
-      ...invoice.lines.map(line => [line.description, line.hours, line.rate, (invoiceAmount(line.hours, line.rate) / 100).toFixed(2)]),
-      ['Total', '', '', (invoiceTotals(invoice).minor / 100).toFixed(2)]];
+      ...invoice.lines.map(line => [line.description, line.hours, line.rate, (invoiceAmount(line.hours, line.rate, invoice.currency) / currencyScale(invoice.currency)).toFixed(currencyScale(invoice.currency) === 1 ? 0 : 2)]),
+      ['Total', '', '', (invoiceTotals(invoice).minor / currencyScale(invoice.currency)).toFixed(currencyScale(invoice.currency) === 1 ? 0 : 2)]];
     const text = '\uFEFF' + rows.map(row => row.map(invoiceCsvCell).join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
@@ -4631,7 +4848,7 @@ function deleteCurrentTask() {
     if (!invoiceReadyForCopy()) return;
     const invoice = state.invoices.editor;
     const text = [invoice.number || 'Draft invoice', invoice.name || '', invoice.status, 'From: ' + invoice.senderName, 'Client: ' + invoice.client,
-      formatDisplayDate(invoice.periodStart) + ' - ' + formatDisplayDate(invoice.periodEnd), 'Videos: ' + invoice.lines.length, ...invoice.lines.map(line => `${line.description}: ${line.hours} hours × ${invoiceMoney(Number(line.rate) * 100, invoice.currency)} = ${invoiceMoney(invoiceAmount(line.hours, line.rate), invoice.currency)}`),
+      formatDisplayDate(invoice.periodStart) + ' - ' + formatDisplayDate(invoice.periodEnd), 'Videos: ' + invoice.lines.length, ...invoice.lines.map(line => `${line.description}: ${line.hours} hours × ${invoiceMoney(Number(line.rate) * currencyScale(invoice.currency), invoice.currency)} = ${invoiceMoney(invoiceAmount(line.hours, line.rate, invoice.currency), invoice.currency)}`),
       'Total: ' + invoiceMoney(invoiceTotals(invoice).minor, invoice.currency), 'Due: ' + formatDisplayDate(invoice.dueDate), invoice.notes].join('\n');
     try { await navigator.clipboard.writeText(text); showToast('Invoice copied for ' + invoice.client + '.'); }
     catch { showToast('Clipboard access is unavailable. Use Print / PDF or CSV.'); }
@@ -4643,14 +4860,19 @@ function deleteCurrentTask() {
     return { start: dateKey(start), end: dateKey(addDays(start, 13)) };
   }
 
-  function invoiceAmount(hours, rate) {
+  function currencyScale(currency) {
+    return currency === 'JPY' || currency === 'KRW' ? 1 : 100;
+  }
+
+  function invoiceAmount(hours, rate, currency = 'USD') {
     if (!['number', 'string'].includes(typeof hours) || !['number', 'string'].includes(typeof rate)) return null;
     const numberHours = Number(hours);
     const numberRate = Number(rate);
+    const scale = currencyScale(currency);
     if (!Number.isFinite(numberHours) || !Number.isFinite(numberRate) || numberHours < 0 || numberHours > 10000 || numberRate < 0 || numberRate > 1000000 ||
       Math.abs(numberHours * 100 - Math.round(numberHours * 100)) > 0.000001 ||
-      Math.abs(numberRate * 100 - Math.round(numberRate * 100)) > 0.000001) return null;
-    return Math.round(Math.round(numberHours * 100) * Math.round(numberRate * 100) / 100);
+      Math.abs(numberRate * scale - Math.round(numberRate * scale)) > 0.000001) return null;
+    return Math.round(Math.round(numberHours * 100) * Math.round(numberRate * scale) / 100);
   }
 
   function newExpenseDraft() {
@@ -4676,6 +4898,7 @@ function deleteCurrentTask() {
     $('expenseDate').value = expense.date || '';
     $('expenseMerchant').value = expense.merchant || '';
     $('expenseAmount').value = expense.amount == null ? '' : expense.amount;
+    $('expenseAmount').step = currencyScale(expense.currency);
     $('expenseDescription').value = expense.description || '';
     $('expenseReceiptUrl').value = expense.receiptUrl || '';
     $('expenseNotes').value = expense.notes || '';
@@ -4715,6 +4938,7 @@ function deleteCurrentTask() {
     const request = ++workspace.request;
     workspace.loading = true;
     workspace.error = '';
+    updateFinanceRefreshButton();
     renderExpenseWorkspace();
     if (typeof google === 'undefined' || !google.script) {
       fail(new Error('Apps Script connection unavailable. Use the deployed web app URL.'));
@@ -4739,7 +4963,9 @@ function deleteCurrentTask() {
       if (!workspace.editor || (!workspace.editor.id && !workspace.dirty)) workspace.editor = newExpenseDraft();
       if (reconcile) state.syncing = false;
       renderExpenseNotice();
-      renderExpenseWorkspace();
+      if (['expenses', 'expenseDashboard'].includes(state.activeView)) renderExpenseWorkspace();
+      if (state.activeView === 'recurring') renderRecurringWorkspace();
+      finishFinanceRefresh('expenses');
       updateDataNotice();
     }).withFailureHandler(fail).getExpenses();
 
@@ -4748,7 +4974,9 @@ function deleteCurrentTask() {
       workspace.loading = false;
       workspace.error = String(error.message || error);
       renderExpenseNotice();
-      renderExpenseWorkspace();
+      if (['expenses', 'expenseDashboard'].includes(state.activeView)) renderExpenseWorkspace();
+      if (state.activeView === 'recurring') renderRecurringWorkspace();
+      finishFinanceRefresh('expenses');
       updateDataNotice();
     }
   }
@@ -4788,7 +5016,7 @@ function deleteCurrentTask() {
     const expense = workspace.records.find(record => record.id === expenseId);
     if (!expense || state.writing || state.syncing) return;
     if (workspace.dirty && !confirm('Discard the current unsaved expense changes?')) return;
-    workspace.editor = { ...expense, amount: (expense.amountMinor / 100).toFixed(2) };
+    workspace.editor = { ...expense, amount: (expense.amountMinor / currencyScale(expense.currency)).toFixed(currencyScale(expense.currency) === 1 ? 0 : 2) };
     workspace.dirty = false;
     workspace.formError = '';
     renderExpenseForm();
@@ -4852,13 +5080,41 @@ function deleteCurrentTask() {
   }
 
   function expenseMoney(minor, currency) {
-    try { return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(minor / 100); }
-    catch (_) { return currency + ' ' + (minor / 100).toFixed(2); }
+    const scale = currencyScale(currency);
+    try { return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(minor / scale); }
+    catch (_) { return currency + ' ' + (minor / scale).toFixed(scale === 1 ? 0 : 2); }
   }
 
   function expenseMonthTotal(records, currency, month) {
     return records.filter(expense => expense.currency === currency && expense.date.slice(0, 7) === month)
       .reduce((total, expense) => total + expense.amountMinor, 0);
+  }
+
+  function recurringMonthTotal(rules, type, currency, month) {
+    const monthStart = parseDate(month + '-01');
+    if (!monthStart) return 0;
+    const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+    let total = 0;
+    rules.filter(rule => rule.type === type && rule.currency === currency && rule.status === 'Active').forEach(rule => {
+      const start = parseDate(rule.startDate);
+      const end = rule.endDate ? parseDate(rule.endDate) : null;
+      if (!start || (end && end < monthStart) || start > monthEnd) return;
+      if (rule.frequency === 'Weekly') {
+        const daysBeforeMonth = Math.max(0, dayDiff(start, monthStart));
+        let occurrence = addDays(start, Math.ceil(daysBeforeMonth / 7) * 7);
+        while (occurrence <= monthEnd && (!end || occurrence <= end)) {
+          if (occurrence >= monthStart) total += rule.amountMinor;
+          occurrence = addDays(occurrence, 7);
+        }
+        return;
+      }
+      const monthOffset = (monthStart.getFullYear() - start.getFullYear()) * 12 + monthStart.getMonth() - start.getMonth();
+      const interval = rule.frequency === 'Quarterly' ? 3 : rule.frequency === 'Yearly' ? 12 : 1;
+      if (monthOffset < 0 || monthOffset % interval !== 0) return;
+      const occurrence = new Date(monthStart.getFullYear(), monthStart.getMonth(), Math.min(start.getDate(), monthEnd.getDate()));
+      if (occurrence >= start && (!end || occurrence <= end)) total += rule.amountMinor;
+    });
+    return total;
   }
 
   function expenseBreakdown(records, key) {
@@ -4873,30 +5129,97 @@ function deleteCurrentTask() {
     return rows.map(([label, amount]) => `<div class="expense-breakdown-row"><span title="${esc(label)}">${esc(label)}</span><span class="expense-breakdown-track" aria-hidden="true"><span style="width:${Math.max(2, amount / maximum * 100)}%"></span></span><strong>${expenseMoney(amount, records[0].currency)}</strong></div>`).join('');
   }
 
+  function expenseAxisMoney(minor, currency) {
+    try { return new Intl.NumberFormat('en-US', { style: 'currency', currency, notation: 'compact', maximumFractionDigits: 1 }).format(minor / currencyScale(currency)); }
+    catch (_) { return expenseMoney(minor, currency); }
+  }
+
+  function expenseTrendChart(trend, currency) {
+    const width = 390;
+    const height = 190;
+    const left = 60;
+    const right = 10;
+    const top = 14;
+    const bottom = 34;
+    const maximum = Math.max(100, ...trend.flatMap(item => [item.expenses, item.earnings]));
+    const plotWidth = width - left - right;
+    const plotHeight = height - top - bottom;
+    const point = (item, index, value) => ({
+      x: left + (trend.length < 2 ? plotWidth / 2 : index * plotWidth / (trend.length - 1)),
+      y: top + plotHeight - value / maximum * plotHeight
+    });
+    const labels = trend.map(item => {
+      const month = parseDate(item.key + '-01').toLocaleDateString('en-US', { month: 'short' });
+      return { ...item, month };
+    });
+    const description = labels.map(item => `${item.month}: expenses ${expenseMoney(item.expenses, currency)}, earnings ${expenseMoney(item.earnings, currency)}`).join('; ');
+    const expenses = trend.map((item, index) => point(item, index, item.expenses));
+    const earnings = trend.map((item, index) => point(item, index, item.earnings));
+    const ticks = [0, maximum / 2, maximum];
+    const line = (points, kind, series, label) => `<polyline class="expense-trend-line ${kind}" points="${points.map(value => `${value.x},${value.y}`).join(' ')}"></polyline>${points.map((value, index) => `<circle class="expense-trend-point ${kind}" cx="${value.x}" cy="${value.y}" r="3.5"><title>${esc(labels[index].month + ' ' + label + ': ' + expenseMoney(labels[index][series], currency))}</title></circle>`).join('')}`;
+    return `<div class="expense-trend"><div class="expense-trend-legend"><span>Expenses</span><span>Earnings</span></div><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(currency + ' monthly expenses and earnings: ' + description)}"><title>${esc(currency + ' monthly expenses and earnings')}</title>${ticks.map(value => {
+      const y = top + plotHeight - value / maximum * plotHeight;
+      return `<g><line class="expense-trend-grid" x1="${left}" y1="${y}" x2="${width - right}" y2="${y}"></line><text class="expense-trend-axis" x="${left - 7}" y="${y + 3}" text-anchor="end">${esc(expenseAxisMoney(value, currency))}</text></g>`;
+    }).join('')}${line(expenses, 'expense-series', 'expenses', 'expenses')}${line(earnings, 'income-series', 'earnings', 'earnings')}${labels.map((item, index) => `<text class="expense-trend-axis" x="${expenses[index].x}" y="${height - 8}" text-anchor="middle">${item.month}</text>`).join('')}</svg><div class="expense-trend-values">${labels.map(item => `<span>${item.month}<strong>Out ${expenseMoney(item.expenses, currency)}</strong><strong>In ${expenseMoney(item.earnings, currency)}</strong></span>`).join('')}</div></div>`;
+  }
+
+  function expenseStatusDonut(paid, pending, currency) {
+    const total = paid + pending;
+    const paidPercent = total ? paid / total * 100 : 0;
+    const background = total
+      ? `conic-gradient(var(--green) 0 ${paidPercent}%, #c9372c ${paidPercent}% 100%)`
+      : '#e9edf3';
+    const percentLabel = Math.round(paidPercent) + '% paid';
+    return `<div class="expense-status-content"><div class="expense-status-chart" role="img" aria-label="${esc(currency + ': ' + expenseMoney(paid, currency) + ' paid, ' + expenseMoney(pending, currency) + ' pending')}" style="background:${background}"><div class="expense-status-chart-hole">${percentLabel}</div></div><div class="expense-status-legend"><span>Paid <strong>${expenseMoney(paid, currency)}</strong></span><span>Pending <strong>${expenseMoney(pending, currency)}</strong></span></div></div>`;
+  }
+
   function renderExpenseDashboard() {
     const workspace = state.expenses;
+    const earningWorkspace = state.earnings;
+    const recurringRules = state.recurring.rules;
     const month = workspace.month || (workspace.today || dateKey(new Date())).slice(0, 7);
     const monthDate = parseDate(month + '-01');
-    const currencies = [...new Set(workspace.records.map(expense => expense.currency))].sort();
+    const sourceCurrencies = [...new Set([
+      ...workspace.records.map(record => record.currency),
+      ...earningWorkspace.records.map(record => record.currency),
+      ...recurringRules.filter(rule => rule.status === 'Active').map(rule => rule.currency)
+    ])].sort();
+    const fx = state.financeFx;
+    const canConvert = fx.loaded && sourceCurrencies.every(currency => Number.isFinite(Number(fx.rates?.[currency])) && Number(fx.rates[currency]) > 0);
+    const convertRecords = records => canConvert ? records.map(record => ({
+      ...record, amountMinor: convertMinorToCurrency(record.amountMinor, record.currency, fx.base, fx.rates), currency: fx.base
+    })) : records;
+    const expenses = convertRecords(workspace.records);
+    const earnings = convertRecords(earningWorkspace.records);
+    const rules = convertRecords(recurringRules.filter(rule => rule.status === 'Active'));
+    const currencies = canConvert && sourceCurrencies.length ? [fx.base] : sourceCurrencies;
     const monthLabel = monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    let content = `<div class="expense-dashboard-head"><div><h3>Spending overview</h3><span class="panel-subtitle">Totals stay separate by currency</span></div><div class="expense-period"><button class="btn" onclick="moveExpenseMonth(-1)" aria-label="Previous expense month">&#8592;</button><strong aria-live="polite">${esc(monthLabel)}</strong><button class="btn" onclick="moveExpenseMonth(1)" aria-label="Next expense month">&#8594;</button></div></div>`;
+    const fxMessage = canConvert
+      ? `Converted to ${fx.base} using ${fx.source} dated ${fx.rateDate}.${fx.stale ? ' Showing the last saved daily rates.' : ''} Original records are unchanged.`
+      : fx.error ? `Daily conversion unavailable. Showing native-currency totals. ${fx.error}`
+        : fx.loaded ? 'Some currencies are not quoted by the provider; showing native-currency totals.'
+          : 'Loading daily exchange rates. Native-currency totals are shown until rates are available.';
+    let content = `<div class="expense-dashboard-head"><div><h3>Income and spending</h3><span class="panel-subtitle">Actual records and recurring forecasts stay separate from one another.</span></div><div class="expense-period"><button class="btn" onclick="moveExpenseMonth(-1)" aria-label="Previous finance month">&#8592;</button><strong aria-live="polite">${esc(monthLabel)}</strong><button class="btn" onclick="moveExpenseMonth(1)" aria-label="Next finance month">&#8594;</button></div><label class="finance-report-currency">Report currency<select class="field-control" id="financeBaseCurrency" aria-label="Finance reporting currency" onchange="setFinanceBaseCurrency(this.value)">${financeBaseCurrencies().map(currency => `<option ${fx.base === currency ? 'selected' : ''}>${currency}</option>`).join('')}</select></label></div><div class="finance-fx-status ${fx.error ? 'error' : ''}" role="status">${esc(fxMessage)}</div>`;
     if (!currencies.length) {
-      content += '<div class="expense-empty">No expenses yet. Add a record to start your dashboard.</div>';
+      content += '<div class="expense-empty">No earnings, expenses, or recurring forecasts yet.</div>';
       $('expenseDashboard').innerHTML = content;
       return;
     }
     const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
     const trendMonths = Array.from({ length: 6 }, (_, index) => dateKey(new Date(monthStart.getFullYear(), monthStart.getMonth() - 5 + index, 1)).slice(0, 7));
     content += currencies.map(currency => {
-      const monthRecords = workspace.records.filter(expense => expense.currency === currency && expense.date.slice(0, 7) === month);
-      const total = monthRecords.reduce((sum, expense) => sum + expense.amountMinor, 0);
-      const paid = monthRecords.filter(expense => expense.status === 'Paid').reduce((sum, expense) => sum + expense.amountMinor, 0);
-      const pending = monthRecords.filter(expense => expense.status === 'Pending').reduce((sum, expense) => sum + expense.amountMinor, 0);
-      const paidPercent = total ? paid / total * 100 : 0;
-      const pendingPercent = total ? pending / total * 100 : 0;
-      const trend = trendMonths.map(key => ({ key, total: expenseMonthTotal(workspace.records, currency, key) }));
-      const maximum = Math.max(1, ...trend.map(item => item.total));
-      return `<section class="expense-currency-block" aria-label="${currency} expense summary"><div class="expense-currency-heading"><h4>${currency}</h4><span>${monthRecords.length} ${monthRecords.length === 1 ? 'expense' : 'expenses'}</span></div><div class="expense-summary-grid"><div><span>Spent this month</span><strong>${expenseMoney(total, currency)}</strong></div><div><span>Paid</span><strong>${expenseMoney(paid, currency)}</strong></div><div><span>Pending</span><strong>${expenseMoney(pending, currency)}</strong></div></div><div class="expense-status-block"><h5>Payment status</h5><div class="expense-status-chart" role="img" aria-label="${currency}: ${expenseMoney(paid, currency)} paid, ${expenseMoney(pending, currency)} pending"><span class="paid" style="width:${paidPercent}%"></span><span class="pending" style="width:${pendingPercent}%"></span></div><div class="expense-status-legend"><span>Paid <strong>${expenseMoney(paid, currency)}</strong></span><span>Pending <strong>${expenseMoney(pending, currency)}</strong></span></div></div><div class="expense-analysis-grid"><div><h5>Six-month trend</h5><div class="expense-trend" role="list" aria-label="Six-month ${currency} spending trend">${trend.map(item => `<div class="expense-trend-item" role="listitem" title="${item.key}: ${expenseMoney(item.total, currency)}"><span>${parseDate(item.key + '-01').toLocaleDateString('en-US', { month: 'short' })}</span><span class="expense-trend-track" aria-hidden="true"><span style="width:${item.total ? Math.max(2, item.total / maximum * 100) : 0}%"></span></span><strong>${expenseMoney(item.total, currency)}</strong></div>`).join('')}</div></div><div><h5>Top categories</h5>${expenseBreakdown(monthRecords, 'category')}</div><div><h5>Top merchants</h5>${expenseBreakdown(monthRecords, 'merchant')}</div></div></section>`;
+      const monthExpenses = expenses.filter(record => record.currency === currency && record.date.slice(0, 7) === month);
+      const monthEarnings = earnings.filter(record => record.currency === currency && record.date.slice(0, 7) === month);
+      const spent = monthExpenses.reduce((sum, record) => sum + record.amountMinor, 0);
+      const income = monthEarnings.reduce((sum, record) => sum + record.amountMinor, 0);
+      const received = monthEarnings.filter(record => record.status === 'Received').reduce((sum, record) => sum + record.amountMinor, 0);
+      const pendingIncome = monthEarnings.filter(record => record.status === 'Pending').reduce((sum, record) => sum + record.amountMinor, 0);
+      const paid = monthExpenses.filter(record => record.status === 'Paid').reduce((sum, record) => sum + record.amountMinor, 0);
+      const pending = monthExpenses.filter(record => record.status === 'Pending').reduce((sum, record) => sum + record.amountMinor, 0);
+      const recurringExpense = recurringMonthTotal(rules, 'Expense', currency, month);
+      const recurringEarning = recurringMonthTotal(rules, 'Earning', currency, month);
+      const trend = trendMonths.map(key => ({ key, expenses: expenseMonthTotal(expenses, currency, key), earnings: expenseMonthTotal(earnings, currency, key) }));
+      return `<section class="expense-currency-block" aria-label="${currency} income and expense comparison"><div class="expense-currency-heading"><h4>${currency}</h4><span>${monthEarnings.length} earnings · ${monthExpenses.length} expenses</span></div><div class="expense-summary-grid"><div><span>Actual earnings</span><strong>${expenseMoney(income, currency)}</strong></div><div><span>Actual expenses</span><strong>${expenseMoney(spent, currency)}</strong></div><div><span>Net</span><strong>${expenseMoney(income - spent, currency)}</strong></div><div><span>Recurring income forecast</span><strong>${expenseMoney(recurringEarning, currency)}</strong></div><div><span>Recurring expense forecast</span><strong>${expenseMoney(recurringExpense, currency)}</strong></div></div><div class="expense-status-block"><h5>Expense payment status</h5>${expenseStatusDonut(paid, pending, currency)}<div class="expense-status-legend"><span>Income received <strong>${expenseMoney(received, currency)}</strong></span><span>Income pending <strong>${expenseMoney(pendingIncome, currency)}</strong></span></div></div><div class="expense-analysis-grid"><div><h5>Six-month actuals</h5>${expenseTrendChart(trend, currency)}</div><div><h5>Expense categories</h5>${expenseBreakdown(monthExpenses, 'category')}</div><div><h5>Expense merchants</h5>${expenseBreakdown(monthExpenses, 'merchant')}</div><div><h5>Earning sources</h5>${expenseBreakdown(monthEarnings, 'payer')}</div></div></section>`;
     }).join('');
     $('expenseDashboard').innerHTML = content;
   }
@@ -4927,6 +5250,7 @@ function deleteCurrentTask() {
   }
 
   function renderExpenseWorkspace() {
+    if (!['expenses', 'expenseDashboard'].includes(state.activeView)) return;
     const workspace = state.expenses;
     renderExpenseNotice();
     if (!workspace.loaded) {
@@ -4944,13 +5268,397 @@ function deleteCurrentTask() {
       renderExpenseForm();
       renderExpenseTable();
     } else {
+      if (!state.financeRefreshing && !state.financeFx.loaded && !state.financeFx.loading && !state.financeFx.error) loadFinanceExchangeRates();
+      if (!state.financeRefreshing && !state.earnings.loaded && !state.earnings.loading && !state.earnings.error) loadEarningWorkspace();
+      if (!state.financeRefreshing && !state.recurring.loaded && !state.recurring.loading && !state.recurring.error) loadRecurringWorkspace();
+      const financeError = state.earnings.error || state.recurring.error;
+      if (!state.earnings.loaded || !state.recurring.loaded) {
+        $('expenseDashboard').innerHTML = financeError
+          ? `<div class="data-notice error" role="alert">${esc(financeError)} <button class="btn" onclick="loadEarningWorkspace();loadRecurringWorkspace()">Retry financial data</button></div>`
+          : loadingMarkup('expenseDashboard');
+        updateExpenseBusy();
+        return;
+      }
       renderExpenseDashboard();
     }
     updateExpenseBusy();
   }
 
+  function newEarningDraft() {
+    return { id: '', date: state.earnings.today || dateKey(new Date()), payer: '', category: 'Other', description: '', amount: '', currency: 'USD', status: 'Pending', notes: '', revision: 0 };
+  }
+
+  function renderEarningForm() {
+    const workspace = state.earnings;
+    const earning = workspace.editor || (workspace.editor = newEarningDraft());
+    $('earningFormTitle').textContent = earning.id ? 'Edit earning' : 'Add an earning';
+    $('earningDate').value = earning.date || '';
+    $('earningPayer').value = earning.payer || '';
+    $('earningAmount').value = earning.amount == null ? '' : earning.amount;
+    $('earningAmount').step = currencyScale(earning.currency);
+    $('earningAmount').step = currencyScale(earning.currency);
+    $('earningDescription').value = earning.description || '';
+    $('earningNotes').value = earning.notes || '';
+    setExpenseOptions('earningCategory', workspace.categories, earning.category || 'Other');
+    setExpenseOptions('earningCurrency', workspace.currencies, earning.currency || 'USD');
+    setExpenseOptions('earningStatus', workspace.statuses, earning.status || 'Pending');
+    $('earningFormError').textContent = workspace.formError || '';
+  }
+
+  function updateEarningBusy() {
+    const workspace = state.earnings;
+    const fields = $('earningFields');
+    if (fields) fields.disabled = !workspace.loaded || workspace.loading || state.writing || state.syncing;
+    document.querySelectorAll('[data-earning-command]').forEach(button => { button.disabled = !workspace.loaded || workspace.loading || state.writing || state.syncing; });
+    const save = $('saveEarningBtn');
+    if (save) save.textContent = state.writing ? 'Saving...' : workspace.editor?.id ? 'Update earning' : 'Save earning';
+  }
+
+  function renderEarningNotice() {
+    const workspace = state.earnings;
+    const notice = $('earningNotice');
+    notice.hidden = !workspace.error;
+    notice.classList.toggle('error', Boolean(workspace.error));
+    notice.innerHTML = workspace.error ? `${workspace.loaded ? 'Showing the last loaded earnings. ' : ''}${esc(workspace.error)} <button class="btn" onclick="loadEarningWorkspace(state.syncing)">Retry</button>` : '';
+  }
+
+  function loadEarningWorkspace(reconcile = false) {
+    const workspace = state.earnings;
+    if (workspace.loading || state.writing) return;
+    const request = ++workspace.request;
+    workspace.loading = true;
+    workspace.error = '';
+    updateFinanceRefreshButton();
+    if (state.activeView === 'earnings') renderEarnings();
+    if (typeof google === 'undefined' || !google.script) { fail(new Error('Apps Script connection unavailable. Use the deployed web app URL.')); return; }
+    google.script.run.withSuccessHandler(response => {
+      if (request !== workspace.request) return;
+      if (!response || !response.success || !Array.isArray(response.earnings) || !Array.isArray(response.categories) || !Array.isArray(response.currencies)) {
+        fail(new Error('The server returned unexpected earnings data.'));
+        return;
+      }
+      workspace.records = response.earnings;
+      workspace.today = response.today || dateKey(new Date());
+      workspace.categories = response.categories;
+      workspace.currencies = response.currencies;
+      workspace.statuses = response.statuses || [];
+      workspace.loaded = true;
+      workspace.loading = false;
+      if (!workspace.editor || (!workspace.editor.id && !workspace.dirty)) workspace.editor = newEarningDraft();
+      if (reconcile) state.syncing = false;
+      if (state.activeView === 'earnings') renderEarnings();
+      if (state.activeView === 'expenseDashboard') renderExpenseWorkspace();
+      if (state.activeView === 'recurring') renderRecurringWorkspace();
+      finishFinanceRefresh('earnings');
+      updateDataNotice();
+    }).withFailureHandler(fail).getEarnings();
+
+    function fail(error) {
+      if (request !== workspace.request) return;
+      workspace.loading = false;
+      workspace.error = String(error.message || error);
+      renderEarningNotice();
+      if (state.activeView === 'earnings') renderEarnings();
+      if (state.activeView === 'expenseDashboard') renderExpenseWorkspace();
+      if (state.activeView === 'recurring') renderRecurringWorkspace();
+      finishFinanceRefresh('earnings');
+      updateDataNotice();
+    }
+  }
+
+  function setEarningField(key, value) {
+    const workspace = state.earnings;
+    if (!workspace.editor) workspace.editor = newEarningDraft();
+    workspace.editor[key] = value;
+    workspace.dirty = true;
+    workspace.formError = '';
+    $('earningFormError').textContent = '';
+    if (key === 'currency') $('earningAmount').step = currencyScale(value);
+    if (key === 'currency') $('earningAmount').step = currencyScale(value);
+  }
+
+  function resetEarningForm() {
+    if (state.earnings.dirty && !confirm('Clear the unsaved earning changes?')) return;
+    state.earnings.editor = newEarningDraft();
+    state.earnings.dirty = false;
+    state.earnings.formError = '';
+    renderEarningForm();
+  }
+
+  function focusEarningForm() {
+    if (state.activeView !== 'earnings') switchView('earnings');
+    if (state.activeView !== 'earnings') return;
+    if (state.earnings.dirty && !confirm('Discard the unsaved earning changes before starting another earning?')) return;
+    state.earnings.editor = newEarningDraft();
+    state.earnings.dirty = false;
+    state.earnings.formError = '';
+    renderEarningForm();
+    $('earningPayer').focus();
+    $('earningFormTitle').scrollIntoView({ block: 'nearest' });
+  }
+
+  function editEarning(earningId) {
+    const workspace = state.earnings;
+    const earning = workspace.records.find(record => record.id === earningId);
+    if (!earning || state.writing || state.syncing) return;
+    if (workspace.dirty && !confirm('Discard the current unsaved earning changes?')) return;
+    workspace.editor = { ...earning, amount: (earning.amountMinor / currencyScale(earning.currency)).toFixed(currencyScale(earning.currency) === 1 ? 0 : 2) };
+    workspace.dirty = false;
+    workspace.formError = '';
+    renderEarningForm();
+    $('earningPayer').focus();
+  }
+
+  function setEarningFilter(key, value) {
+    state.earnings.filters[key] = value;
+    renderEarningTable();
+  }
+
+  function renderEarningTable() {
+    const workspace = state.earnings;
+    if (!workspace.loaded) { $('earningTable').innerHTML = ''; return; }
+    const filters = workspace.filters;
+    setExpenseOptions('earningListCategory', workspace.categories, filters.category, 'All categories');
+    setExpenseOptions('earningListStatus', workspace.statuses, filters.status, 'All statuses');
+    setExpenseOptions('earningListCurrency', workspace.currencies, filters.currency, 'All currencies');
+    const search = filters.search.trim().toLowerCase();
+    const records = workspace.records.filter(earning =>
+      (!search || `${earning.payer} ${earning.description} ${earning.notes}`.toLowerCase().includes(search)) &&
+      (!filters.category || earning.category === filters.category) &&
+      (!filters.status || earning.status === filters.status) &&
+      (!filters.currency || earning.currency === filters.currency));
+    $('earningRecordCount').textContent = `${records.length} ${records.length === 1 ? 'record' : 'records'}`;
+    if (!records.length) { $('earningTable').innerHTML = `<div class="expense-empty">${workspace.records.length ? 'No earnings match these filters.' : 'No earnings recorded yet.'}</div>`; return; }
+    $('earningTable').innerHTML = `<table><thead><tr><th>Date</th><th>Payer / source</th><th>Category</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead><tbody>${records.map(earning => {
+      const argument = esc(JSON.stringify(earning.id));
+      return `<tr><td>${displayDate(earning.date, true)}</td><td><strong>${esc(earning.payer)}</strong><div class="task-meta">${esc(earning.description)}</div></td><td>${esc(earning.category)}</td><td class="expense-amount">${expenseMoney(earning.amountMinor, earning.currency)}</td><td><span class="pill ${earning.status === 'Received' ? 'done' : 'todo'}">${esc(earning.status)}</span></td><td><div class="expense-row-actions"><button class="subtask-link" data-earning-command onclick="editEarning(${argument})">Edit</button><button class="expense-delete" data-earning-command aria-label="Delete ${esc(earning.payer)} earning" onclick="deleteEarningRecord(${argument})">Delete</button></div></td></tr>`;
+    }).join('')}</tbody></table>`;
+    updateEarningBusy();
+  }
+
+  function renderEarnings() {
+    const workspace = state.earnings;
+    renderEarningNotice();
+    if (!workspace.loaded) {
+      renderEarningForm();
+      $('earningTable').innerHTML = workspace.error ? '<div class="expense-empty">Earnings could not be loaded.</div>' : loadingMarkup('earnings');
+      if (!workspace.loading && !workspace.error) loadEarningWorkspace();
+      updateEarningBusy();
+      return;
+    }
+    renderEarningForm();
+    renderEarningTable();
+    updateEarningBusy();
+  }
+
+  function saveEarningForm(event) {
+    event.preventDefault();
+    const workspace = state.earnings;
+    if (!workspace.loaded || state.writing || state.syncing) return;
+    const earning = { ...workspace.editor, amount: Number(workspace.editor.amount) };
+    workspace.formError = '';
+    mutationRunner()
+      .withFailureHandler(error => { workspace.formError = String(error.message || error); $('earningFormError').textContent = workspace.formError; updateEarningBusy(); })
+      .withReconciliationHandler(() => loadEarningWorkspace(true))
+      .withSuccessHandler(result => {
+        workspace.dirty = false;
+        workspace.formError = '';
+        workspace.editor = newEarningDraft();
+        showToast(result.message || 'Earning saved.');
+        loadEarningWorkspace(true);
+      })
+      .saveEarning(earning);
+  }
+
+  function deleteEarningRecord(earningId) {
+    const workspace = state.earnings;
+    const earning = workspace.records.find(record => record.id === earningId);
+    if (!earning || state.writing || state.syncing || !confirm(`Delete the ${earning.currency} earning from ${earning.payer}?`)) return;
+    mutationRunner().withReconciliationHandler(() => loadEarningWorkspace(true)).withSuccessHandler(result => {
+      if (workspace.editor?.id === earningId) { workspace.editor = newEarningDraft(); workspace.dirty = false; }
+      showToast(result.message || 'Earning deleted.');
+      loadEarningWorkspace(true);
+    }).deleteEarning(earning.id, earning.revision);
+  }
+
+  function newRecurringDraft() {
+    return { id: '', type: 'Expense', name: '', category: 'Other', description: '', amount: '', currency: 'USD', frequency: 'Monthly', startDate: state.expenses.today || state.earnings.today || dateKey(new Date()), endDate: '', status: 'Active', notes: '', revision: 0 };
+  }
+
+  function renderRecurringForm() {
+    const workspace = state.recurring;
+    const rule = workspace.editor || (workspace.editor = newRecurringDraft());
+    $('recurringFormTitle').textContent = rule.id ? 'Edit recurring rule' : 'Add a recurring rule';
+    $('recurringType').value = rule.type;
+    $('recurringName').value = rule.name || '';
+    $('recurringAmount').value = rule.amount == null ? '' : rule.amount;
+    $('recurringAmount').step = currencyScale(rule.currency);
+    const currencies = state.expenses.currencies.length ? state.expenses.currencies : ['USD', 'PHP', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'KRW'];
+    setExpenseOptions('recurringCurrency', currencies, rule.currency || 'USD');
+    $('recurringFrequency').value = rule.frequency || 'Monthly';
+    $('recurringStartDate').value = rule.startDate || '';
+    $('recurringEndDate').value = rule.endDate || '';
+    $('recurringStatus').value = rule.status || 'Active';
+    $('recurringNotes').value = rule.notes || '';
+    const categories = rule.type === 'Expense' ? state.expenses.categories : state.earnings.categories;
+    setExpenseOptions('recurringCategory', categories.length ? categories : ['Other'], rule.category || 'Other');
+    $('recurringFormError').textContent = workspace.formError || '';
+  }
+
+  function updateRecurringBusy() {
+    const workspace = state.recurring;
+    const fields = $('recurringFields');
+    if (fields) fields.disabled = !workspace.loaded || workspace.loading || state.writing || state.syncing;
+    document.querySelectorAll('[data-recurring-command]').forEach(button => { button.disabled = !workspace.loaded || workspace.loading || state.writing || state.syncing; });
+    const save = $('saveRecurringBtn');
+    if (save) save.textContent = state.writing ? 'Saving...' : workspace.editor?.id ? 'Update recurring rule' : 'Save recurring rule';
+  }
+
+  function renderRecurringNotice() {
+    const workspace = state.recurring;
+    const notice = $('recurringNotice');
+    notice.hidden = !workspace.error;
+    notice.classList.toggle('error', Boolean(workspace.error));
+    notice.innerHTML = workspace.error ? `${workspace.loaded ? 'Showing the last loaded rules. ' : ''}${esc(workspace.error)} <button class="btn" onclick="loadRecurringWorkspace(state.syncing)">Retry</button>` : '';
+  }
+
+  function loadRecurringWorkspace(reconcile = false) {
+    const workspace = state.recurring;
+    if (workspace.loading || state.writing) return;
+    const request = ++workspace.request;
+    workspace.loading = true;
+    workspace.error = '';
+    updateFinanceRefreshButton();
+    if (state.activeView === 'recurring') renderRecurringWorkspace();
+    if (typeof google === 'undefined' || !google.script) { fail(new Error('Apps Script connection unavailable. Use the deployed web app URL.')); return; }
+    google.script.run.withSuccessHandler(response => {
+      if (request !== workspace.request) return;
+      if (!response || !response.success || !Array.isArray(response.rules)) { fail(new Error('The server returned unexpected recurring data.')); return; }
+      workspace.rules = response.rules;
+      workspace.loaded = true;
+      workspace.loading = false;
+      if (!workspace.editor || (!workspace.editor.id && !workspace.dirty)) workspace.editor = newRecurringDraft();
+      if (reconcile) state.syncing = false;
+      if (state.activeView === 'recurring') renderRecurringWorkspace();
+      if (state.activeView === 'expenseDashboard') renderExpenseWorkspace();
+      finishFinanceRefresh('recurring');
+      updateDataNotice();
+    }).withFailureHandler(fail).getRecurringRules();
+    function fail(error) {
+      if (request !== workspace.request) return;
+      workspace.loading = false;
+      workspace.error = String(error.message || error);
+      renderRecurringNotice();
+      if (state.activeView === 'recurring') renderRecurringWorkspace();
+      if (state.activeView === 'expenseDashboard') renderExpenseWorkspace();
+      finishFinanceRefresh('recurring');
+      updateDataNotice();
+    }
+  }
+
+  function setRecurringField(key, value) {
+    const workspace = state.recurring;
+    if (!workspace.editor) workspace.editor = newRecurringDraft();
+    workspace.editor[key] = value;
+    workspace.dirty = true;
+    workspace.formError = '';
+    $('recurringFormError').textContent = '';
+    if (key === 'currency') $('recurringAmount').step = currencyScale(value);
+  }
+
+  function setRecurringType(type) {
+    state.recurring.editor.type = type;
+    const categories = type === 'Expense' ? state.expenses.categories : state.earnings.categories;
+    state.recurring.editor.category = categories[0] || 'Other';
+    state.recurring.dirty = true;
+    renderRecurringForm();
+  }
+
+  function resetRecurringForm() {
+    if (state.recurring.dirty && !confirm('Clear the unsaved recurring rule changes?')) return;
+    state.recurring.editor = newRecurringDraft();
+    state.recurring.dirty = false;
+    state.recurring.formError = '';
+    renderRecurringForm();
+  }
+
+  function focusRecurringForm() {
+    if (state.activeView !== 'recurring') switchView('recurring');
+    if (state.activeView !== 'recurring') return;
+    if (state.recurring.dirty && !confirm('Discard the unsaved recurring rule changes?')) return;
+    state.recurring.editor = newRecurringDraft();
+    state.recurring.dirty = false;
+    renderRecurringForm();
+    $('recurringName').focus();
+  }
+
+  function editRecurringRule(ruleId) {
+    const rule = state.recurring.rules.find(item => item.id === ruleId);
+    if (!rule || state.writing || state.syncing || (state.recurring.dirty && !confirm('Discard the unsaved recurring changes?'))) return;
+    state.recurring.editor = { ...rule, amount: (rule.amountMinor / currencyScale(rule.currency)).toFixed(currencyScale(rule.currency) === 1 ? 0 : 2) };
+    state.recurring.dirty = false;
+    state.recurring.formError = '';
+    renderRecurringForm();
+    $('recurringName').focus();
+  }
+
+  function renderRecurringTable() {
+    const workspace = state.recurring;
+    $('recurringRecordCount').textContent = `${workspace.rules.length} ${workspace.rules.length === 1 ? 'rule' : 'rules'}`;
+    if (!workspace.rules.length) { $('recurringTable').innerHTML = '<div class="expense-empty">No recurring rules. Rules forecast expected amounts but never create transactions automatically.</div>'; return; }
+    $('recurringTable').innerHTML = `<table><thead><tr><th>Type</th><th>Name</th><th>Frequency</th><th>Next forecast</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead><tbody>${workspace.rules.map(rule => {
+      const argument = esc(JSON.stringify(rule.id));
+      return `<tr><td>${esc(rule.type)}</td><td><strong>${esc(rule.name)}</strong><div class="task-meta">${esc(rule.category)}</div></td><td>${esc(rule.frequency)}</td><td>${displayDate(rule.startDate, true)}${rule.endDate ? ' – ' + displayDate(rule.endDate, true) : ' onward'}</td><td class="expense-amount">${expenseMoney(rule.amountMinor, rule.currency)} ${esc(rule.currency)}</td><td><span class="pill ${rule.status === 'Active' ? 'done' : 'todo'}">${esc(rule.status)}</span></td><td><div class="expense-row-actions"><button class="subtask-link" data-recurring-command onclick="editRecurringRule(${argument})">Edit</button><button class="expense-delete" data-recurring-command onclick="deleteRecurringRuleRecord(${argument})">Delete</button></div></td></tr>`;
+    }).join('')}</tbody></table>`;
+    updateRecurringBusy();
+  }
+
+  function renderRecurringWorkspace() {
+    const workspace = state.recurring;
+    renderRecurringNotice();
+    if (!state.expenses.loaded && !state.expenses.loading && !state.expenses.error) loadExpenseWorkspace();
+    if (!state.earnings.loaded && !state.earnings.loading && !state.earnings.error) loadEarningWorkspace();
+    if (!workspace.loaded) {
+      renderRecurringForm();
+      $('recurringTable').innerHTML = workspace.error ? '<div class="expense-empty">Recurring rules could not be loaded.</div>' : loadingMarkup('recurring');
+      if (!workspace.loading && !workspace.error) loadRecurringWorkspace();
+      updateRecurringBusy();
+      return;
+    }
+    renderRecurringForm();
+    renderRecurringTable();
+    updateRecurringBusy();
+  }
+
+  function saveRecurringForm(event) {
+    event.preventDefault();
+    const workspace = state.recurring;
+    if (!workspace.loaded || state.writing || state.syncing) return;
+    const rule = { ...workspace.editor, amount: Number(workspace.editor.amount) };
+    mutationRunner().withFailureHandler(error => {
+      workspace.formError = String(error.message || error);
+      $('recurringFormError').textContent = workspace.formError;
+      updateRecurringBusy();
+    }).withReconciliationHandler(() => loadRecurringWorkspace(true)).withSuccessHandler(result => {
+      workspace.dirty = false;
+      workspace.editor = newRecurringDraft();
+      showToast(result.message || 'Recurring rule saved.');
+      loadRecurringWorkspace(true);
+    }).saveRecurringRule(rule);
+  }
+
+  function deleteRecurringRuleRecord(ruleId) {
+    const rule = state.recurring.rules.find(item => item.id === ruleId);
+    if (!rule || state.writing || state.syncing || !confirm(`Delete the recurring rule for ${rule.name}?`)) return;
+    mutationRunner().withReconciliationHandler(() => loadRecurringWorkspace(true)).withSuccessHandler(result => {
+      if (state.recurring.editor?.id === ruleId) { state.recurring.editor = newRecurringDraft(); state.recurring.dirty = false; }
+      showToast(result.message || 'Recurring rule deleted.');
+      loadRecurringWorkspace(true);
+    }).deleteRecurringRule(rule.id, rule.revision);
+  }
+
   function invoiceMoney(minor, currency) {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(minor / 100);
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(minor / currencyScale(currency));
   }
 
   function invoiceCsvCell(value) {
