@@ -277,18 +277,6 @@
     .metrics-variance-table { min-width: 560px; }
     .metrics-variance-table td { vertical-align: middle; }
     .metrics-variance-table .date-label { white-space: nowrap; }
-    .metrics-variance-axis { display: grid; grid-template-columns: 1fr 2px 1fr; align-items: center; margin: 0 0 6px; color: var(--muted); font-size: 10px; }
-    .metrics-variance-axis span:first-child { text-align: left; }
-    .metrics-variance-axis span:last-child { text-align: right; }
-    .metrics-variance-axis strong { text-align: center; font-weight: 600; }
-    .metrics-variance-track { display: grid; grid-template-columns: minmax(0, 1fr) 2px minmax(0, 1fr); align-items: center; min-width: 120px; height: 12px; }
-    .metrics-variance-half { display: flex; height: 100%; }
-    .metrics-variance-half.early { justify-content: flex-end; }
-    .metrics-variance-half.late { justify-content: flex-start; }
-    .metrics-variance-bar { display: block; width: var(--variance-width); height: 8px; border-radius: 4px; }
-    .metrics-variance-bar.early { background: #0c66e4; }
-    .metrics-variance-bar.late { background: #c9372c; }
-    .metrics-variance-zero { display: block; height: 12px; background: #647084; }
     .metrics-variance-result { display: inline-flex; min-height: 28px; align-items: center; padding: 4px 8px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; white-space: nowrap; }
     .metrics-variance-result.late { color: #ae2e24; background: #ffebe6; }
     .metrics-variance-result.early { color: #0747a6; background: #deebff; }
@@ -2780,19 +2768,11 @@ html += `<div class="task-cell"
 
   function renderMetricsFinishVariance(model) {
     if (!model.finishVariance.length) return '<div class="metrics-zero">No completed tasks with both a planned end date and actual completion date in this period.</div>';
-    const visible = model.finishVariance.slice(0, 8);
-    const maxVariance = Math.max(1, ...visible.map(item => Math.abs(item.days)));
-    return `<div class="table-wrap"><table class="metrics-variance-table"><thead><tr><th>Task</th><th>Planned finish</th><th>Actual completion</th><th>Variance<div class="metrics-variance-axis" aria-hidden="true"><span>Early</span><strong>On time</strong><span>Late</span></div></th></tr></thead><tbody>${visible.map(({ task, plannedEnd, actualEnd, days }) => {
+    return `<div class="table-wrap"><table class="metrics-variance-table"><thead><tr><th>Task</th><th>Planned finish</th><th>Actual completion</th><th>Variance</th></tr></thead><tbody>${model.finishVariance.slice(0, 8).map(({ task, plannedEnd, actualEnd, days }) => {
       const result = days > 0 ? `${days} ${days === 1 ? 'day' : 'days'} late`
         : days < 0 ? `${Math.abs(days)} ${Math.abs(days) === 1 ? 'day' : 'days'} early` : 'On time';
       const tone = days > 0 ? 'late' : days < 0 ? 'early' : 'ontime';
-      const varianceWidth = days ? Math.max(4, Math.abs(days) / maxVariance * 100) : 0;
-      const bar = days < 0
-        ? `<span class="metrics-variance-half early"><span class="metrics-variance-bar early" style="--variance-width:${varianceWidth}%"></span></span><span class="metrics-variance-zero"></span><span class="metrics-variance-half late"></span>`
-        : days > 0
-          ? `<span class="metrics-variance-half early"></span><span class="metrics-variance-zero"></span><span class="metrics-variance-half late"><span class="metrics-variance-bar late" style="--variance-width:${varianceWidth}%"></span></span>`
-          : '<span class="metrics-variance-half early"></span><span class="metrics-variance-zero"></span><span class="metrics-variance-half late"></span>';
-      return `<tr><td><button type="button" class="subtask-link" onclick="openEdit(${esc(JSON.stringify(task.id))})">${esc(task.name || task.id)}</button><div class="task-meta">${esc(task.id)}</div></td><td>${displayDate(plannedEnd, true)}</td><td>${displayDate(actualEnd, true)}</td><td><div class="metrics-variance-track" role="img" aria-label="${esc(result)}" title="${esc(result)}">${bar}</div><span class="metrics-variance-result ${tone}">${result}</span></td></tr>`;
+      return `<tr><td><button type="button" class="subtask-link" onclick="openEdit(${esc(JSON.stringify(task.id))})">${esc(task.name || task.id)}</button><div class="task-meta">${esc(task.id)}</div></td><td>${displayDate(plannedEnd, true)}</td><td>${displayDate(actualEnd, true)}</td><td><span class="metrics-variance-result ${tone}">${result}</span></td></tr>`;
     }).join('')}</tbody></table>${model.finishVariance.length > 8 ? `<div class="metrics-caption">Showing 8 of ${model.finishVariance.length} completed tasks. Use View completed for the full list.</div>` : ''}</div>`;
   }
 
