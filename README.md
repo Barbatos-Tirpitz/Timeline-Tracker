@@ -195,4 +195,4 @@ The intended workload is approximately 200–1,000 tasks. Validate performance w
 
 ## Planned work
 
-Enhanced timeline navigation, Kanban, activity history, and dependencies/milestones are outside the current release.
+Enhanced timeline navigation, activity history, and dependencies/milestones are outside the current release.
