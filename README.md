@@ -74,6 +74,8 @@ The application supports a parent-child task structure.
 
 **Current hierarchy depth:** One subtask level.
 
+Parent assignment is validated on task creation, subtask creation, bulk selection and transfer. Parents must exist and be top-level; duplicate IDs are rejected by direct row lookups. Deleting a parent requires explicitly selecting all of its subtasks. A subtask with logged hours cannot be detached, and a top-level task with legacy Hours cannot become a subtask until that stored value is resolved, so hierarchy changes cannot hide or silently activate hours.
+
 ## Hours and Hours Progress
 
 Only subtasks can store logged Hours, separate from planned start/end, actual work dates and the calendar-day Duration formula. Enter 0-10,000 hours with up to two decimals. New subtasks start at zero; their parent assignment enables the Hours input. Top-level tasks cannot log hours directly.
@@ -181,4 +183,4 @@ The intended workload is approximately 200–1,000 tasks. Validate performance w
 
 ## Planned work
 
-Broader hierarchy validation, enhanced timeline navigation, Kanban, activity history, and dependencies/milestones are outside the current release.
+Enhanced timeline navigation, Kanban, activity history, and dependencies/milestones are outside the current release.
