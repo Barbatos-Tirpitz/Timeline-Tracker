@@ -1014,10 +1014,12 @@ function invoiceServer() {
           setValues(values) { values.forEach((valuesRow, offset) => {
             if (!rows[row - 1 + offset]) rows[row - 1 + offset] = [];
             valuesRow.forEach((value, index) => { rows[row - 1 + offset][column - 1 + index] = value; });
-          }); return this; }
+          }); return this; },
+          setNumberFormat() { return this; }
         };
       },
-      deleteRows(row, count) { rows.splice(row - 1, count); }
+      deleteRows(row, count) { rows.splice(row - 1, count); },
+      setFrozenRows() {}
     };
   }
   const spreadsheet = {
@@ -1027,12 +1029,94 @@ function invoiceServer() {
   };
   const context = vm.createContext({ Date,
     SpreadsheetApp: { getActiveSpreadsheet: () => spreadsheet },
-    Utilities: { formatDate: date => date.toISOString().slice(0, 10) },
+    Utilities: {
+      formatDate: date => date.toISOString().slice(0, 10),
+      parseDate: value => new Date(value + 'T00:00:00.000Z'),
+      getUuid: () => 'new-expense-001'
+    },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() { releases++; } }) }
   });
   vm.runInContext(backend, context);
   return { context, sheets, releases: () => releases };
 }
+
+function expenseDraft(overrides = {}) {
+  return {
+    date: '2026-11-05', merchant: 'Metro Market', category: 'Meals', description: 'Lunch', amount: 12.34,
+    currency: 'USD', paymentMethod: 'Card', status: 'Pending', notes: '', receiptUrl: '', revision: 0, ...overrides
+  };
+}
+
+test('expense workspace reads without creating sheets and saves isolated, revisioned minor-unit records', () => {
+  const app = invoiceServer();
+  const empty = app.context.getExpenses();
+  assert.deepEqual(Array.from(empty.expenses), []);
+  assert.equal(app.sheets.size, 0);
+  const first = app.context.saveExpense(expenseDraft()).expense;
+  assert.equal(first.id, 'EXP-new-expense-001');
+  assert.equal(first.amountMinor, 1234);
+  assert.equal(first.revision, 1);
+  assert.deepEqual([...app.sheets.keys()], ['Expense_Master']);
+  assert.equal(app.sheets.get('Expense_Master').rows.length, 2);
+  assert.ok(app.sheets.get('Expense_Master').rows[1][1] instanceof Date);
+  assert.equal(app.context.getExpenses().expenses[0].date, '2026-11-05');
+  assert.throws(() => app.context.saveExpense(expenseDraft({ id: first.id, revision: 0 })), /another session/);
+  const updated = app.context.saveExpense({ ...first, amount: 14.25, revision: 1 }).expense;
+  assert.equal(updated.amountMinor, 1425);
+  assert.equal(updated.revision, 2);
+  assert.equal(app.context.getExpenses().expenses[0].amountMinor, 1425);
+  assert.throws(() => app.context.deleteExpense(first.id, 1), /changed in another session/);
+  assert.equal(app.context.deleteExpense(first.id, 2).success, true);
+  assert.equal(app.context.getExpenses().expenses.length, 0);
+  assert.equal(app.sheets.has('Task_Master'), false);
+  assert.equal(app.sheets.has('Invoice_Master'), false);
+  app.context.expenseSheet_(true);
+  app.sheets.get('Expense_Master').rows.length = 0;
+  const initialized = app.context.saveExpense(expenseDraft()).expense;
+  assert.ok(initialized.id);
+  assert.equal(app.sheets.get('Expense_Master').rows[0][0], 'Expense ID');
+});
+
+test('expense validation and header conflicts fail before changing stored records', () => {
+  const app = invoiceServer();
+  for (const overrides of [
+    { date: '2026-02-30' }, { merchant: '' }, { category: 'Unlisted' }, { amount: 0 },
+    { amount: 1.001 }, { currency: 'XXX' }, { paymentMethod: 'Cheque' }, { status: 'Reimbursed' },
+    { receiptUrl: 'javascript:alert(1)' }
+  ]) assert.throws(() => app.context.normalizeExpense_(expenseDraft(overrides)));
+  const saved = app.context.saveExpense(expenseDraft()).expense;
+  const sheet = app.sheets.get('Expense_Master');
+  sheet.rows[0][0] = 'Unrelated header';
+  assert.throws(() => app.context.saveExpense({ ...saved, amount: 13, revision: 1 }), /headers do not match/);
+  assert.equal(sheet.rows.length, 2);
+});
+
+test('expense totals group by currency and selected month without combining unlike amounts', () => {
+  const app = client();
+  const records = [
+    { date: '2026-11-02', currency: 'USD', amountMinor: 1250 },
+    { date: '2026-11-08', currency: 'USD', amountMinor: 275 },
+    { date: '2026-11-03', currency: 'PHP', amountMinor: 50000 },
+    { date: '2026-10-31', currency: 'USD', amountMinor: 900 }
+  ];
+  assert.equal(app.expenseMonthTotal(records, 'USD', '2026-11'), 1525);
+  assert.equal(app.expenseMonthTotal(records, 'PHP', '2026-11'), 50000);
+  assert.equal(app.expenseMonthTotal(records, 'CAD', '2026-11'), 0);
+});
+
+test('Multi Purpose Planner nests expense records and dashboard with an expense-specific top action', () => {
+  assert.match(html, /<title>Multi Purpose Planner<\/title>/);
+  assert.match(html, /id="expenseNav"[^>]*aria-controls="expenseWorkspaceNav"/);
+  assert.match(html, /<nav class="workspace-nav" id="expenseWorkspaceNav" aria-label="Expense workspaces">\s*<button class="nav-item" data-view="expenses"/);
+  assert.match(html, /<button class="nav-item" data-view="expenseDashboard" aria-label="Expense Dashboard"/);
+  assert.match(html, /id="view-expenses"/);
+  assert.match(html, /id="view-expenseDashboard"/);
+  assert.match(html, /id="expenseForm" onsubmit="saveExpenseForm\(event\)"/);
+  assert.match(html, /id="expenseTopActions" hidden/);
+  assert.match(html, /onclick="focusExpenseForm\(\)"[^>]*>[^<]*Add Expense/);
+  assert.match(html, /class="expense-status-chart" role="img"/);
+  for (const view of ['timeline', 'tasks', 'dashboard', 'invoices']) assert.match(html, new RegExp(`data-view="${view}"`));
+});
 
 test('invoice workspace reads create no sheets; saves preserve snapshots and detect stale revisions', () => {
   const app = invoiceServer();
@@ -1963,7 +2047,7 @@ test('All tasks status selection respects filters and never selects a context-on
 
 test('UI foundation declares semantic tokens, readable defaults and protected timeline sizing', () => {
   assert.match(html, /<html lang="en">/);
-  assert.match(html, /<title>Task Timeline Planner<\/title>/);
+  assert.match(html, /<title>Multi Purpose Planner<\/title>/);
   assert.match(html, /--control-height:\s*2\.75rem/);
   assert.match(html, /font-variant-numeric:\s*tabular-nums/);
   assert.match(html, /\.selection-hit\s*\{[^}]*min-width:\s*var\(--control-height\)/);
@@ -1977,10 +2061,28 @@ test('UI foundation declares semantic tokens, readable defaults and protected ti
 test('task dialog and navigation use accessible labels and retain dirty-safe backdrop handling', () => {
   assert.match(html, /<dialog open class="modal" aria-modal="true" aria-labelledby="modalTitle"/);
   assert.doesNotMatch(html, /id="taskModal" onclick=/);
+  assert.match(html, /id="projectNav"[^>]*aria-expanded="true"[^>]*aria-controls="workspaceNav"/);
+  assert.match(html, /<nav class="workspace-nav" id="workspaceNav" aria-label="Task Timeline workspaces">/);
+  assert.match(html, /function toggleWorkspaceNav\(\)/);
   for (const label of ['Search timeline tasks', 'Timeline status', 'Timeline category']) assert.ok(html.includes('aria-label="' + label + '"'));
   assert.match(html, /class="task-title"[^>]*onclick="openEdit/);
   assert.match(html, /if \(event.target === \$\('taskModal'\)\) closeModal\(\)/);
   assert.match(html, /\.nav-text \{ display: block; font-size: 11px/);
+});
+
+test('Task Timeline sidebar group toggles its workspace navigation accessibly', () => {
+  const app = client();
+  const attributes = new Map([['aria-expanded', 'true']]);
+  const projectNav = { getAttribute: name => attributes.get(name), setAttribute: (name, value) => attributes.set(name, value) };
+  const workspaceNav = { hidden: false };
+  app.elements.set('projectNav', projectNav);
+  app.elements.set('workspaceNav', workspaceNav);
+  app.toggleWorkspaceNav();
+  assert.equal(attributes.get('aria-expanded'), 'false');
+  assert.equal(workspaceNav.hidden, true);
+  app.toggleWorkspaceNav();
+  assert.equal(attributes.get('aria-expanded'), 'true');
+  assert.equal(workspaceNav.hidden, false);
 });
 
 test('dialog keyboard focus wraps at both boundaries and dismissal uses the guarded close function', () => {
