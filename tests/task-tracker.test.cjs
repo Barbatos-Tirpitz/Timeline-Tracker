@@ -1687,9 +1687,8 @@ test('finish variance shows per-task date differences, escapes names, and caps v
   assert.ok(varianceHtml.indexOf('Late task') < varianceHtml.indexOf('Early task'));
   assert.match(varianceHtml, /2 days late/);
   assert.match(varianceHtml, /2 days early/);
-  assert.match(varianceHtml, /metrics-variance-bar late/);
-  assert.match(varianceHtml, /metrics-variance-bar early/);
-  assert.match(varianceHtml, /metrics-variance-axis/);
+  assert.doesNotMatch(varianceHtml, /metrics-variance-bar|metrics-variance-axis|metrics-variance-track/);
+  assert.match(varianceHtml, /<th>Variance<\/th>/);
   const empty = app.buildMetricsModel([], range, '', app.parseDate('2026-11-04'), 'weekly');
   assert.match(app.renderMetricsFinishVariance(empty), /No completed tasks with both a planned end date and actual completion date/);
   assert.match(app.renderMetricsParentChart(empty), /No recorded hours/);
