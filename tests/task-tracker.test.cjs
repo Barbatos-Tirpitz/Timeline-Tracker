@@ -550,6 +550,16 @@ test('header upgrade preserves original fields and rejects occupied column O bef
   assert.equal(app.writes.length, count);
 });
 
+test('hierarchy header upgrade rejects occupied column N without a parent header', () => {
+  const app = server([taskRow('VID-001')]);
+  app.rows[0][13] = '';
+  app.rows[1][13] = 'Existing unrelated value';
+  const writes = app.writes.length;
+  assert.throws(() => app.context.initializeTaskHeaders_(app.sheet), /Column N contains data without a Parent Task ID header/);
+  assert.equal(app.writes.length, writes);
+  assert.equal(app.rows[0][13], '');
+});
+
 test('category upgrade is explicit and deterministic, and detail edits preserve or clear clients', () => {
   const app = server([taskRow('VID-001')]);
   assert.equal(app.context.categoryForUpgrade_('Graphics'), 'Graphic Design');
@@ -596,6 +606,29 @@ test('bulk subtask patches validate every merged date and parent scope before wr
   assert.equal(app.rows[2][7], '=G2-F2+1');
   assert.equal(app.rows[2][5], child[5]);
   assert.throws(() => app.context.updateSubtasks('VID-001', ['VID-002'], {}), /at least one/);
+});
+
+test('hierarchy mutations reject duplicate IDs and protect logged or legacy hours', () => {
+  const duplicates = server([taskRow('VID-001'), taskRow('VID-001')]);
+  assert.throws(() => duplicates.context.findTaskRow(duplicates.sheet, 'VID-001'), /Duplicate task ID/);
+
+  const parent = taskRow('VID-001');
+  const child = taskRow('VID-002', 'VID-001'); child[15] = 4;
+  const legacyRoot = taskRow('VID-003'); legacyRoot[15] = 9;
+  const destination = taskRow('VID-004');
+  const app = server([parent, child, legacyRoot, destination]);
+  app.context.initializeTaskHeaders_(app.sheet);
+  const writes = app.writes.length;
+  assert.throws(() => app.context.setTaskParent('VID-002', ''), /logged hours/);
+  assert.throws(() => app.context.setTaskParent('VID-003', 'VID-001'), /stored Hours/);
+  assert.equal(app.rows[2][13], 'VID-001');
+  assert.equal(app.rows[2][15], 4);
+  assert.equal(app.rows[3][13], '');
+  assert.equal(app.rows[3][15], 9);
+  assert.equal(app.writes.length, writes);
+  app.context.setTaskParent('VID-002', 'VID-004');
+  assert.equal(app.rows[2][13], 'VID-004');
+  assert.equal(app.rows[2][15], 4);
 });
 
 test('multi-field bulk subtask patch commits selected rows in one write and preserves intervening rows', () => {
@@ -1519,8 +1552,7 @@ test('metrics model separates actual completions from schedules and counts leaf 
   assert.equal(model.completed.length, 2);
   assert.equal(model.overdue.length, 1);
   assert.equal(model.attention[0].task.id, 'VID-3');
-  assert.equal(model.buckets.reduce((sum, bucket) => sum + bucket.completedIds.length, 0), 2);
-  assert.equal(model.buckets.reduce((sum, bucket) => sum + bucket.dueIds.length, 0), 2);
+  assert.deepEqual(Array.from(model.finishVariance, item => [item.task.id, item.days]), [['VID-4', 15], ['VID-2', -1]]);
 });
 
 test('Needs Attention catches In Progress tasks due yesterday or today outside the selected period', () => {
@@ -1569,17 +1601,18 @@ test('rescheduling an In Progress task to yesterday or today reaches the refresh
   assert.match(app.renderMetricsAttention(model), /Due today/);
 });
 
-test('metric drilldowns reevaluate changed tasks and calendar buckets remain bounded', () => {
+test('metric drilldowns reevaluate changes and finish variance requires comparable dates', () => {
   const app = client();
-  const task = listTask('VID-1', '', { start: app.parseDate('2026-11-01'), end: app.parseDate('2026-11-02') });
+  const task = listTask('VID-1', '', { status: 'In Progress', start: app.parseDate('2026-11-01'), end: app.parseDate('2026-11-02') });
   const focus = { kind: 'overdue', start: '2026-11-01', end: '2026-11-30', period: 'monthly', client: '' };
   assert.equal(app.metricsFocusIds([task], focus, app.parseDate('2026-11-04')).length, 1);
   task.status = 'Done';
   assert.equal(app.metricsFocusIds([task], focus, app.parseDate('2026-11-04')).length, 0);
-  for (const [period, count] of [['daily', 1], ['weekly', 7], ['fortnightly', 14], ['monthly', 5], ['yearly', 12]]) {
-    const range = app.dashboardRange(period, app.parseDate('2026-11-04'));
-    assert.equal(app.buildMetricsModel([], range, '', app.parseDate('2026-11-04'), period).buckets.length, count);
-  }
+  task.actualEndDate = app.parseDate('2026-11-03');
+  const varianceFocus = { kind: 'finishVariance', start: '2026-11-01', end: '2026-11-30', period: 'monthly', client: '' };
+  assert.deepEqual(Array.from(app.metricsFocusIds([task], varianceFocus, app.parseDate('2026-11-04'))), ['VID-1']);
+  task.end = null;
+  assert.deepEqual(Array.from(app.metricsFocusIds([task], varianceFocus, app.parseDate('2026-11-04'))), []);
 });
 
 test('metric drilldown task IDs preserve parent context while excluding unrelated siblings', () => {
@@ -1631,7 +1664,7 @@ test('Metrics invoice review carries client/range without silently replacing an 
   assert.equal(state.invoices.editor.lines.length, 0);
 });
 
-test('metric charts expose numeric labels, escape names, and bound parent bars', () => {
+test('finish variance shows per-task date differences, escapes names, and caps visible rows', () => {
   const app = client();
   const tasks = Array.from({ length: 20 }, (_, index) => listTask('VID-' + index, 'PARENT-' + index, { name: 'Client <script>' + index,
     hours: index + 1, start: app.parseDate('2026-11-01'), end: app.parseDate('2026-11-04'), status: 'Done', actualEndDate: app.parseDate('2026-11-04') }));
@@ -1641,14 +1674,24 @@ test('metric charts expose numeric labels, escape names, and bound parent bars',
   assert.equal((parentChart.match(/class="metrics-parent"/g) || []).length, 5);
   assert.match(parentChart, /Client &lt;script&gt;/);
   assert.doesNotMatch(parentChart, /Client <script>/);
-  const deliveryChart = app.renderMetricsDeliveryChart(model, 'weekly');
-  assert.match(deliveryChart, /Planned finish: 20 tasks by planned end date/);
-  assert.match(deliveryChart, /Actual completion: 20 tasks marked Done/);
-  const singleTask = listTask('VID-SINGLE', '', { start: app.parseDate('2026-11-03'), end: app.parseDate('2026-11-05') });
-  const singleModel = app.buildMetricsModel([singleTask], range, '', app.parseDate('2026-11-04'), 'weekly');
-  assert.match(app.renderMetricsDeliveryChart(singleModel, 'weekly'), /Planned finish: 1 task by planned end date/);
+  const finishVariance = app.renderMetricsFinishVariance(model);
+  assert.equal((finishVariance.match(/<tr>/g) || []).length, 9);
+  assert.match(finishVariance, /On time/);
+  assert.match(finishVariance, /Client &lt;script&gt;/);
+  assert.doesNotMatch(finishVariance, /Client <script>/);
+  assert.match(finishVariance, /Showing 8 of 20 completed tasks/);
+  const early = listTask('VID-EARLY', '', { name: 'Early task', status: 'Done', end: app.parseDate('2026-11-05'), actualEndDate: app.parseDate('2026-11-03') });
+  const late = listTask('VID-LATE', '', { name: 'Late task', status: 'Done', end: app.parseDate('2026-11-03'), actualEndDate: app.parseDate('2026-11-05') });
+  const varianceModel = app.buildMetricsModel([early, late], range, '', app.parseDate('2026-11-04'), 'weekly');
+  const varianceHtml = app.renderMetricsFinishVariance(varianceModel);
+  assert.ok(varianceHtml.indexOf('Late task') < varianceHtml.indexOf('Early task'));
+  assert.match(varianceHtml, /2 days late/);
+  assert.match(varianceHtml, /2 days early/);
+  assert.match(varianceHtml, /metrics-variance-bar late/);
+  assert.match(varianceHtml, /metrics-variance-bar early/);
+  assert.match(varianceHtml, /metrics-variance-axis/);
   const empty = app.buildMetricsModel([], range, '', app.parseDate('2026-11-04'), 'weekly');
-  assert.match(app.renderMetricsDeliveryChart(empty, 'weekly'), /No planned finish dates or actual completions/);
+  assert.match(app.renderMetricsFinishVariance(empty), /No completed tasks with both a planned end date and actual completion date/);
   assert.match(app.renderMetricsParentChart(empty), /No recorded hours/);
 });
 
@@ -1926,6 +1969,9 @@ test('UI foundation declares semantic tokens, readable defaults and protected ti
   assert.match(html, /font-variant-numeric:\s*tabular-nums/);
   assert.match(html, /\.selection-hit\s*\{[^}]*min-width:\s*var\(--control-height\)/);
   assert.match(html, /\.timeline \.task-cell, \.timeline \.day-cell\s*\{ height: 54px/);
+  assert.match(html, /#taskForm \{ display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; margin: 0; \}/);
+  assert.match(html, /\.modal-body \{ flex: 1 1 auto; min-height: 0; overflow: auto;/);
+  assert.match(html, /\.modal-foot \{\s*flex: 0 0 auto;/);
   assert.match(html, /isolation:\s*isolate/);
 });
 

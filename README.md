@@ -74,6 +74,8 @@ The application supports a parent-child task structure.
 
 **Current hierarchy depth:** One subtask level.
 
+Parent assignment is validated on task creation, subtask creation, bulk selection and transfer. Parents must exist and be top-level; duplicate IDs are rejected by direct row lookups. Deleting a parent requires explicitly selecting all of its subtasks. A subtask with logged hours cannot be detached, and a top-level task with legacy Hours cannot become a subtask until that stored value is resolved, so hierarchy changes cannot hide or silently activate hours.
+
 ## Hours and Hours Progress
 
 Only subtasks can store logged Hours, separate from planned start/end, actual work dates and the calendar-day Duration formula. Enter 0-10,000 hours with up to two decimals. New subtasks start at zero; their parent assignment enables the Hours input. Top-level tasks cannot log hours directly.
@@ -106,7 +108,7 @@ The former Dashboard is now the dedicated **Metrics** workspace. Sticky Daily, W
 
 Four actionable tiles show actual completions in the selected period, recorded hours on scheduled work, current overdue work for the selected client, and blocked scheduled work. Parent/standalone and subtask counts are separated. Overdue is explicitly **now**, not a historical snapshot of the selected month.
 
-**Planned Finish vs Actual Completion** compares leaf-task planned end dates with actual dates marked Done. Planned-finish counts include tasks in every status, so they are not a count of unfinished work; a task can appear in both series. Daily/weekly/biweekly views use day buckets, Monthly uses 7-day buckets, and Yearly uses calendar months. Counts appear as text on keyboard-operable bars; dense charts scroll within their container on mobile. Completion events can be included even when their planned dates were outside the period. Parent containers are excluded from this chart to avoid counting the same work twice.
+**Planned vs Actual Finish** compares each leaf task completed in the selected period with its planned end date. Each row shows both dates and a diverging variance bar centered on On time: early finishes extend left and late finishes extend right, with an explicit day difference label. Tasks without either date are excluded. Late finishes appear first, with up to eight rows shown and a View completed action for the full list. Completion is scoped by actual completion date, so the planned end can fall outside the selected period. Parent containers are excluded to avoid counting the same work twice.
 
 **Hours by Parent Task** shows the five largest groups by recorded subtask hours in the schedule window, with a View work shortcut for the full set. Shared-client subtasks count once for the selected client filter; hours are not split or added again for parent rollups. These are stored task totals, not hours worked on each calendar day. Accurate daily time-spent charts require dated time entries, which are not implemented.
 
@@ -245,4 +247,4 @@ The intended workload is approximately 200–1,000 tasks. Validate performance w
 
 ## Planned work
 
-Broader hierarchy validation, enhanced timeline navigation, Kanban, activity history, and dependencies/milestones are outside the current release.
+Enhanced timeline navigation, Kanban, activity history, and dependencies/milestones are outside the current release.

@@ -274,20 +274,26 @@
     .metrics-section h3 { margin: 0; font-size: 15px; }
     .metrics-section-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
     .metrics-caption { font-size: 11px; color: var(--muted); line-height: 1.5; }
-    .metrics-legend { display: flex; gap: 16px; font-size: 11px; color: var(--muted); margin: 14px 0; }
-    .metrics-legend span { display: inline-flex; gap: 6px; align-items: center; }
-    .metrics-legend i { width: 10px; height: 10px; display: inline-block; border-radius: 2px; }
-    .metrics-chart-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
-    .metrics-buckets { display: grid; grid-template-columns: repeat(var(--bucket-count), minmax(36px, 1fr)); gap: 4px; min-width: max-content; }
-    .metrics-bucket { min-width: 0; text-align: center; }
-    .metrics-bar-pair { display: flex; justify-content: center; height: 176px; border-bottom: 1px solid var(--border); }
-    .metrics-count-bar { position: relative; width: 24px; height: 100%; border: 0; padding: 0; background: transparent; color: var(--text); }
-    .metrics-count-bar:hover { background: #f1f5f9; }
-    .metrics-count-bar:focus-visible, .metrics-parent:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-    .metrics-bar-fill { position: absolute; bottom: 0; left: 3px; right: 3px; height: var(--fill-height); border-radius: 3px 3px 0 0; background: #b58105; }
-    .metrics-count-bar.completed .metrics-bar-fill { background: #1f845a; }
-    .metrics-bar-value { position: absolute; bottom: calc(var(--fill-height) + 4px); left: 0; right: 0; font-size: 11px; font-weight: 700; }
-    .metrics-bucket-label { display: block; font-size: 10px; color: var(--muted); margin-top: 8px; line-height: 1.4; }
+    .metrics-variance-table { min-width: 560px; }
+    .metrics-variance-table td { vertical-align: middle; }
+    .metrics-variance-table .date-label { white-space: nowrap; }
+    .metrics-variance-axis { display: grid; grid-template-columns: 1fr 2px 1fr; align-items: center; margin: 0 0 6px; color: var(--muted); font-size: 10px; }
+    .metrics-variance-axis span:first-child { text-align: left; }
+    .metrics-variance-axis span:last-child { text-align: right; }
+    .metrics-variance-axis strong { text-align: center; font-weight: 600; }
+    .metrics-variance-track { display: grid; grid-template-columns: minmax(0, 1fr) 2px minmax(0, 1fr); align-items: center; min-width: 120px; height: 12px; }
+    .metrics-variance-half { display: flex; height: 100%; }
+    .metrics-variance-half.early { justify-content: flex-end; }
+    .metrics-variance-half.late { justify-content: flex-start; }
+    .metrics-variance-bar { display: block; width: var(--variance-width); height: 8px; border-radius: 4px; }
+    .metrics-variance-bar.early { background: #0c66e4; }
+    .metrics-variance-bar.late { background: #c9372c; }
+    .metrics-variance-zero { display: block; height: 12px; background: #647084; }
+    .metrics-variance-result { display: inline-flex; min-height: 28px; align-items: center; padding: 4px 8px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .metrics-variance-result.late { color: #ae2e24; background: #ffebe6; }
+    .metrics-variance-result.early { color: #0747a6; background: #deebff; }
+    .metrics-variance-result.ontime { color: #216e4e; background: #dcfff1; }
+    .metrics-parent:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
     .metrics-parent { display: block; width: 100%; padding: 10px 0; text-align: left; border: 0; background: transparent; color: var(--text); }
     .metrics-parent:hover { background: #f7f8fa; }
     .metrics-parent-label { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; margin-bottom: 7px; }
@@ -782,13 +788,19 @@
       width: 100%;
       max-width: 560px;
       max-height: 92vh;
-      overflow: auto;
+      max-height: 92dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
       background: white;
       border-radius: var(--radius-md);
       box-shadow: 0 12px 40px #091e4240;
     }
 
+    #taskForm { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; margin: 0; }
+
     .modal-head {
+      flex: 0 0 auto;
       padding: var(--space-lg);
       border-bottom: 1px solid var(--border);
       display: flex;
@@ -799,9 +811,7 @@
     .modal-head h2 { font-size: 18px; }
     .close-btn { border: 0; background: transparent; font-size: 22px; color: var(--muted); min-width: var(--control-height); min-height: var(--control-height); }
 
-    .modal-body {
-  padding: var(--space-lg);
-  }
+    .modal-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: var(--space-lg); }
 
   #timelineShell {
   width: 100%;
@@ -862,6 +872,7 @@
     .form-field textarea { resize: vertical; min-height: 88px; }
 
     .modal-foot {
+      flex: 0 0 auto;
       display: flex;
       flex-wrap: wrap;
       justify-content: space-between;
@@ -2575,26 +2586,13 @@ html += `<div class="task-cell"
       group.ids.push(task.id);
     });
     const groups = [...hourGroups.values()].sort((first, second) => second.units - first.units || first.name.localeCompare(second.name, undefined, { numeric: true }));
-    const bucketSize = period === 'monthly' ? 7 : 1;
-    const buckets = [];
-    let cursor = new Date(range.start);
-    while (cursor <= range.end) {
-      const start = new Date(cursor);
-      const next = period === 'yearly' ? new Date(start.getFullYear(), start.getMonth() + 1, 1) : addDays(start, bucketSize);
-      const end = addDays(next, -1) > range.end ? new Date(range.end) : addDays(next, -1);
-      buckets.push({ key: dateKey(start), start, end, dueIds: [], completedIds: [] });
-      cursor = next;
-    }
-    const bucketIndex = date => {
-      if (!date || date < range.start || date > range.end) return -1;
-      return period === 'yearly' ? date.getMonth() - range.start.getMonth() : Math.floor(dayDiff(range.start, date) / bucketSize);
-    };
-    leaves.forEach(task => {
-      const dueIndex = bucketIndex(task.end);
-      if (dueIndex >= 0) buckets[dueIndex].dueIds.push(task.id);
-      const completedIndex = task.status === 'Done' ? bucketIndex(parseDate(task.actualEndDate)) : -1;
-      if (completedIndex >= 0) buckets[completedIndex].completedIds.push(task.id);
-    });
+    const finishVariance = completed.filter(task => !parents.has(task.id) && task.end)
+      .map(task => {
+        const actualEnd = parseDate(task.actualEndDate);
+        return actualEnd ? { task, plannedEnd: task.end, actualEnd, days: dayDiff(task.end, actualEnd) } : null;
+      })
+      .filter(Boolean)
+      .sort((first, second) => second.days - first.days || first.actualEnd - second.actualEnd || first.task.id.localeCompare(second.task.id));
     const attention = [];
     const seen = new Set();
     [[overdue, 'Overdue now'], [blocked, 'Blocked'], [dueToday, 'Due today'], [missingHours, 'Needs hours']].forEach(([items, reason]) => {
@@ -2604,7 +2602,7 @@ html += `<div class="task-cell"
         attention.push({ task, reason });
       });
     });
-    return { scoped, completed, overdue, blocked, dueToday, missingHours, groups, buckets, attention,
+    return { scoped, completed, finishVariance, overdue, blocked, dueToday, missingHours, groups, attention,
       hours: taskHourMetrics(scoped, tasks), parents: scoped.filter(task => !task.parentTaskId).length,
       subtasks: scoped.filter(task => task.parentTaskId).length };
   }
@@ -2617,9 +2615,9 @@ html += `<div class="task-cell"
     if (focus.kind === 'blocked') return model.blocked.map(task => task.id);
     if (focus.kind === 'hours') return model.groups.flatMap(group => group.ids);
     if (focus.kind === 'attention') return model.attention.map(item => item.task.id);
+    if (focus.kind === 'finishVariance') return model.finishVariance.map(item => item.task.id);
     if (focus.kind === 'parent') return model.groups.find(group => group.id === focus.key)?.ids || [];
-    const bucket = model.buckets.find(item => item.key === focus.key);
-    return focus.kind === 'dueBucket' ? bucket?.dueIds || [] : focus.kind === 'completedBucket' ? bucket?.completedIds || [] : [];
+    return [];
   }
 
   function moveDashboardPeriod(direction) {
@@ -2665,7 +2663,7 @@ html += `<div class="task-cell"
       <div class="panel-subtitle" style="margin-top:14px"><strong title="Current date in the spreadsheet time zone">Today:</strong> ${displayDate(today, true)} <span aria-hidden="true">·</span> <strong>Selected period:</strong> ${displayDateRange(range.start, range.end)} · ${total} scheduled tasks · ${model.parents} parent/standalone · ${model.subtasks} subtasks${dashboard.client ? ' · ' + esc(dashboard.client === 'unassigned' ? 'Unassigned' : dashboard.client.slice(7)) : ''}</div>
       <section class="metrics-tiles" id="dashboardMetrics" aria-label="Selected period metrics">${tiles.map(([label, value, note, kind]) => `<button type="button" class="stat metrics-tile" onclick="openMetricTasks('${kind}')"><div class="stat-label">${label}</div><div class="stat-number">${value}</div><div class="stat-foot">${note}</div>${kind === 'hours' ? renderHoursProgress(model.hours.completed, model.hours.total, false, false) : ''}</button>`).join('')}</section>
       <div class="metrics-charts">
-        <section class="metrics-section" aria-labelledby="metricsDeliveryHeading"><div class="metrics-section-head"><h3 id="metricsDeliveryHeading">Planned Finish vs Actual Completion</h3></div><div class="metrics-caption">Planned finish counts include every status; actual completions use the date tasks were marked Done. A task may appear in both.</div>${renderMetricsDeliveryChart(model, dashboard.period)}</section>
+        <section class="metrics-section" aria-labelledby="metricsDeliveryHeading"><div class="metrics-section-head"><h3 id="metricsDeliveryHeading">Planned vs Actual Finish</h3><button class="subtask-link" ${model.finishVariance.length ? '' : 'disabled'} onclick="openMetricTasks('finishVariance')">View completed (${model.finishVariance.length})</button></div><div class="metrics-caption">Completed in this period · days variance = actual completion minus planned end; positive is late, negative is early.</div>${renderMetricsFinishVariance(model)}</section>
         <section class="metrics-section" aria-labelledby="metricsHoursHeading"><div class="metrics-section-head"><h3 id="metricsHoursHeading">Hours by Parent Task</h3><button class="subtask-link" onclick="openMetricTasks('hours')">View work</button></div><div class="metrics-caption">Recorded task totals · selected schedule window</div>${renderMetricsParentChart(model)}</section>
       </div>
       <section class="metrics-section" aria-labelledby="metricsAttentionHeading"><div class="metrics-section-head"><h3 id="metricsAttentionHeading">Needs Attention</h3><button class="subtask-link" onclick="openMetricTasks('attention')">View all (${model.attention.length})</button></div><div class="metrics-caption">Overdue and due-today items for ${esc(attentionClient)} are current and not limited to this period. Showing up to eight; View all opens every match. Blocked and missing-hour items use the selected schedule window.</div>${renderMetricsAttention(model)}</section>
@@ -2696,7 +2694,7 @@ html += `<div class="task-cell"
   function openMetricTasks(kind, key = '') {
     const dashboard = state.dashboard;
     const range = dashboardRange(dashboard.period, dashboard.anchor);
-    const labels = { completed: 'Actual completions', overdue: 'Overdue now', blocked: 'Blocked scheduled work', hours: 'Recorded-hour work', attention: 'Needs Attention', parent: 'Work by parent', dueBucket: 'Planned finish dates', completedBucket: 'Actual completions' };
+    const labels = { completed: 'Actual completions', overdue: 'Overdue now', blocked: 'Blocked scheduled work', hours: 'Recorded-hour work', attention: 'Needs Attention', parent: 'Work by parent', finishVariance: 'Finish variance' };
     const focus = { kind, key, label: labels[kind] || 'Metrics', start: dateKey(range.start), end: dateKey(range.end), client: dashboard.client, period: dashboard.period };
     ['taskSearch', 'taskStatusFilter', 'taskCategoryFilter', 'taskPriorityFilter', 'taskDateFrom', 'taskDateTo'].forEach(id => { $(id).value = ''; });
     $('taskClientFilter').value = dashboard.client;
@@ -2780,19 +2778,22 @@ html += `<div class="task-cell"
     startNewInvoice(draft.client, draft.start, draft.end, dayDiff(parseDate(draft.start), parseDate(draft.end)) === 13 ? 'fortnight' : 'custom');
   }
 
-  function renderMetricsDeliveryChart(model, period) {
-    const maximum = Math.max(0, ...model.buckets.flatMap(bucket => [bucket.dueIds.length, bucket.completedIds.length]));
-    if (!maximum) return '<div class="metrics-zero">No planned finish dates or actual completions in this period.</div>';
-    return `<div class="metrics-legend"><span><i style="background:#b58105"></i>Planned finish</span><span><i style="background:#1f845a"></i>Actual completion</span></div><div class="metrics-chart-scroll"><div class="metrics-buckets" style="--bucket-count:${model.buckets.length}">${model.buckets.map(bucket => {
-      const label = period === 'yearly' ? COMPACT_MONTH_NAMES[bucket.start.getMonth()] : formatDisplayDate(bucket.start, true, false);
-      return `<div class="metrics-bucket"><div class="metrics-bar-pair">${[['dueIds', 'Planned finish', 'dueBucket'], ['completedIds', 'Actual completion', 'completedBucket']].map(([key, title, kind]) => {
-        const count = bucket[key].length;
-        const height = count / maximum * 84;
-        const noun = count === 1 ? 'task' : 'tasks';
-        const description = `${title}: ${count} ${noun}${kind === 'dueBucket' ? ' by planned end date' : ' marked Done'}; ${formatDisplayDate(bucket.start)} - ${formatDisplayDate(bucket.end)}`;
-        return `<button type="button" class="metrics-count-bar ${kind === 'completedBucket' ? 'completed' : ''}" style="--fill-height:${height}%" title="${esc(description)}" aria-label="${esc(description)}" onclick="openMetricTasks('${kind}',${esc(JSON.stringify(bucket.key))})"><span class="metrics-bar-value">${count}</span><span class="metrics-bar-fill" aria-hidden="true"></span></button>`;
-      }).join('')}</div><span class="metrics-bucket-label">${esc(label)}${dateKey(bucket.start) !== dateKey(bucket.end) && period !== 'yearly' ? '<br>- ' + bucket.end.getDate() : ''}</span></div>`;
-    }).join('')}</div></div>`;
+  function renderMetricsFinishVariance(model) {
+    if (!model.finishVariance.length) return '<div class="metrics-zero">No completed tasks with both a planned end date and actual completion date in this period.</div>';
+    const visible = model.finishVariance.slice(0, 8);
+    const maxVariance = Math.max(1, ...visible.map(item => Math.abs(item.days)));
+    return `<div class="table-wrap"><table class="metrics-variance-table"><thead><tr><th>Task</th><th>Planned finish</th><th>Actual completion</th><th>Variance<div class="metrics-variance-axis" aria-hidden="true"><span>Early</span><strong>On time</strong><span>Late</span></div></th></tr></thead><tbody>${visible.map(({ task, plannedEnd, actualEnd, days }) => {
+      const result = days > 0 ? `${days} ${days === 1 ? 'day' : 'days'} late`
+        : days < 0 ? `${Math.abs(days)} ${Math.abs(days) === 1 ? 'day' : 'days'} early` : 'On time';
+      const tone = days > 0 ? 'late' : days < 0 ? 'early' : 'ontime';
+      const varianceWidth = days ? Math.max(4, Math.abs(days) / maxVariance * 100) : 0;
+      const bar = days < 0
+        ? `<span class="metrics-variance-half early"><span class="metrics-variance-bar early" style="--variance-width:${varianceWidth}%"></span></span><span class="metrics-variance-zero"></span><span class="metrics-variance-half late"></span>`
+        : days > 0
+          ? `<span class="metrics-variance-half early"></span><span class="metrics-variance-zero"></span><span class="metrics-variance-half late"><span class="metrics-variance-bar late" style="--variance-width:${varianceWidth}%"></span></span>`
+          : '<span class="metrics-variance-half early"></span><span class="metrics-variance-zero"></span><span class="metrics-variance-half late"></span>';
+      return `<tr><td><button type="button" class="subtask-link" onclick="openEdit(${esc(JSON.stringify(task.id))})">${esc(task.name || task.id)}</button><div class="task-meta">${esc(task.id)}</div></td><td>${displayDate(plannedEnd, true)}</td><td>${displayDate(actualEnd, true)}</td><td><div class="metrics-variance-track" role="img" aria-label="${esc(result)}" title="${esc(result)}">${bar}</div><span class="metrics-variance-result ${tone}">${result}</span></td></tr>`;
+    }).join('')}</tbody></table>${model.finishVariance.length > 8 ? `<div class="metrics-caption">Showing 8 of ${model.finishVariance.length} completed tasks. Use View completed for the full list.</div>` : ''}</div>`;
   }
 
   function renderMetricsParentChart(model) {
