@@ -1287,7 +1287,7 @@
                     <label class="form-field">Date *<input class="field-control" id="expenseDate" type="date" required onchange="setExpenseField('date',this.value)"></label>
                     <label class="form-field">Merchant *<input class="field-control" id="expenseMerchant" maxlength="120" required oninput="setExpenseField('merchant',this.value)"></label>
                     <label class="form-field">Category *<select class="field-control" id="expenseCategory" required onchange="setExpenseField('category',this.value)"></select></label>
-                    <label class="form-field">Amount *<input class="field-control" id="expenseAmount" type="number" min="0.01" max="10000000" step="any" required oninput="setExpenseField('amount',this.value)"></label>
+                    <label class="form-field">Amount *<input class="field-control" id="expenseAmount" type="text" inputmode="decimal" maxlength="18" required oninput="setExpenseField('amount',parseMoneyInputValue(this.value));validateMoneyInput(this,state.expenses.editor.currency,false,10000000)" onblur="if(normalizeMoneyInput(this,state.expenses.editor.currency,false,10000000))setExpenseField('amount',parseMoneyInputValue(this.value))"></label>
                     <label class="form-field">Currency *<select class="field-control" id="expenseCurrency" required onchange="setExpenseField('currency',this.value)"></select></label>
                     <label class="form-field">Payment method *<select class="field-control" id="expensePaymentMethod" required onchange="setExpenseField('paymentMethod',this.value)"></select></label>
                     <label class="form-field">Payment status *<select class="field-control" id="expenseStatus" required onchange="setExpenseField('status',this.value)"></select></label>
@@ -1336,7 +1336,7 @@
                   <label class="form-field">Date *<input class="field-control" id="earningDate" type="date" required oninput="setEarningField('date',this.value)"></label>
                   <label class="form-field">Payer / source *<input class="field-control" id="earningPayer" maxlength="120" required oninput="setEarningField('payer',this.value)"></label>
                   <label class="form-field">Category *<select class="field-control" id="earningCategory" required onchange="setEarningField('category',this.value)"></select></label>
-                  <label class="form-field">Amount *<input class="field-control" id="earningAmount" type="number" min="0.01" max="10000000" step="any" required oninput="setEarningField('amount',this.value)"></label>
+                  <label class="form-field">Amount *<input class="field-control" id="earningAmount" type="text" inputmode="decimal" maxlength="18" required oninput="setEarningField('amount',parseMoneyInputValue(this.value));validateMoneyInput(this,state.earnings.editor.currency,false,10000000)" onblur="if(normalizeMoneyInput(this,state.earnings.editor.currency,false,10000000))setEarningField('amount',parseMoneyInputValue(this.value))"></label>
                   <label class="form-field">Currency *<select class="field-control" id="earningCurrency" required onchange="setEarningField('currency',this.value)"></select></label>
                   <label class="form-field">Status *<select class="field-control" id="earningStatus" required onchange="setEarningField('status',this.value)"></select></label>
                   <label class="form-field full">Description<input class="field-control" id="earningDescription" maxlength="200" oninput="setEarningField('description',this.value)"></label>
@@ -1365,7 +1365,7 @@
                   <label class="form-field">Type *<select class="field-control" id="recurringType" onchange="setRecurringType(this.value)"><option>Expense</option><option>Earning</option></select></label>
                   <label class="form-field">Name *<input class="field-control" id="recurringName" maxlength="120" required oninput="setRecurringField('name',this.value)"></label>
                   <label class="form-field">Category *<select class="field-control" id="recurringCategory" required onchange="setRecurringField('category',this.value)"></select></label>
-                  <label class="form-field">Amount *<input class="field-control" id="recurringAmount" type="number" min="0.01" max="10000000" step="any" required oninput="setRecurringField('amount',this.value)"></label>
+                  <label class="form-field">Amount *<input class="field-control" id="recurringAmount" type="text" inputmode="decimal" maxlength="18" required oninput="setRecurringField('amount',parseMoneyInputValue(this.value));validateMoneyInput(this,state.recurring.editor.currency,false,10000000)" onblur="if(normalizeMoneyInput(this,state.recurring.editor.currency,false,10000000))setRecurringField('amount',parseMoneyInputValue(this.value))"></label>
                   <label class="form-field">Currency *<select class="field-control" id="recurringCurrency" required onchange="setRecurringField('currency',this.value)"></select></label>
                   <label class="form-field">Frequency *<select class="field-control" id="recurringFrequency" onchange="setRecurringField('frequency',this.value)"><option>Weekly</option><option>Monthly</option><option>Quarterly</option><option>Yearly</option></select></label>
                   <label class="form-field">Starts *<input class="field-control" id="recurringStartDate" type="date" required oninput="setRecurringField('startDate',this.value)"></label>
@@ -4440,7 +4440,7 @@ function deleteCurrentTask() {
       <details id="invoiceSettings" class="invoice-band" ${!workspace.settings.senderName || workspace.billingDirty ? 'open' : ''}>
         <summary><strong>Billing defaults</strong></summary>
         <fieldset id="invoiceSettingsFields" class="invoice-fields"><div class="form-grid" style="margin-top:16px">
-          ${[['anchor', 'Billing cycle starts', 'date'], ['currency', 'Currency', 'currency'], ['defaultRate', 'Default hourly rate', 'number'], ['senderName', 'Your name / business', 'text'], ['senderDetails', 'Your address / contact', 'textarea'], ['paymentNotes', 'Payment details / notes', 'textarea']].map(([key, label, type]) => `<label class="form-field">${label}${type === 'currency' ? `<select class="field-control" id="billing${key}" onchange="state.invoices.settingsDraft.${key}=this.value;state.invoices.billingDirty=true">${currencies.map(currency => `<option ${settings[key] === currency ? 'selected' : ''}>${currency}</option>`).join('')}</select>` : type === 'textarea' ? `<textarea class="field-control" id="billing${key}" oninput="state.invoices.settingsDraft.${key}=this.value;state.invoices.billingDirty=true">${esc(settings[key])}</textarea>` : `<input class="field-control" id="billing${key}" type="${type}" ${type === 'number' ? `min="0" step="${currencyScale(settings.currency)}" max="1000000"` : ''} value="${esc(settings[key])}" oninput="state.invoices.settingsDraft.${key}=this.value;state.invoices.billingDirty=true">`}</label>`).join('')}
+          ${[['anchor', 'Billing cycle starts', 'date'], ['currency', 'Currency', 'currency'], ['defaultRate', 'Default hourly rate', 'number'], ['senderName', 'Your name / business', 'text'], ['senderDetails', 'Your address / contact', 'textarea'], ['paymentNotes', 'Payment details / notes', 'textarea']].map(([key, label, type]) => `<label class="form-field">${label}${type === 'currency' ? `<select class="field-control" id="billing${key}" onchange="state.invoices.settingsDraft.${key}=this.value;state.invoices.billingDirty=true">${currencies.map(currency => `<option ${settings[key] === currency ? 'selected' : ''}>${currency}</option>`).join('')}</select>` : type === 'textarea' ? `<textarea class="field-control" id="billing${key}" oninput="state.invoices.settingsDraft.${key}=this.value;state.invoices.billingDirty=true">${esc(settings[key])}</textarea>` : `<input class="field-control" id="billing${key}" type="${type === 'number' ? 'text' : type}" ${type === 'number' ? 'inputmode="decimal" maxlength="18"' : ''} value="${type === 'number' ? formatMoneyInputValue(settings[key], settings.currency) : esc(settings[key])}" oninput="state.invoices.settingsDraft.${key}=${type === 'number' ? 'parseMoneyInputValue(this.value)' : 'this.value'};state.invoices.billingDirty=true;${type === 'number' ? 'validateMoneyInput(this,state.invoices.settingsDraft.currency,true,1000000)' : ''}" onblur="${type === 'number' ? `if(normalizeMoneyInput(this,state.invoices.settingsDraft.currency,true,1000000)){state.invoices.settingsDraft.${key}=parseMoneyInputValue(this.value);state.invoices.billingDirty=true}` : ''}">`}</label>`).join('')}
         </div><div class="invoice-toolbar" style="margin-top:14px"><button class="btn" onclick="saveBillingDefaults()">Save billing defaults</button><button class="btn" onclick="resetBillingDefaults()">Reload saved defaults</button></div></fieldset>
       </details>
       <section id="invoiceEditor" class="invoice-band">
@@ -4458,14 +4458,14 @@ function deleteCurrentTask() {
             <label class="form-field">Billing timeline<select class="field-control" id="invoicePeriodMode" onchange="setInvoiceRange('periodMode',this.value)"><option value="fortnight" ${(invoice.periodMode || 'fortnight') === 'fortnight' ? 'selected' : ''}>Two weeks</option><option value="custom" ${invoice.periodMode === 'custom' ? 'selected' : ''}>Custom dates</option></select></label>
             <label class="form-field">From<input class="field-control" id="invoicePeriodStart" type="date" value="${esc(invoice.periodStart)}" onchange="setInvoiceRange('periodStart',this.value)"></label>
             <label class="form-field">Through<input class="field-control" id="invoicePeriodEnd" type="date" value="${esc(invoice.periodEnd)}" ${(invoice.periodMode || 'fortnight') === 'fortnight' ? 'disabled' : ''} onchange="setInvoiceRange('periodEnd',this.value)"></label>
-            ${[['issueDate', 'Issue date', 'date'], ['dueDate', 'Due date', 'date'], ['senderName', 'Your name / business', 'text'], ['defaultRate', 'Hourly rate for new lines', 'number']].map(([key, label, type]) => `<label class="form-field">${label}<input class="field-control" id="invoiceField-${key}" type="${type}" ${type === 'number' ? `min="0" max="1000000" step="${currencyScale(invoice.currency)}"` : 'maxlength="200"'} value="${esc(invoice[key])}" oninput="setInvoiceField('${key}',this.value)"></label>`).join('')}
+            ${[['issueDate', 'Issue date', 'date'], ['dueDate', 'Due date', 'date'], ['senderName', 'Your name / business', 'text'], ['defaultRate', 'Hourly rate for new lines', 'number']].map(([key, label, type]) => `<label class="form-field">${label}<input class="field-control" id="invoiceField-${key}" type="${type === 'number' ? 'text' : type}" ${type === 'number' ? 'inputmode="decimal" maxlength="18"' : 'maxlength="200"'} value="${type === 'number' ? formatMoneyInputValue(invoice[key], invoice.currency) : esc(invoice[key])}" oninput="${type === 'number' ? `setInvoiceField('${key}',parseMoneyInputValue(this.value));validateMoneyInput(this,state.invoices.editor.currency,true,1000000)` : `setInvoiceField('${key}',this.value)`}" onblur="${type === 'number' ? `if(normalizeMoneyInput(this,state.invoices.editor.currency,true,1000000))setInvoiceField('${key}',parseMoneyInputValue(this.value))` : ''}"></label>`).join('')}
             ${[['senderDetails', 'Your address / contact'], ['clientDetails', 'Bill to address / contact'], ['notes', 'Payment details / notes']].map(([key, label]) => `<label class="form-field ${key === 'notes' ? 'full' : ''}">${label}<textarea class="field-control" maxlength="${key === 'notes' ? 1500 : 1000}" oninput="setInvoiceField('${key}',this.value)">${esc(invoice[key])}</textarea></label>`).join('')}
           </div>
           <div class="invoice-toolbar" style="margin-top:18px"><span>${invoice.lines.length} invoice lines</span><span class="spacer"></span><button class="btn btn-primary" id="addManualInvoiceLine" onclick="addInvoiceLine()">Add manual line</button></div>
           <div class="table-wrap"><table class="invoice-lines"><thead><tr><th>Description</th><th>Hours</th><th>Hourly rate</th><th>Amount</th><th></th></tr></thead><tbody>
             ${invoice.lines.map((line, index) => `<tr><td><input class="field-control description-input" id="invoiceLine-${index}-description" aria-label="Description line ${index + 1}" maxlength="200" value="${esc(line.description)}" oninput="setInvoiceLine(${index},'description',this.value)"><output class="invoice-field-error" id="invoiceError-${index}-description"></output>${line.taskId ? `<div class="task-meta">${esc(line.taskId)}</div>` : ''}</td>
               <td><input class="field-control" id="invoiceLine-${index}-hours" aria-label="Hours line ${index + 1}" type="number" min="0" max="10000" step="0.01" value="${esc(line.hours)}" oninput="setInvoiceLine(${index},'hours',this.value)"><output class="invoice-field-error" id="invoiceError-${index}-hours"></output></td>
-              <td><input class="field-control" id="invoiceLine-${index}-rate" aria-label="Rate line ${index + 1}" type="number" min="0" max="1000000" step="${currencyScale(invoice.currency)}" value="${esc(line.rate)}" oninput="setInvoiceLine(${index},'rate',this.value)"><output class="invoice-field-error" id="invoiceError-${index}-rate"></output></td>
+              <td><input class="field-control" id="invoiceLine-${index}-rate" aria-label="Rate line ${index + 1}" type="text" inputmode="decimal" maxlength="18" value="${formatMoneyInputValue(line.rate, invoice.currency)}" oninput="setInvoiceLine(${index},'rate',parseMoneyInputValue(this.value));validateMoneyInput(this,state.invoices.editor.currency,true,1000000)" onblur="if(normalizeMoneyInput(this,state.invoices.editor.currency,true,1000000))setInvoiceLine(${index},'rate',parseMoneyInputValue(this.value))"><output class="invoice-field-error" id="invoiceError-${index}-rate"></output></td>
               <td><output id="invoiceLineAmount${index}">${invoiceAmount(line.hours, line.rate, invoice.currency) === null ? 'Invalid amount' : esc(invoiceMoney(invoiceAmount(line.hours, line.rate, invoice.currency), invoice.currency))}</output></td>
               <td><button class="btn" aria-label="Remove invoice line ${index + 1}" title="Remove line" onclick="removeInvoiceLine(${index})">&#215;</button></td></tr>`).join('') || '<tr><td colspan="5">No invoice lines.</td></tr>'}
           </tbody></table></div>
@@ -4514,6 +4514,22 @@ function deleteCurrentTask() {
 
   function saveCurrentInvoice(status) {
     if (state.writing || state.syncing) return;
+    const defaultRateInput = $('invoiceField-defaultRate');
+    if (defaultRateInput && !normalizeMoneyInput(defaultRateInput, state.invoices.editor.currency, true, 1000000)) {
+      defaultRateInput.reportValidity();
+      return;
+    }
+    if (defaultRateInput) setInvoiceField('defaultRate', parseMoneyInputValue(defaultRateInput.value));
+    for (let index = 0; index < state.invoices.editor.lines.length; index++) {
+      const rateInput = $('invoiceLine-' + index + '-rate');
+      if (rateInput) {
+        if (!normalizeMoneyInput(rateInput, state.invoices.editor.currency, true, 1000000)) {
+          rateInput.reportValidity();
+          return;
+        }
+        state.invoices.editor.lines[index].rate = parseMoneyInputValue(rateInput.value);
+      }
+    }
     if (status === 'Issued') {
       const readiness = invoiceReadiness(state.invoices.editor, state.invoices.records);
       if (!readiness.ready) { revealInvoiceErrors(readiness); showToast(readiness.issues[0].message); focusInvoiceIssue(readiness.issues[0]); return; }
@@ -4530,6 +4546,15 @@ function deleteCurrentTask() {
 
   function saveBillingDefaults() {
     if (state.writing || state.syncing) return;
+    const defaultRateInput = $('billingdefaultRate');
+    if (defaultRateInput && !normalizeMoneyInput(defaultRateInput, state.invoices.settingsDraft.currency, true, 1000000)) {
+      defaultRateInput.reportValidity();
+      return;
+    }
+    if (defaultRateInput) {
+      state.invoices.settingsDraft.defaultRate = parseMoneyInputValue(defaultRateInput.value);
+      state.invoices.billingDirty = true;
+    }
     invoiceMutation().withSuccessHandler(result => {
       state.invoices.settings = result.settings;
       state.invoices.settingsDraft = { ...result.settings };
@@ -4864,6 +4889,42 @@ function deleteCurrentTask() {
     return currency === 'JPY' || currency === 'KRW' ? 1 : 100;
   }
 
+  function parseMoneyInputValue(value) {
+    return String(value == null ? '' : value).trim().replace(/,/g, '');
+  }
+
+  function formatMoneyInputValue(value, currency) {
+    const raw = parseMoneyInputValue(value);
+    if (!raw || !Number.isFinite(Number(raw))) return raw;
+    const digits = currencyScale(currency) === 1 ? 0 : 2;
+    return Number(raw).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  }
+
+  function validateMoneyInput(input, currency, allowBlank = false, maximum = 10000000) {
+    const displayed = String(input.value || '').trim();
+    const raw = parseMoneyInputValue(displayed);
+    const scale = currencyScale(currency);
+    const grouped = scale === 1 ? /^\d{1,3}(?:,\d{3})+$/.test(displayed)
+      : /^\d{1,3}(?:,\d{3})+(?:\.\d{0,2})?$/.test(displayed);
+    let message = '';
+    if (!displayed) {
+      if (!allowBlank) message = 'Enter an amount.';
+    } else if (!(grouped || (scale === 1 ? /^\d+$/.test(displayed) : /^\d+(?:\.\d{0,2})?$/.test(displayed))) || !Number.isFinite(Number(raw)) || Number(raw) > maximum) {
+      message = scale === 1 ? 'Enter a whole number for ' + currency + '.' : 'Enter a number with up to two decimal places.';
+    }
+    input.setCustomValidity(message);
+    if (message) input.setAttribute('aria-invalid', 'true');
+    else input.removeAttribute('aria-invalid');
+    return !message;
+  }
+
+  function normalizeMoneyInput(input, currency, allowBlank = false, maximum = 10000000) {
+    if (!validateMoneyInput(input, currency, allowBlank, maximum)) return false;
+    const raw = parseMoneyInputValue(input.value);
+    if (raw) input.value = formatMoneyInputValue(raw, currency);
+    return true;
+  }
+
   function invoiceAmount(hours, rate, currency = 'USD') {
     if (!['number', 'string'].includes(typeof hours) || !['number', 'string'].includes(typeof rate)) return null;
     const numberHours = Number(hours);
@@ -4897,7 +4958,7 @@ function deleteCurrentTask() {
     $('expenseFormTitle').textContent = expense.id ? 'Edit expense' : 'Add an expense';
     $('expenseDate').value = expense.date || '';
     $('expenseMerchant').value = expense.merchant || '';
-    $('expenseAmount').value = expense.amount == null ? '' : expense.amount;
+    $('expenseAmount').value = formatMoneyInputValue(expense.amount, expense.currency);
     $('expenseAmount').step = currencyScale(expense.currency);
     $('expenseDescription').value = expense.description || '';
     $('expenseReceiptUrl').value = expense.receiptUrl || '';
@@ -5027,6 +5088,9 @@ function deleteCurrentTask() {
     event.preventDefault();
     const workspace = state.expenses;
     if (!workspace.loaded || state.writing || state.syncing) return;
+    const amountInput = $('expenseAmount');
+    if (!normalizeMoneyInput(amountInput, workspace.editor.currency, false, 10000000)) { amountInput.reportValidity(); return; }
+    workspace.editor.amount = parseMoneyInputValue(amountInput.value);
     const expense = { ...workspace.editor, amount: Number(workspace.editor.amount) };
     workspace.formError = '';
     mutationRunner()
@@ -5294,7 +5358,7 @@ function deleteCurrentTask() {
     $('earningFormTitle').textContent = earning.id ? 'Edit earning' : 'Add an earning';
     $('earningDate').value = earning.date || '';
     $('earningPayer').value = earning.payer || '';
-    $('earningAmount').value = earning.amount == null ? '' : earning.amount;
+    $('earningAmount').value = formatMoneyInputValue(earning.amount, earning.currency);
     $('earningAmount').step = currencyScale(earning.currency);
     $('earningAmount').step = currencyScale(earning.currency);
     $('earningDescription').value = earning.description || '';
@@ -5455,6 +5519,9 @@ function deleteCurrentTask() {
     event.preventDefault();
     const workspace = state.earnings;
     if (!workspace.loaded || state.writing || state.syncing) return;
+    const amountInput = $('earningAmount');
+    if (!normalizeMoneyInput(amountInput, workspace.editor.currency, false, 10000000)) { amountInput.reportValidity(); return; }
+    workspace.editor.amount = parseMoneyInputValue(amountInput.value);
     const earning = { ...workspace.editor, amount: Number(workspace.editor.amount) };
     workspace.formError = '';
     mutationRunner()
@@ -5491,7 +5558,7 @@ function deleteCurrentTask() {
     $('recurringFormTitle').textContent = rule.id ? 'Edit recurring rule' : 'Add a recurring rule';
     $('recurringType').value = rule.type;
     $('recurringName').value = rule.name || '';
-    $('recurringAmount').value = rule.amount == null ? '' : rule.amount;
+    $('recurringAmount').value = formatMoneyInputValue(rule.amount, rule.currency);
     $('recurringAmount').step = currencyScale(rule.currency);
     const currencies = state.expenses.currencies.length ? state.expenses.currencies : ['USD', 'PHP', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'KRW'];
     setExpenseOptions('recurringCurrency', currencies, rule.currency || 'USD');
@@ -5634,6 +5701,9 @@ function deleteCurrentTask() {
     event.preventDefault();
     const workspace = state.recurring;
     if (!workspace.loaded || state.writing || state.syncing) return;
+    const amountInput = $('recurringAmount');
+    if (!normalizeMoneyInput(amountInput, workspace.editor.currency, false, 10000000)) { amountInput.reportValidity(); return; }
+    workspace.editor.amount = parseMoneyInputValue(amountInput.value);
     const rule = { ...workspace.editor, amount: Number(workspace.editor.amount) };
     mutationRunner().withFailureHandler(error => {
       workspace.formError = String(error.message || error);
