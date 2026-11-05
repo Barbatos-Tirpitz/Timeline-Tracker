@@ -1687,6 +1687,9 @@ test('finish variance shows per-task date differences, escapes names, and caps v
   assert.ok(varianceHtml.indexOf('Late task') < varianceHtml.indexOf('Early task'));
   assert.match(varianceHtml, /2 days late/);
   assert.match(varianceHtml, /2 days early/);
+  assert.match(varianceHtml, /metrics-variance-bar late/);
+  assert.match(varianceHtml, /metrics-variance-bar early/);
+  assert.match(varianceHtml, /metrics-variance-axis/);
   const empty = app.buildMetricsModel([], range, '', app.parseDate('2026-11-04'), 'weekly');
   assert.match(app.renderMetricsFinishVariance(empty), /No completed tasks with both a planned end date and actual completion date/);
   assert.match(app.renderMetricsParentChart(empty), /No recorded hours/);
@@ -1966,6 +1969,9 @@ test('UI foundation declares semantic tokens, readable defaults and protected ti
   assert.match(html, /font-variant-numeric:\s*tabular-nums/);
   assert.match(html, /\.selection-hit\s*\{[^}]*min-width:\s*var\(--control-height\)/);
   assert.match(html, /\.timeline \.task-cell, \.timeline \.day-cell\s*\{ height: 54px/);
+  assert.match(html, /#taskForm \{ display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; margin: 0; \}/);
+  assert.match(html, /\.modal-body \{ flex: 1 1 auto; min-height: 0; overflow: auto;/);
+  assert.match(html, /\.modal-foot \{\s*flex: 0 0 auto;/);
   assert.match(html, /isolation:\s*isolate/);
 });
 
