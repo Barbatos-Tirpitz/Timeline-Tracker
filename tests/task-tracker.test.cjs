@@ -1003,7 +1003,10 @@ test('invoice drafts may be incomplete but issuing requires sender, lines, posit
 
 function invoiceServer() {
   const sheets = new Map();
+  const properties = new Map();
   let releases = 0;
+  let fetchCount = 0;
+  let failFxFetch = false;
   function makeSheet() {
     const rows = [];
     return {
@@ -1034,10 +1037,21 @@ function invoiceServer() {
       parseDate: value => new Date(value + 'T00:00:00.000Z'),
       getUuid: () => 'new-expense-001'
     },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: key => properties.get(key) || null, setProperty: (key, value) => properties.set(key, value) }) },
+    UrlFetchApp: { fetch(url) {
+      fetchCount++;
+      if (failFxFetch) throw new Error('Offline');
+      const request = new URL(url);
+      const base = request.searchParams.get('base');
+      const quotes = request.searchParams.get('quotes').split(',');
+      const usdRates = { EUR: 0.9, GBP: 0.8, CAD: 1.4, AUD: 1.5, JPY: 158.31, KRW: 1341.25, PHP: 63.295 };
+      const rows = quotes.map(quote => ({ date: '2026-11-05', base, quote, rate: base === 'USD' ? usdRates[quote] : 1 / usdRates[base] }));
+      return { getResponseCode: () => 200, getContentText: () => JSON.stringify(rows) };
+    } },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() { releases++; } }) }
   });
   vm.runInContext(backend, context);
-  return { context, sheets, releases: () => releases };
+  return { context, sheets, properties, releases: () => releases, fetchCount: () => fetchCount, failFxFetch: value => { failFxFetch = value; } };
 }
 
 function expenseDraft(overrides = {}) {
@@ -1091,6 +1105,103 @@ test('expense validation and header conflicts fail before changing stored record
   assert.equal(sheet.rows.length, 2);
 });
 
+test('JPY and KRW use whole-unit storage while EUR retains two-decimal precision', () => {
+  const app = invoiceServer();
+  const yenInvoice = app.context.normalizeInvoice_(invoiceDraft({
+    id: 'INV-yen-invoice-001', currency: 'JPY',
+    lines: [{ taskId: 'VID-001', description: 'Video', hours: 2, rate: 125 }]
+  }));
+  assert.equal(yenInvoice.lines[0].rate, 125);
+  assert.equal(yenInvoice.totalMinor, 250);
+  assert.throws(() => app.context.normalizeInvoice_(invoiceDraft({ currency: 'JPY', lines: [{ description: 'Video', hours: 1, rate: 125.5 }] })), /whole number/);
+  const euroInvoice = app.context.normalizeInvoice_(invoiceDraft({ currency: 'EUR', lines: [{ description: 'Video', hours: 1, rate: 12.34 }] }));
+  assert.equal(euroInvoice.lines[0].rate, 12.34);
+  const yenExpense = app.context.normalizeExpense_(expenseDraft({ currency: 'JPY', amount: 1250 }));
+  assert.equal(yenExpense.amountMinor, 1250);
+  assert.throws(() => app.context.normalizeExpense_(expenseDraft({ currency: 'KRW', amount: 1250.5 })), /whole number/);
+  assert.equal(app.context.normalizeExpense_(expenseDraft({ currency: 'KRW', amount: 8000 })).amountMinor, 8000);
+});
+
+test('earnings and recurring rules use separate lazy sheets and revision-protected records', () => {
+  const app = invoiceServer();
+  assert.deepEqual(Array.from(app.context.getEarnings().earnings), []);
+  assert.deepEqual(Array.from(app.context.getRecurringRules().rules), []);
+  assert.equal(app.sheets.size, 0);
+  const earning = app.context.saveEarning({ date: '2026-11-05', payer: 'Studio', category: 'Freelance', description: 'November editing', amount: 850, currency: 'EUR', status: 'Pending', notes: '', revision: 0 }).earning;
+  assert.equal(earning.amountMinor, 85000);
+  assert.equal(app.sheets.has('Earning_Master'), true);
+  assert.equal(app.sheets.has('Task_Master'), false);
+  assert.throws(() => app.context.saveEarning({ ...earning, amount: 900, revision: 0 }), /another session/);
+  assert.equal(app.context.deleteEarning(earning.id, earning.revision).success, true);
+  const rule = app.context.saveRecurringRule({ type: 'Expense', name: 'Rent', category: 'Utilities', description: '', amount: 1200, currency: 'JPY', frequency: 'Monthly', startDate: '2026-11-01', endDate: '', status: 'Active', notes: '', revision: 0 }).rule;
+  assert.equal(rule.amountMinor, 1200);
+  assert.equal(app.context.getRecurringRules('Expense').rules[0].frequency, 'Monthly');
+  assert.equal(app.context.getRecurringRules('Earning').rules.length, 0);
+  assert.throws(() => app.context.saveRecurringRule({ ...rule, amount: 1300, revision: 0 }), /another session/);
+  assert.equal(app.context.deleteRecurringRule(rule.id, rule.revision).success, true);
+});
+
+test('daily FX rates normalize provider quotes, cache once per day, and fall back stale when offline', () => {
+  const app = invoiceServer();
+  const rates = app.context.getFinanceExchangeRates('USD');
+  assert.equal(rates.rates.USD, 1);
+  assert.equal(rates.rates.JPY, 158.31);
+  assert.equal(rates.rates.KRW, 1341.25);
+  assert.equal(rates.rateDate, '2026-11-05');
+  assert.equal(rates.cached, false);
+  assert.equal(app.context.getFinanceExchangeRates('USD').cached, true);
+  assert.equal(app.fetchCount(), 1);
+  assert.throws(() => app.context.getFinanceExchangeRates('XYZ'), /supported reporting currency/);
+  const saved = JSON.parse(app.properties.get('FINANCE_FX_DAILY_USD'));
+  saved.requestedOn = '2099-01-01';
+  app.properties.set('FINANCE_FX_DAILY_USD', JSON.stringify(saved));
+  app.failFxFetch(true);
+  const stale = app.context.getFinanceExchangeRates('USD');
+  assert.equal(stale.stale, true);
+  assert.match(stale.error, /last saved daily rates/);
+  assert.equal(app.sheets.size, 0);
+});
+
+test('Refresh Finance reads each finance ledger and FX once, then clears its combined busy state', () => {
+  const app = loadingClient();
+  const state = app.getState();
+  app.renderExpenseWorkspace = () => {};
+  app.renderEarnings = () => {};
+  app.renderRecurringWorkspace = () => {};
+  app.renderExpenseNotice = () => {};
+  app.renderEarningNotice = () => {};
+  app.renderRecurringNotice = () => {};
+  app.updateDataNotice = () => {};
+  app.updateFinanceRefreshButton = () => {};
+  app.refreshFinanceData();
+  assert.deepEqual(app.calls.map(call => call.method), ['getExpenses', 'getEarnings', 'getRecurringRules', 'getFinanceExchangeRates']);
+  assert.equal(state.financeRefreshing, true);
+  for (const call of app.calls) {
+    if (call.method === 'getExpenses') call.success({ success: true, expenses: [], today: '2026-11-05', categories: [], currencies: [], paymentMethods: [], statuses: [] });
+    if (call.method === 'getEarnings') call.success({ success: true, earnings: [], today: '2026-11-05', categories: [], currencies: [], statuses: [] });
+    if (call.method === 'getRecurringRules') call.success({ success: true, rules: [] });
+    if (call.method === 'getFinanceExchangeRates') call.success({ success: true, base: 'USD', rates: { USD: 1, EUR: 0.9 }, rateDate: '2026-11-05', requestedOn: '2026-11-05' });
+  }
+  assert.equal(state.financeRefreshing, false);
+  assert.equal(state.financeRefreshPending.size, 0);
+  assert.equal(app.calls.length, 4);
+});
+
+test('recurring monthly and weekly forecasts respect currency, type, status and end dates', () => {
+  const app = client();
+  const rules = [
+    { type: 'Expense', currency: 'USD', status: 'Active', frequency: 'Monthly', startDate: '2026-01-31', endDate: '', amountMinor: 1000 },
+    { type: 'Expense', currency: 'USD', status: 'Active', frequency: 'Weekly', startDate: '2026-11-02', endDate: '2026-11-23', amountMinor: 200 },
+    { type: 'Expense', currency: 'USD', status: 'Paused', frequency: 'Monthly', startDate: '2026-01-01', endDate: '', amountMinor: 9000 },
+    { type: 'Earning', currency: 'USD', status: 'Active', frequency: 'Monthly', startDate: '2026-01-01', endDate: '', amountMinor: 5000 },
+    { type: 'Expense', currency: 'JPY', status: 'Active', frequency: 'Monthly', startDate: '2026-01-01', endDate: '', amountMinor: 800 }
+  ];
+  assert.equal(app.recurringMonthTotal(rules, 'Expense', 'USD', '2026-11'), 1800);
+  assert.equal(app.recurringMonthTotal(rules, 'Earning', 'USD', '2026-11'), 5000);
+  assert.equal(app.recurringMonthTotal(rules, 'Expense', 'JPY', '2026-11'), 800);
+  assert.equal(app.recurringMonthTotal(rules, 'Expense', 'USD', '2025-12'), 0);
+});
+
 test('expense totals group by currency and selected month without combining unlike amounts', () => {
   const app = client();
   const records = [
@@ -1104,16 +1215,59 @@ test('expense totals group by currency and selected month without combining unli
   assert.equal(app.expenseMonthTotal(records, 'CAD', '2026-11'), 0);
 });
 
+test('expense line and donut charts label months, currency units and payment values', () => {
+  const app = client();
+  const line = app.expenseTrendChart([
+    { key: '2026-09', expenses: 1250, earnings: 2000 },
+    { key: '2026-10', expenses: 0, earnings: 3000 },
+    { key: '2026-11', expenses: 275, earnings: 4500 }
+  ], 'USD');
+  assert.match(line, /<svg viewBox="0 0 390 190" role="img"/);
+  assert.match(line, /USD monthly expenses and earnings/);
+  assert.match(line, /Sep/);
+  assert.match(line, /\$12\.50/);
+  assert.match(line, /income-series/);
+  assert.match(line, /Out \$2\.75/);
+  assert.match(line, /In \$45\.00/);
+  const donut = app.expenseStatusDonut(600, 400, 'USD');
+  assert.match(donut, /role="img" aria-label="USD: \$6\.00 paid, \$4\.00 pending"/);
+  assert.match(donut, /conic-gradient\(var\(--green\) 0 60%/);
+  assert.match(donut, /60% paid/);
+  const empty = app.expenseStatusDonut(0, 0, 'USD');
+  assert.match(empty, /0% paid/);
+  assert.match(empty, /#e9edf3/);
+});
+
+test('invoice and expense frontend formatting respects zero-decimal currencies', () => {
+  const app = client();
+  assert.equal(app.invoiceAmount(2, 125, 'JPY'), 250);
+  assert.equal(app.invoiceAmount(2, 125.5, 'JPY'), null);
+  assert.equal(app.invoiceAmount(1, 12.34, 'EUR'), 1234);
+  assert.equal(app.currencyScale('KRW'), 1);
+  assert.equal(app.currencyScale('USD'), 100);
+  assert.equal(app.expenseMoney(1250, 'JPY'), new Intl.NumberFormat('en-US', { style: 'currency', currency: 'JPY' }).format(1250));
+  assert.equal(app.convertMinorToCurrency(15831, 'JPY', 'USD', { USD: 1, JPY: 158.31 }), 10000);
+  assert.equal(app.convertMinorToCurrency(10000, 'EUR', 'USD', { USD: 1, EUR: 0.9 }), 11111);
+  assert.equal(app.convertMinorToCurrency(10000, 'XYZ', 'USD', { USD: 1 }), null);
+});
+
 test('Multi Purpose Planner nests expense records and dashboard with an expense-specific top action', () => {
   assert.match(html, /<title>Multi Purpose Planner<\/title>/);
   assert.match(html, /id="expenseNav"[^>]*aria-controls="expenseWorkspaceNav"/);
-  assert.match(html, /<nav class="workspace-nav" id="expenseWorkspaceNav" aria-label="Expense workspaces">\s*<button class="nav-item" data-view="expenses"/);
-  assert.match(html, /<button class="nav-item" data-view="expenseDashboard" aria-label="Expense Dashboard"/);
+  const financeNavStart = html.indexOf('<nav class="workspace-nav" id="expenseWorkspaceNav" aria-label="Finance workspaces">');
+  const financeNavEnd = html.indexOf('</nav>', financeNavStart);
+  const financeNav = html.slice(financeNavStart, financeNavEnd);
+  for (const view of ['expenses', 'expenseDashboard', 'earnings', 'recurring']) assert.ok(financeNav.includes(`data-view="${view}"`));
+  assert.match(html, /<span class="nav-text">Finance<\/span>/);
   assert.match(html, /id="view-expenses"/);
   assert.match(html, /id="view-expenseDashboard"/);
   assert.match(html, /id="expenseForm" onsubmit="saveExpenseForm\(event\)"/);
-  assert.match(html, /id="expenseTopActions" hidden/);
-  assert.match(html, /onclick="focusExpenseForm\(\)"[^>]*>[^<]*Add Expense/);
+  assert.match(html, /id="financeTopActions" hidden/);
+  assert.match(html, /id="financeRefreshBtn" onclick="refreshFinanceData\(\)"/);
+  assert.match(html, /id="addExpenseAction" onclick="focusExpenseForm\(\)" hidden/);
+  assert.match(html, /id="addEarningAction" onclick="focusEarningForm\(\)" hidden/);
+  assert.match(html, /id="addRecurringAction" onclick="focusRecurringForm\(\)" hidden/);
+  assert.match(html, /function refreshFinanceData\(\)[\s\S]*loadExpenseWorkspace\(true\)[\s\S]*loadEarningWorkspace\(true\)[\s\S]*loadRecurringWorkspace\(true\)/);
   assert.match(html, /class="expense-status-chart" role="img"/);
   for (const view of ['timeline', 'tasks', 'dashboard', 'invoices']) assert.match(html, new RegExp(`data-view="${view}"`));
 });

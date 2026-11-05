@@ -13,8 +13,8 @@ Each user or team deploys its own copy of the spreadsheet and bound Apps Script 
 - **Task hierarchy:** Group subtasks under parent tasks, track their progress and hours, and collapse or expand them in the timeline. The hierarchy supports one subtask level.
 - **Metrics:** Review completions, scheduled hours, overdue and blocked work, and period summaries.
 - **Invoices:** Prepare and save biweekly or custom-period hourly invoices for clients, then print or export copies.
-- **Expenses:** Record purchases and review monthly spending by category, merchant, and currency.
-- **Storage:** Keep task, invoice, and expense records in separate tabs in your own Google spreadsheet; no build-tool packages are needed.
+- **Finance:** Record expenses and earnings, manage recurring forecasts, and compare income and spending by currency.
+- **Storage:** Keep task, invoice, expense, earning, and recurring-rule data in separate tabs in your own Google spreadsheet; no build-tool packages are needed.
 
 ## Preview
 
@@ -56,7 +56,7 @@ Create, edit, search, and filter tasks while keeping their details organized.
 | Search and Filters | Find tasks based on available criteria |
 | Metrics Workspace | Daily, weekly, biweekly, monthly, and yearly task/hour summaries |
 | Invoices | Biweekly hourly billing, saved client copies, paid tracking, PDF print and CSV export |
-| Expense Planner | Manual expense records, monthly summaries, six-month trends, and category/merchant breakdowns |
+| Finance | Expense, earnings, and recurring ledgers with a per-currency income/spending dashboard |
 
 ## Interface and Accessibility
 
@@ -139,13 +139,15 @@ The built-in categories are **Graphic Design**, **Video editing**, **Scheduling*
 
 Native date pickers retain the browser/operating system format, with a readable month-name label alongside the chosen value. Storage, date inputs, filtering and billing calculations continue to use ISO calendar dates internally. Task date-only writes are parsed in the spreadsheet time zone and read back in that same zone to avoid off-by-one-day changes when Apps Script and spreadsheet time zones differ. This does not migrate or rewrite saved task/invoice dates.
 
-### Expense Planner
+### Finance Planner
 
-Open **Expenses** to record a date, merchant, category, amount/currency, payment method and status, with optional description, notes and receipt link. Search and filter records, edit or delete them, and review monthly paid/pending totals, a six-month trend, and top category and merchant breakdowns.
+Open the **Finance** group to manage **Expenses**, **Earnings**, and **Recurring** rules, or use **Expense Dashboard** to compare monthly income and spending. The dashboard shows actual earnings, expenses, and net by currency, received/pending income, expense payment status, six-month income-versus-expense trends, category and merchant comparisons, earning-source comparisons, and separate recurring forecasts. A single Refresh Finance action reloads all three Finance ledgers.
 
-Expense records are stored in the separate **Expense_Master** worksheet, created on the first successful expense save. Opening or refreshing the workspace does not create a sheet. The expense schema does not change `Task_Master`, `Invoice_Master`, or invoice settings. Supported currencies are tracked independently; the dashboard never adds amounts from different currencies or performs foreign-exchange conversion. Receipt links are stored as URLs only; the app does not upload files.
+Expense and earning records are stored in separate **Expense_Master** and **Earning_Master** worksheets, created on the first successful save to each ledger. Recurring rules are stored in **Recurring_Master**. Opening or refreshing workspaces does not create these sheets. The schemas do not change `Task_Master`, `Invoice_Master`, or invoice settings. Supported currencies include USD, PHP, EUR, GBP, CAD, AUD, JPY, and KRW; JPY and KRW use whole-unit precision. The dashboard can convert display totals to a selectable reporting currency using the latest daily Frankfurter mid-market rates. The source rate date is shown; rates are cached per reporting currency/day, and if a refresh fails the last cached rates are marked stale. Original earning and expense amounts are never rewritten. Receipt links are stored as URLs only; the app does not upload files.
 
-This is a manual expense organizer prototype, not accounting or tax software. It does not include budgets, recurring expense automation, reimbursement approvals, receipt uploads, payment processing, or task/client linking. Test persistence and header validation on a copy of the workbook before using it with production data.
+Daily rates are fetched server-side from Frankfurter; no API key or transaction details are sent. The bound Apps Script must be authorized for external requests (`UrlFetchApp`) before rates can load. If rate lookup is unavailable, the dashboard falls back to separate native-currency totals. Converted historical totals use the latest daily rate, not a transaction-date historical rate.
+
+Recurring rules support weekly, monthly, quarterly, and yearly forecasts with optional end dates. Forecasts are not posted as transactions and do not change actual earnings or expense totals. Daily reference-rate conversion is for planning and comparison, not live trading or accounting valuation; it does not use transaction-date historical rates. This is a planning prototype, not accounting or tax software; it does not include budgets, reimbursement approvals, receipt uploads, payment processing, or task/client linking. Test persistence, rate authorization, and header validation on a copy of the workbook before using it with production data.
 
 ### Invoices
 
@@ -185,8 +187,21 @@ Enable the Google Apps Script API for the authorized account. Each run first tes
 - In All tasks, parent groups and child lists are paginated separately. Selections persist across pages but are cleared when filters change.
 - Invoice data is stored separately in `Invoice_Master` and `Invoice_Settings`, created when invoices or billing defaults are first saved.
 - Expense data is stored separately in `Expense_Master`, created on the first successful expense save; reads are non-mutating.
+- Earnings are stored in `Earning_Master`; recurring expense and earning forecasts are stored in `Recurring_Master`. Reads are non-mutating, and recurring forecasts never create ledger transactions automatically.
 
 ## Development and verification
+
+### Unit tests
+
+The regression suite uses Node's built-in `node:test` runner, `assert`, and VM-based mocks; no test framework or package install is required. `client()` exercises pure frontend logic with a small DOM mock, while the spreadsheet harnesses exercise backend normalization, sheet isolation, locking, revisions, and writes. Keep tests focused on one observable behavior, deterministic, and independent of a live spreadsheet or network service.
+
+The suite covers boundary and invalid inputs, stale revisions, lazy sheet creation, daily FX caching/fallback, zero-decimal currencies, recurring forecast dates, and Finance refresh fan-out. Use descriptive test names and rerun the full suite after changes. To run one area while iterating:
+
+```sh
+node --test --test-name-pattern="daily FX rates|recurring monthly and weekly forecasts" tests/task-tracker.test.cjs
+```
+
+Mocked tests do not replace integration checks. Verify Apps Script authorization, Frankfurter access, date/time-zone behavior, and persistence on a copy of the workbook before production deployment.
 
 Run the dependency-free Node regression suite from the repository root:
 
