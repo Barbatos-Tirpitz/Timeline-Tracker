@@ -29,7 +29,8 @@ Review task progress, workload, and current status.
 
 Visualize schedules on a Gantt-style timeline, navigate across dates, and reschedule tasks by dragging their bars.
 
-<img width="1856" height="932" alt="Timeline workspace" src="https://github.com/user-attachments/assets/5c76a682-3cf7-4688-8d5b-f3cde6056f27" />
+<img width="1846" height="932" alt="image" src="https://github.com/user-attachments/assets/4386db74-e671-4de9-9a4d-62ad5db8a24f" />
+
 
 ### Task management
 
