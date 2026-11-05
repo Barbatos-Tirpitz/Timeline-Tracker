@@ -58,7 +58,9 @@ jobs:
 
       - name: Overlay repository source
         working-directory: ${{ runner.temp }}/timeline-tracker-clasp
-        run: cp "$RUNNER_TEMP/timeline-tracker-source/"* .
+        run: |
+          find . -maxdepth 1 -type f \( -iname 'App.html' -o -iname 'code.gs' \) -delete
+          cp "$RUNNER_TEMP/timeline-tracker-source/"* .
 
       - name: Push source to Apps Script
         working-directory: ${{ runner.temp }}/timeline-tracker-clasp
