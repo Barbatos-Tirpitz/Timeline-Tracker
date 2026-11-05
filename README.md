@@ -153,6 +153,18 @@ Test upgrades and deployment on a **copy** of your spreadsheet before using prod
 
 No build-tool packages are required. The PDF export lazily loads jsPDF from a CDN. The task interface needs the deployed Apps Script web app for real data; opening `App.html` directly does not provide a backend.
 
+### Automatic GitHub Deployment
+
+The workflow at `.github/workflows/deploy-apps-script.yml` runs the Node regression suite and then updates the existing Apps Script web-app deployment on pushes to `main` or `v.9`. It preserves the deployment ID, so the web-app URL does not change. Other branches do not deploy automatically; the workflow can also be started manually on either deployment branch.
+
+Configure these repository **Actions secrets** once:
+
+- `CLASP_CREDENTIALS`: the complete JSON contents of the authorized user's `~/.clasprc.json`. Install clasp and run `clasp login` locally to create it. Treat this as a password; never commit or print it.
+- `APPS_SCRIPT_ID`: the Script ID from the bound Apps Script project's Project Settings.
+- `APPS_SCRIPT_DEPLOYMENT_ID`: the existing web-app deployment ID from Apps Script **Deploy → Manage deployments**.
+
+Enable the Google Apps Script API for the authorized account. Each run first tests the code, pulls the current remote project (preserving its manifest), overlays `App.html` and `code.gs` from GitHub, pushes the project, and updates the specified deployment. A missing or invalid secret fails the workflow without publishing.
+
 ## Data and behavior notes
 
 - The spreadsheet is the source of task data. Each deployment can use its own spreadsheet and web app.

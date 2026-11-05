@@ -1,0 +1,80 @@
+name: Deploy Apps Script
+
+on:
+  push:
+    branches:
+      - main
+      - v.9
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apps-script-production-deployment
+  cancel-in-progress: false
+
+jobs:
+  test-and-deploy:
+    if: github.ref_name == 'main' || github.ref_name == 'v.9'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run regression tests
+        run: node --test tests/task-tracker.test.cjs
+
+      - name: Install clasp
+        run: npm install --global @google/clasp@3.4.1
+
+      - name: Preserve repository source
+        run: |
+          mkdir -p "$RUNNER_TEMP/timeline-tracker-source"
+          mkdir -p "$RUNNER_TEMP/timeline-tracker-clasp"
+          cp App.html code.gs "$RUNNER_TEMP/timeline-tracker-source/"
+
+      - name: Configure clasp credentials and project
+        env:
+          CLASP_CREDENTIALS: ${{ secrets.CLASP_CREDENTIALS }}
+          APPS_SCRIPT_ID: ${{ secrets.APPS_SCRIPT_ID }}
+        run: |
+          if [ -z "$CLASP_CREDENTIALS" ] || [ -z "$APPS_SCRIPT_ID" ]; then
+            echo "Required GitHub Secrets are missing: CLASP_CREDENTIALS and APPS_SCRIPT_ID."
+            exit 1
+          fi
+          printf '%s' "$CLASP_CREDENTIALS" > "$HOME/.clasprc.json"
+          printf '{"scriptId":"%s","rootDir":"."}\n' "$APPS_SCRIPT_ID" > "$RUNNER_TEMP/timeline-tracker-clasp/.clasp.json"
+
+      - name: Pull current Apps Script project metadata
+        working-directory: ${{ runner.temp }}/timeline-tracker-clasp
+        run: clasp pull
+
+      - name: Overlay repository source
+        working-directory: ${{ runner.temp }}/timeline-tracker-clasp
+        run: cp "$RUNNER_TEMP/timeline-tracker-source/"* .
+
+      - name: Push source to Apps Script
+        working-directory: ${{ runner.temp }}/timeline-tracker-clasp
+        run: clasp push
+
+      - name: Update existing web-app deployment
+        working-directory: ${{ runner.temp }}/timeline-tracker-clasp
+        env:
+          APPS_SCRIPT_DEPLOYMENT_ID: ${{ secrets.APPS_SCRIPT_DEPLOYMENT_ID }}
+        run: |
+          if [ -z "$APPS_SCRIPT_DEPLOYMENT_ID" ]; then
+            echo "Required GitHub Secret is missing: APPS_SCRIPT_DEPLOYMENT_ID."
+            exit 1
+          fi
+          clasp create-deployment --deploymentId "$APPS_SCRIPT_DEPLOYMENT_ID" --description "GitHub ${GITHUB_SHA}"
+
+      - name: Remove temporary clasp credentials
+        if: always()
+        run: rm -rf "$HOME/.clasprc.json" "$RUNNER_TEMP/timeline-tracker-clasp"
