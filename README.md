@@ -164,7 +164,7 @@ Configure these repository **Actions secrets** once:
 - `APPS_SCRIPT_ID`: the Script ID from the bound Apps Script project's Project Settings.
 - `APPS_SCRIPT_DEPLOYMENT_ID`: the existing web-app deployment ID from Apps Script **Deploy → Manage deployments**.
 
-Enable the Google Apps Script API for the authorized account. Each run first tests the code, pulls the current remote project (preserving its manifest), removes case-variant copies of the two tracked source files from the temporary checkout, overlays canonical `App.html` and `code.gs` from GitHub, pushes the project, and updates the specified deployment. A missing or invalid secret fails the workflow without publishing.
+Enable the Google Apps Script API for the authorized account. Each run first tests the code, pulls the current remote project (preserving its manifest), removes root files sharing the `App` or `Code` stem with the tracked sources, overlays canonical `App.html` and `code.gs` from GitHub, checks for any remaining same-stem Apps Script filename conflicts, pushes the project, and updates the specified deployment. A missing or invalid secret or remaining conflict fails the workflow before publishing.
 
 ## Data and behavior notes
 

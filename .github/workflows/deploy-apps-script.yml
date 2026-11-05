@@ -59,8 +59,37 @@ jobs:
       - name: Overlay repository source
         working-directory: ${{ runner.temp }}/timeline-tracker-clasp
         run: |
-          find . -maxdepth 1 -type f \( -iname 'App.html' -o -iname 'code.gs' \) -delete
+          find . -maxdepth 1 -type f \( -iname 'App.*' -o -iname 'Code.*' \) -print -delete
           cp "$RUNNER_TEMP/timeline-tracker-source/"* .
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const supported = /\.(gs|js|ts|html|json)$/i;
+          const files = [];
+          function walk(directory, relative = '') {
+            for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+              if (entry.name === '.clasp.json') continue;
+              const next = path.join(relative, entry.name);
+              const full = path.join(directory, entry.name);
+              if (entry.isDirectory()) walk(full, next);
+              else if (supported.test(entry.name)) files.push(next);
+            }
+          }
+          walk('.');
+          const groups = new Map();
+          for (const file of files) {
+            const parsed = path.parse(file);
+            const key = path.join(parsed.dir, parsed.name).toLowerCase();
+            groups.set(key, [...(groups.get(key) || []), file]);
+          }
+          const conflicts = [...groups.values()].filter(group => group.length > 1);
+          if (conflicts.length) {
+            console.error('Apps Script filename conflicts remain after overlay:');
+            for (const group of conflicts) console.error(' - ' + group.join(' <-> '));
+            process.exit(1);
+          }
+          NODE
 
       - name: Push source to Apps Script
         working-directory: ${{ runner.temp }}/timeline-tracker-clasp
