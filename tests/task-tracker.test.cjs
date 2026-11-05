@@ -19,7 +19,13 @@ function client() {
         listeners.get(type).push(handler);
       },
       getElementById(id) {
-        if (!elements.has(id)) elements.set(id, { innerHTML: '', value: '', addEventListener() {} });
+        if (!elements.has(id)) elements.set(id, {
+          innerHTML: '', value: '', validationMessage: '', addEventListener() {},
+          setCustomValidity(message) { this.validationMessage = message; },
+          setAttribute() {}, removeAttribute() {},
+          checkValidity() { return !this.validationMessage; },
+          reportValidity() { return this.checkValidity(); }
+        });
         return elements.get(id);
       }
     },
@@ -1249,6 +1255,29 @@ test('invoice and expense frontend formatting respects zero-decimal currencies',
   assert.equal(app.convertMinorToCurrency(15831, 'JPY', 'USD', { USD: 1, JPY: 158.31 }), 10000);
   assert.equal(app.convertMinorToCurrency(10000, 'EUR', 'USD', { USD: 1, EUR: 0.9 }), 11111);
   assert.equal(app.convertMinorToCurrency(10000, 'XYZ', 'USD', { USD: 1 }), null);
+  const field = { value: '4000', setCustomValidity(message) { this.error = message; }, setAttribute(name) { this[name] = true; }, removeAttribute(name) { delete this[name]; } };
+  assert.equal(app.normalizeMoneyInput(field, 'USD'), true);
+  assert.equal(field.value, '4,000.00');
+  assert.equal(app.parseMoneyInputValue(field.value), '4000.00');
+  assert.equal(app.validateMoneyInput(field, 'USD'), true);
+  field.value = '4,00.00';
+  assert.equal(app.validateMoneyInput(field, 'USD'), false);
+  field.value = '40abc';
+  assert.equal(app.validateMoneyInput(field, 'USD'), false);
+  assert.match(field.error, /number/);
+  field.value = '4000.5';
+  assert.equal(app.normalizeMoneyInput(field, 'JPY'), false);
+  field.value = '4000';
+  assert.equal(app.normalizeMoneyInput(field, 'JPY'), true);
+  assert.equal(field.value, '4,000');
+  for (const id of ['expenseAmount', 'earningAmount', 'recurringAmount']) {
+    assert.match(html, new RegExp(`id="${id}" type="text" inputmode="decimal"`));
+    assert.match(html, new RegExp(`id="${id}"[^>]*validateMoneyInput`));
+    assert.match(html, new RegExp(`id="${id}"[^>]*normalizeMoneyInput`));
+  }
+  assert.match(html, /id="invoiceLine-\$\{index\}-rate"[^>]*normalizeMoneyInput/);
+  assert.match(html, /id="invoiceField-\$\{key\}"[^>]*normalizeMoneyInput/);
+  assert.match(html, /id="billing\$\{key\}"[^>]*normalizeMoneyInput/);
 });
 
 test('Multi Purpose Planner nests expense records and dashboard with an expense-specific top action', () => {
