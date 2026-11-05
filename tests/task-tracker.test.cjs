@@ -550,6 +550,16 @@ test('header upgrade preserves original fields and rejects occupied column O bef
   assert.equal(app.writes.length, count);
 });
 
+test('hierarchy header upgrade rejects occupied column N without a parent header', () => {
+  const app = server([taskRow('VID-001')]);
+  app.rows[0][13] = '';
+  app.rows[1][13] = 'Existing unrelated value';
+  const writes = app.writes.length;
+  assert.throws(() => app.context.initializeTaskHeaders_(app.sheet), /Column N contains data without a Parent Task ID header/);
+  assert.equal(app.writes.length, writes);
+  assert.equal(app.rows[0][13], '');
+});
+
 test('category upgrade is explicit and deterministic, and detail edits preserve or clear clients', () => {
   const app = server([taskRow('VID-001')]);
   assert.equal(app.context.categoryForUpgrade_('Graphics'), 'Graphic Design');
@@ -596,6 +606,29 @@ test('bulk subtask patches validate every merged date and parent scope before wr
   assert.equal(app.rows[2][7], '=G2-F2+1');
   assert.equal(app.rows[2][5], child[5]);
   assert.throws(() => app.context.updateSubtasks('VID-001', ['VID-002'], {}), /at least one/);
+});
+
+test('hierarchy mutations reject duplicate IDs and protect logged or legacy hours', () => {
+  const duplicates = server([taskRow('VID-001'), taskRow('VID-001')]);
+  assert.throws(() => duplicates.context.findTaskRow(duplicates.sheet, 'VID-001'), /Duplicate task ID/);
+
+  const parent = taskRow('VID-001');
+  const child = taskRow('VID-002', 'VID-001'); child[15] = 4;
+  const legacyRoot = taskRow('VID-003'); legacyRoot[15] = 9;
+  const destination = taskRow('VID-004');
+  const app = server([parent, child, legacyRoot, destination]);
+  app.context.initializeTaskHeaders_(app.sheet);
+  const writes = app.writes.length;
+  assert.throws(() => app.context.setTaskParent('VID-002', ''), /logged hours/);
+  assert.throws(() => app.context.setTaskParent('VID-003', 'VID-001'), /stored Hours/);
+  assert.equal(app.rows[2][13], 'VID-001');
+  assert.equal(app.rows[2][15], 4);
+  assert.equal(app.rows[3][13], '');
+  assert.equal(app.rows[3][15], 9);
+  assert.equal(app.writes.length, writes);
+  app.context.setTaskParent('VID-002', 'VID-004');
+  assert.equal(app.rows[2][13], 'VID-004');
+  assert.equal(app.rows[2][15], 4);
 });
 
 test('multi-field bulk subtask patch commits selected rows in one write and preserves intervening rows', () => {

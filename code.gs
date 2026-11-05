@@ -93,6 +93,12 @@ function validateTaskHeaders_(sheet) {
   if (sheet.getMaxColumns() >= 14) {
     const parentHeader = sheet.getRange(1, 14).getValue();
     if (parentHeader && parentHeader !== 'Parent Task ID') throw new Error('Column N is already in use. Inspect Task_Master before upgrading.');
+    if (!parentHeader && sheet.getLastRow() > 1) {
+      const parentRange = sheet.getRange(2, 14, sheet.getLastRow() - 1, 1);
+      const hasValues = parentRange.getValues().some(row => row[0] !== '');
+      const hasFormulas = parentRange.getFormulas().some(row => row[0] !== '');
+      if (hasValues || hasFormulas) throw new Error('Column N contains data without a Parent Task ID header. Inspect Task_Master before upgrading.');
+    }
   }
   hasClientsColumn_(sheet);
   hasHoursColumn_(sheet);
@@ -435,13 +441,16 @@ function findTaskRow(sheet, taskId) {
   const ids = sheet.getRange(2, 1, lastRow - 1, 1)
     .getDisplayValues();
 
-  const index = ids.findIndex(row => row[0] === taskId);
-
-  if (index === -1) {
+  const matches = [];
+  ids.forEach((row, index) => {
+    if (row[0] === taskId) matches.push(index);
+  });
+  if (!matches.length) {
     throw new Error('Task ID not found: ' + taskId);
   }
+  if (matches.length > 1) throw new Error('Duplicate task ID: ' + taskId);
 
-  return index + 2;
+  return matches[0] + 2;
 }
 
 // Updates task details without changing its status.
@@ -1318,6 +1327,15 @@ function setTaskParent(taskId, newParentTaskId) {
     const rows = lastRow >= 2
       ? sheet.getRange(2, 1, lastRow - 1, 14).getValues()
       : [];
+    const taskValues = rows.find(row => String(row[0] || '').trim() === taskId);
+    const currentParentId = String(taskValues?.[13] || '').trim();
+    const ownHours = hasHoursColumn_(sheet) ? normalizeTaskHours_(sheet.getRange(taskRow, 16).getValue(), taskId) : 0;
+    if (currentParentId && !newParentTaskId && ownHours > 0) {
+      throw new Error('This subtask has logged hours. Set its hours to zero before making it standalone.');
+    }
+    if (!currentParentId && newParentTaskId && ownHours > 0) {
+      throw new Error('This top-level task has stored Hours. Clear the legacy value before assigning it a parent.');
+    }
 
     // Find the existing children of this task.
     const children = rows
@@ -1345,7 +1363,6 @@ function setTaskParent(taskId, newParentTaskId) {
     }
 
     const now = new Date();
-    const taskValues = rows.find(row => String(row[0] || '').trim() === taskId);
     const taskUpdatedAt = taskValues ? taskValues[12] : sheet.getRange(taskRow, 13).getValue();
 
     // Update or clear the selected task's parent.
