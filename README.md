@@ -1,6 +1,6 @@
-# Task Timeline Tracker
+# Multi Purpose Planner
 
-A self-hosted task management and timeline application built with Google Apps Script and Google Sheets. Track work in a sortable task list, plan schedules on a Gantt-style timeline, organize tasks into parent/subtask groups, and review workload in the Metrics workspace.
+A self-hosted planning application built with Google Apps Script and Google Sheets. Manage project schedules and tasks, review work metrics, prepare invoices, and record day-to-day expenses in separate workspaces.
 
 Each user or team deploys its own copy of the spreadsheet and bound Apps Script web app.
 
@@ -13,7 +13,8 @@ Each user or team deploys its own copy of the spreadsheet and bound Apps Script 
 - **Task hierarchy:** Group subtasks under parent tasks, track their progress and hours, and collapse or expand them in the timeline. The hierarchy supports one subtask level.
 - **Metrics:** Review completions, scheduled hours, overdue and blocked work, and period summaries.
 - **Invoices:** Prepare and save biweekly or custom-period hourly invoices for clients, then print or export copies.
-- **Storage:** Keep task data in your own Google spreadsheet; no build-tool packages are needed.
+- **Expenses:** Record purchases and review monthly spending by category, merchant, and currency.
+- **Storage:** Keep task, invoice, and expense records in separate tabs in your own Google spreadsheet; no build-tool packages are needed.
 
 ## Preview
 
@@ -55,6 +56,7 @@ Create, edit, search, and filter tasks while keeping their details organized.
 | Search and Filters | Find tasks based on available criteria |
 | Metrics Workspace | Daily, weekly, biweekly, monthly, and yearly task/hour summaries |
 | Invoices | Biweekly hourly billing, saved client copies, paid tracking, PDF print and CSV export |
+| Expense Planner | Manual expense records, monthly summaries, six-month trends, and category/merchant breakdowns |
 
 ## Interface and Accessibility
 
@@ -135,6 +137,16 @@ The Timeline also has task-summary tiles that follow its selected calendar perio
 
 The built-in categories are **Graphic Design**, **Video editing**, **Scheduling**, and **Revision**. Clients are optional and separate from categories; a task can have multiple clients or be unassigned. Client suggestions are reusable, and client names are trimmed and deduplicated without regard to case.
 
+Native date pickers retain the browser/operating system format, with a readable month-name label alongside the chosen value. Storage, date inputs, filtering and billing calculations continue to use ISO calendar dates internally. Task date-only writes are parsed in the spreadsheet time zone and read back in that same zone to avoid off-by-one-day changes when Apps Script and spreadsheet time zones differ. This does not migrate or rewrite saved task/invoice dates.
+
+### Expense Planner
+
+Open **Expenses** to record a date, merchant, category, amount/currency, payment method and status, with optional description, notes and receipt link. Search and filter records, edit or delete them, and review monthly paid/pending totals, a six-month trend, and top category and merchant breakdowns.
+
+Expense records are stored in the separate **Expense_Master** worksheet, created on the first successful expense save. Opening or refreshing the workspace does not create a sheet. The expense schema does not change `Task_Master`, `Invoice_Master`, or invoice settings. Supported currencies are tracked independently; the dashboard never adds amounts from different currencies or performs foreign-exchange conversion. Receipt links are stored as URLs only; the app does not upload files.
+
+This is a manual expense organizer prototype, not accounting or tax software. It does not include budgets, recurring expense automation, reimbursement approvals, receipt uploads, payment processing, or task/client linking. Test persistence and header validation on a copy of the workbook before using it with production data.
+
 ### Invoices
 
 Invoices are separate from task scheduling: task Duration is measured in calendar days and is not billable time. Create hourly invoices for a two-week cycle or custom dates, add matching video-editing tasks for a client, review and save a draft, then issue the invoice when ready. Saved invoices are snapshots, so later task or billing-default changes do not change existing copies.
@@ -172,6 +184,7 @@ Enable the Google Apps Script API for the authorized account. Each run first tes
 - Parent and subtask schedules are independent. Changing a subtask does not change its parent's dates, and status updates do not cascade through the hierarchy.
 - In All tasks, parent groups and child lists are paginated separately. Selections persist across pages but are cleared when filters change.
 - Invoice data is stored separately in `Invoice_Master` and `Invoice_Settings`, created when invoices or billing defaults are first saved.
+- Expense data is stored separately in `Expense_Master`, created on the first successful expense save; reads are non-mutating.
 
 ## Development and verification
 

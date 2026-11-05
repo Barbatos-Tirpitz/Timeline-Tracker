@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
   <base target="_top">
-  <title>Task Timeline Planner</title>
+  <title>Multi Purpose Planner</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
@@ -153,9 +153,17 @@
       color: white;
     }
     .nav-item.active { box-shadow: inset 3px 0 0 #85b8ff; }
+    .nav-group-trigger.has-active-descendant { color: #ffffff; }
+    .nav-group-trigger.has-active-descendant .nav-icon { color: #85b8ff; }
+    .nav-group-trigger[aria-expanded="false"] .nav-chevron { transform: rotate(-90deg); }
+    .nav-chevron { transition: transform .12s ease-out; }
     .sidebar :focus-visible { outline-color: #b3d4ff; }
 
     .nav-icon { width: 18px; text-align: center; }
+    .nav-chevron { margin-left: auto; font-size: 13px; }
+    .workspace-nav { margin: 3px 0 0 20px; padding-left: 8px; border-left: 1px solid #53627a; }
+    .workspace-nav[hidden] { display: none; }
+    .workspace-nav .nav-item { padding-left: var(--space-sm); }
 
     .sidebar-footer {
       margin-top: auto;
@@ -588,6 +596,7 @@
 
     .view { display: none; }
     .view.active { display: block; }
+    #taskTopActions[hidden], #expenseTopActions[hidden] { display: none; }
 
     .table-wrap { overflow: auto; }
     .list-filters { align-items: end; }
@@ -923,6 +932,76 @@
     .invoice-total { display: flex; justify-content: flex-end; gap: 30px; font-size: 18px; padding: 15px 0; border-top: 2px solid var(--border); }
     .invoice-status { font-weight: 700; color: var(--muted); }
     .invoice-dashboard { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
+    .expense-workspace { padding: 20px; overflow: hidden; }
+    .expense-toolbar, .expense-dashboard-head, .expense-list-heading, .expense-currency-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .expense-toolbar { padding-bottom: 16px; }
+    .expense-toolbar h2, .expense-dashboard-head h3, .expense-list-heading h3 { margin: 0; }
+    .expense-columns { display: grid; grid-template-columns: minmax(260px, .75fr) minmax(0, 1.65fr); gap: 24px; align-items: start; }
+    .expense-form-section, .expense-list-section { min-width: 0; border-top: 1px solid var(--border); padding-top: 16px; }
+    .expense-form-section h3 { margin: 0 0 14px; font-size: 15px; }
+    .expense-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+    .expense-fields .form-grid { gap: 12px; }
+    .expense-fields .field-control { min-width: 0; }
+    .expense-form-actions, .expense-row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+    .expense-dashboard-head { padding: 16px 0; border-top: 1px solid var(--border); }
+    .expense-period { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 8px; width: min(100%, 300px); }
+    .expense-period .btn { width: 44px; padding-left: 0; padding-right: 0; }
+    .expense-period strong { min-width: 0; text-align: center; font-size: 13px; white-space: nowrap; }
+    .expense-currency-block { border-top: 1px solid var(--border); padding: 16px 0 20px; }
+    .expense-currency-heading { justify-content: flex-start; margin-bottom: 12px; }
+    .expense-currency-heading h4 { margin: 0; font-size: 16px; }
+    .expense-currency-heading span, .expense-quiet { color: var(--muted); font-size: 12px; }
+    .expense-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .expense-summary-grid > div { min-width: 0; border-top: 2px solid var(--border); padding-top: 8px; }
+    .expense-summary-grid > div:first-child { border-color: var(--blue); }
+    .expense-summary-grid > div:nth-child(2) { border-color: var(--green); }
+    .expense-summary-grid > div:nth-child(3) { border-color: #c9372c; }
+    .expense-summary-grid span { display: block; color: var(--muted); font-size: 11px; }
+    .expense-summary-grid strong { display: block; margin-top: 4px; font-size: 16px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .expense-status-block { margin-top: 16px; }
+    .expense-status-block h5 { margin: 0 0 8px; font-size: 12px; }
+    .expense-status-chart { display: flex; width: 100%; height: 12px; overflow: hidden; border-radius: 6px; background: #e9edf3; }
+    .expense-status-chart span { display: block; height: 100%; }
+    .expense-status-chart .paid { background: var(--green); }
+    .expense-status-chart .pending { background: #c9372c; }
+    .expense-status-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 7px; color: var(--muted); font-size: 11px; }
+    .expense-status-legend strong { color: var(--text); font-variant-numeric: tabular-nums; }
+    .expense-analysis-grid { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 18px; margin-top: 18px; }
+    .expense-analysis-grid > div { min-width: 0; }
+    .expense-analysis-grid h5 { margin: 0 0 10px; font-size: 12px; }
+    .expense-trend { display: flex; flex-direction: column; gap: 8px; }
+    .expense-trend-item { min-width: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr) max-content; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; }
+    .expense-trend-track { height: 8px; border-radius: 4px; background: #e9edf3; overflow: hidden; }
+    .expense-trend-track span { display: block; height: 100%; background: var(--blue); border-radius: inherit; }
+    .expense-trend-item strong { color: var(--text); font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .expense-breakdown-row { display: grid; grid-template-columns: minmax(56px, 1fr) minmax(48px, 1.2fr) max-content; gap: 7px; align-items: center; margin: 9px 0; font-size: 11px; }
+    .expense-breakdown-row > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .expense-breakdown-row strong { font-variant-numeric: tabular-nums; font-size: 10px; }
+    .expense-breakdown-track { height: 6px; border-radius: 3px; background: #e9edf3; overflow: hidden; }
+    .expense-breakdown-track span { display: block; height: 100%; background: var(--green); border-radius: inherit; }
+    .expense-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
+    .expense-filters label { display: flex; flex-direction: column; gap: 5px; min-width: 0; color: var(--muted); font-size: 11px; }
+    .expense-filters .field-control { min-width: 0; width: 100%; }
+    .expense-list-section .table-wrap { max-height: 680px; }
+    .expense-list-section table { min-width: 640px; }
+    .expense-amount { white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600; }
+    .expense-row-actions { justify-content: flex-start; margin: 0; white-space: nowrap; }
+    .expense-delete { border: 0; background: transparent; color: var(--red); text-decoration: underline; cursor: pointer; font: inherit; }
+    .expense-empty { padding: 18px 0; color: var(--muted); font-size: 13px; }
+    .expense-quiet { padding: 8px 0; }
+    @media (max-width: 900px) {
+      .expense-columns { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+      .expense-analysis-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .expense-analysis-grid > div:first-child { grid-column: 1 / -1; }
+    }
+    @media (max-width: 560px) {
+      .expense-workspace { padding: 14px; }
+      .expense-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .expense-analysis-grid { grid-template-columns: minmax(0, 1fr); }
+      .expense-analysis-grid > div:first-child { grid-column: auto; }
+      .expense-trend-item { grid-template-columns: 30px minmax(24px, 1fr) max-content; gap: 6px; }
+      .expense-trend-item strong { font-size: 9px; }
+    }
     @media (max-width: 560px) {
       .invoice-layout { padding: 0 12px; }
       .invoice-paper { padding: 18px 0; }
@@ -976,7 +1055,9 @@
       .brand-text, .nav-label, .sidebar-footer { display: none; }
       .nav-item { justify-content: center; flex-direction: column; padding: var(--space-sm) var(--space-micro); gap: var(--space-micro); }
       .nav-text { display: block; font-size: 11px; line-height: 1.25; text-align: center; overflow-wrap: anywhere; }
-      #projectNav .nav-text { font-size: 10px; }
+      .workspace-nav { margin: 3px 0 0; padding: 0; border-left: 0; }
+      .workspace-nav .nav-item { padding: var(--space-sm) var(--space-micro); }
+      .nav-chevron { margin: 0; font-size: 10px; line-height: 1; }
       .content { padding: var(--space-md); }
       .topbar { padding: var(--space-md); }
       .stats { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
@@ -1002,50 +1083,66 @@
 <div class="app">
   <aside class="sidebar">
     <div class="brand">
-      <div class="brand-icon">▶</div>
-      <span class="brand-text">Task Timeline Planner</span>
+      <div class="brand-icon">▦</div>
+      <span class="brand-text">Multi Purpose Planner</span>
     </div>
 
-    <div>
-      <div class="nav-label">Workspace</div>
-      <button class="nav-item active" data-view="timeline" aria-label="Timeline" title="Timeline" aria-current="page">
-        <span class="nav-icon" aria-hidden="true">▥</span><span class="nav-text">Timeline</span>
+    <div class="workspace-group">
+      <button class="nav-item nav-group-trigger has-active-descendant" id="projectNav" type="button" title="Task Timeline workspaces" aria-label="Task Timeline workspaces" aria-expanded="true" aria-controls="workspaceNav" onclick="toggleWorkspaceNav()">
+        <span class="nav-icon" aria-hidden="true">◈</span><span class="nav-text">Task Timeline</span><span class="nav-chevron" aria-hidden="true">&#9662;</span>
       </button>
-      <button class="nav-item" data-view="tasks" aria-label="All tasks" title="All tasks">
-        <span class="nav-icon" aria-hidden="true">☷</span><span class="nav-text">All tasks</span>
-      </button>
-      <button class="nav-item" data-view="dashboard" aria-label="Metrics" title="Metrics">
-        <span class="nav-icon" aria-hidden="true">▦</span><span class="nav-text">Metrics</span>
-      </button>
-      <button class="nav-item" data-view="invoices" aria-label="Invoices" title="Invoices">
-        <span class="nav-icon" aria-hidden="true">&#36;</span><span class="nav-text">Invoices</span>
-      </button>
+      <nav class="workspace-nav" id="workspaceNav" aria-label="Task Timeline workspaces">
+        <button class="nav-item active" data-view="timeline" aria-label="Timeline" title="Timeline" aria-current="page">
+          <span class="nav-icon" aria-hidden="true">▥</span><span class="nav-text">Timeline</span>
+        </button>
+        <button class="nav-item" data-view="tasks" aria-label="All tasks" title="All tasks">
+          <span class="nav-icon" aria-hidden="true">☷</span><span class="nav-text">All tasks</span>
+        </button>
+        <button class="nav-item" data-view="dashboard" aria-label="Metrics" title="Metrics">
+          <span class="nav-icon" aria-hidden="true">▦</span><span class="nav-text">Metrics</span>
+        </button>
+        <button class="nav-item" data-view="invoices" aria-label="Invoices" title="Invoices">
+          <span class="nav-icon" aria-hidden="true">&#36;</span><span class="nav-text">Invoices</span>
+        </button>
+      </nav>
     </div>
 
-    <div>
-      <div class="nav-label">Project</div>
-      <button class="nav-item" id="projectNav" title="Task Timeline" onclick="switchView('timeline')">
-        <span class="nav-icon">◈</span><span class="nav-text">Task Timeline</span>
+    <div class="workspace-group">
+      <button class="nav-item nav-group-trigger" id="expenseNav" type="button" title="Expense workspaces" aria-label="Expense workspaces" aria-expanded="true" aria-controls="expenseWorkspaceNav" onclick="toggleExpenseNav()">
+        <span class="nav-icon" aria-hidden="true">$</span><span class="nav-text">Expenses</span><span class="nav-chevron" aria-hidden="true">&#9662;</span>
       </button>
+      <nav class="workspace-nav" id="expenseWorkspaceNav" aria-label="Expense workspaces">
+        <button class="nav-item" data-view="expenses" aria-label="Expenses" title="Expenses">
+          <span class="nav-icon" aria-hidden="true">▤</span><span class="nav-text">Expenses</span>
+        </button>
+        <button class="nav-item" data-view="expenseDashboard" aria-label="Expense Dashboard" title="Expense Dashboard">
+          <span class="nav-icon" aria-hidden="true">▥</span><span class="nav-text">Dashboard</span>
+        </button>
+      </nav>
     </div>
 
     <div class="sidebar-footer">
-      TASK TIMELINE<br>
-      Task management workspace
+      MULTI PURPOSE PLANNER<br>
+      Work and expense planning
     </div>
   </aside>
 
   <main class="main">
     <header class="topbar">
-      <div class="breadcrumb">Projects&nbsp; / &nbsp;<strong>Task Timeline</strong></div>
-      <div class="top-actions">
+      <div class="breadcrumb" id="breadcrumb">Multi Purpose Planner&nbsp; / &nbsp;<strong>Workspace</strong></div>
+      <div class="top-actions" id="taskTopActions">
         <button class="btn" onclick="loadTasks()">↻ Refresh</button>
         <button class="btn btn-primary" onclick="openCreate()">＋ Add task</button>
+      </div>
+      <div class="top-actions" id="expenseTopActions" hidden>
+        <button class="btn" id="expenseRefreshBtn" onclick="loadExpenseWorkspace(state.syncing)" title="Refresh expenses">↻ Refresh expenses</button>
+        <button class="btn btn-primary" onclick="focusExpenseForm()">＋ Add Expense</button>
       </div>
     </header>
 
     <div class="content">
       <output id="dataNotice" class="data-notice" hidden></output>
+      <output id="expenseNotice" class="data-notice" aria-live="polite" hidden></output>
       <section class="page-heading">
         <div>
           <h1 id="pageTitle">Task Timeline</h1>
@@ -1151,6 +1248,57 @@
       </section>
       <section class="view" id="view-invoices">
         <div class="panel"><div id="invoiceWorkspace" class="invoice-layout"></div></div>
+      </section>
+      <section class="view" id="view-expenses">
+        <div class="panel expense-workspace">
+          <div class="expense-toolbar">
+            <div><h2>Expense records</h2><div class="panel-subtitle">Record and manage day-to-day spending.</div></div>
+          </div>
+          <div class="expense-columns">
+            <section class="expense-form-section" aria-labelledby="expenseFormTitle">
+              <form id="expenseForm" onsubmit="saveExpenseForm(event)">
+                <h3 id="expenseFormTitle">Add an expense</h3>
+                <div id="expenseFormError" class="invoice-field-error" role="alert"></div>
+                <fieldset id="expenseFields" class="expense-fields">
+                  <div class="form-grid">
+                    <label class="form-field">Date *<input class="field-control" id="expenseDate" type="date" required onchange="setExpenseField('date',this.value)"></label>
+                    <label class="form-field">Merchant *<input class="field-control" id="expenseMerchant" maxlength="120" required oninput="setExpenseField('merchant',this.value)"></label>
+                    <label class="form-field">Category *<select class="field-control" id="expenseCategory" required onchange="setExpenseField('category',this.value)"></select></label>
+                    <label class="form-field">Amount *<input class="field-control" id="expenseAmount" type="number" min="0.01" max="10000000" step="0.01" required oninput="setExpenseField('amount',this.value)"></label>
+                    <label class="form-field">Currency *<select class="field-control" id="expenseCurrency" required onchange="setExpenseField('currency',this.value)"></select></label>
+                    <label class="form-field">Payment method *<select class="field-control" id="expensePaymentMethod" required onchange="setExpenseField('paymentMethod',this.value)"></select></label>
+                    <label class="form-field">Payment status *<select class="field-control" id="expenseStatus" required onchange="setExpenseField('status',this.value)"></select></label>
+                    <label class="form-field full">Description<input class="field-control" id="expenseDescription" maxlength="200" oninput="setExpenseField('description',this.value)"></label>
+                    <label class="form-field full">Receipt link<input class="field-control" id="expenseReceiptUrl" type="url" maxlength="2000" placeholder="https://" oninput="setExpenseField('receiptUrl',this.value)"></label>
+                    <label class="form-field full">Notes<textarea class="field-control" id="expenseNotes" maxlength="2000" rows="3" oninput="setExpenseField('notes',this.value)"></textarea></label>
+                  </div>
+                  <div class="expense-form-actions">
+                    <button class="btn" type="button" onclick="resetExpenseForm()">Clear</button>
+                    <button class="btn btn-primary" id="saveExpenseBtn" type="submit">Save expense</button>
+                  </div>
+                </fieldset>
+              </form>
+            </section>
+            <section class="expense-list-section" aria-labelledby="expenseListTitle">
+              <div class="expense-list-heading"><h3 id="expenseListTitle">Expense records</h3><span id="expenseRecordCount" class="panel-subtitle"></span></div>
+              <div class="expense-filters">
+                <label>Search<input class="field-control" id="expenseSearch" type="search" placeholder="Merchant or description" oninput="setExpenseFilter('search',this.value)"></label>
+                <label>Category<select class="field-control" id="expenseListCategory" onchange="setExpenseFilter('category',this.value)"></select></label>
+                <label>Status<select class="field-control" id="expenseListStatus" onchange="setExpenseFilter('status',this.value)"></select></label>
+                <label>Currency<select class="field-control" id="expenseListCurrency" onchange="setExpenseFilter('currency',this.value)"></select></label>
+              </div>
+              <div class="table-wrap" id="expenseTable"></div>
+            </section>
+          </div>
+        </div>
+      </section>
+      <section class="view" id="view-expenseDashboard">
+        <div class="panel expense-workspace">
+          <div class="expense-toolbar">
+            <div><h2>Expense Dashboard</h2><div class="panel-subtitle">Visualize spending by month, currency, category, and merchant.</div></div>
+          </div>
+          <div id="expenseDashboard"></div>
+        </div>
       </section>
     </div>
   </main>
@@ -1313,6 +1461,7 @@
     spreadsheetTimeZone: '',
     dashboard: { period: 'monthly', anchor: null, client: '' },
     invoices: { loaded: false, loading: false, error: '', request: 0, records: [], settings: null, settingsRevision: 0, editor: null, dirty: false, historyClient: '', historyPage: 1 },
+    expenses: { loaded: false, loading: false, error: '', formError: '', request: 0, records: [], today: '', categories: [], currencies: [], paymentMethods: [], statuses: [], editor: null, dirty: false, month: '', filters: { search: '', category: '', status: '', currency: '' } },
     subtaskPanel: { parentId: null, page: 1, selected: new Set(), draft: '', quantity: 1, patch: {}, editOpen: false, status: 'To Do' },
     list: {
       period: 'all', anchor: null,
@@ -1582,8 +1731,10 @@
     $('taskForm').inert = state.writing || state.syncing;
     $('taskForm').setAttribute('aria-busy', String(state.writing || state.syncing));
     updateInvoiceBusy();
+    updateExpenseBusy();
     updateMetricsBusy();
-    notice.hidden = !state.loading && !state.error && !state.writing;
+    const taskView = ['timeline', 'tasks', 'dashboard'].includes(state.activeView);
+    notice.hidden = !taskView || (!state.loading && !state.error && !state.writing);
     notice.classList.toggle('error', Boolean(state.error));
     notice.innerHTML = state.error
       ? `${state.loaded ? 'Showing the last loaded data. ' : ''}${esc(state.error)} <button class="btn" onclick="loadTasks()">Retry</button>`
@@ -1591,6 +1742,10 @@
   }
 
   function renderActiveView() {
+    if (state.activeView === 'expenses' || state.activeView === 'expenseDashboard') {
+      renderExpenseWorkspace();
+      return;
+    }
     if (state.activeView === 'invoices') {
       renderInvoices();
       return;
@@ -1607,7 +1762,8 @@
   }
 
   function loadingMarkup(view) {
-    return `<div class="loading loading-${esc(view)}" aria-busy="true"><output aria-live="polite">Loading ${view === 'invoices' ? 'invoices' : 'tasks'}...</output><div class="loading-skeleton" aria-hidden="true">${'<span></span>'.repeat(8)}</div></div>`;
+    const label = view === 'invoices' ? 'invoices' : view === 'expenses' ? 'expenses' : 'tasks';
+    return `<div class="loading loading-${esc(view)}" aria-busy="true"><output aria-live="polite">Loading ${label}...</output><div class="loading-skeleton" aria-hidden="true">${'<span></span>'.repeat(8)}</div></div>`;
   }
 
   function scheduleSearch(view) {
@@ -1628,7 +1784,8 @@
         if (method === 'withReconciliationHandler') return callback => { reconcile = callback; return runner; };
         return (...args) => {
           const invoiceCommand = ['saveInvoice', 'saveInvoiceSettings', 'changeInvoiceStatus', 'deleteInvoiceDraft'].includes(method);
-          if (state.writing || state.syncing || (invoiceCommand ? !state.invoices.loaded : !state.loaded)) {
+          const expenseCommand = ['saveExpense', 'deleteExpense'].includes(method);
+          if (state.writing || state.syncing || (invoiceCommand ? !state.invoices.loaded : expenseCommand ? !state.expenses.loaded : !state.loaded)) {
             failure(new Error('Wait for the current operation or refresh to finish.'));
             return;
           }
@@ -1650,12 +1807,17 @@
             state.invoices.request++;
             state.invoices.loading = false;
           }
+          if (expenseCommand) {
+            state.expenses.request++;
+            state.expenses.loading = false;
+          }
           state.writing = true;
           state.syncing = true;
           ++state.request;
           state.loading = false;
           updateDataNotice();
           if (state.activeView === 'tasks') renderTaskTable();
+          if (state.activeView === 'expenses' || state.activeView === 'expenseDashboard') updateExpenseBusy();
           google.script.run.withSuccessHandler(result => {
             state.writing = false;
             if (!result || result.success !== true) {
@@ -2795,12 +2957,21 @@ html += `<div class="task-cell"
   }
 
   function switchView(view) {
+    const expenseViews = ['expenses', 'expenseDashboard'];
+    if (view !== state.activeView && expenseViews.includes(state.activeView) && state.expenses.dirty && !confirm('Discard the unsaved expense changes?')) return;
     if (view !== state.activeView && state.taskBaseline && !closeModal()) return;
+    if (view !== state.activeView && expenseViews.includes(state.activeView) && state.expenses.dirty) {
+      state.expenses.dirty = false;
+      state.expenses.editor = newExpenseDraft();
+      state.expenses.formError = '';
+    }
     state.activeView = view;
     document.querySelectorAll('.nav-item[data-view]').forEach(b => {
       b.classList.toggle('active', b.dataset.view === view);
       if (b.dataset.view === view) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
+    $('projectNav').classList.toggle('has-active-descendant', ['timeline', 'tasks', 'dashboard', 'invoices'].includes(view));
+    $('expenseNav').classList.toggle('has-active-descendant', expenseViews.includes(view));
     document.querySelectorAll('.view').forEach(v =>
       v.classList.toggle('active', v.id === `view-${view}`));
 
@@ -2808,13 +2979,36 @@ html += `<div class="task-cell"
       timeline: ['Task Timeline', 'Plan, track, and deliver your video projects.'],
       tasks: ['All tasks', 'View and manage every task in your project.'],
       dashboard: ['Metrics', 'Task and hours metrics.'],
-      invoices: ['Invoices', 'Biweekly billing and client copies.']
+      invoices: ['Invoices', 'Biweekly billing and client copies.'],
+      expenses: ['Expenses', 'Record and manage day-to-day spending.'],
+      expenseDashboard: ['Expense Dashboard', 'Visualize spending by month, currency, category, and merchant.']
     };
 
     $('pageTitle').textContent = titles[view][0];
     $('pageSubtitle').textContent = titles[view][1];
     $('stats').hidden = view !== 'timeline';
+    const expenseView = expenseViews.includes(view);
+    $('taskTopActions').hidden = expenseView;
+    $('expenseTopActions').hidden = !expenseView;
+    $('breadcrumb').innerHTML = `Multi Purpose Planner&nbsp; / &nbsp;<strong>${esc(titles[view][0])}</strong>`;
+    updateDataNotice();
     renderActiveView();
+  }
+
+  function toggleWorkspaceNav() {
+    const button = $('projectNav');
+    const nav = $('workspaceNav');
+    const expanded = button.getAttribute('aria-expanded') === 'true';
+    button.setAttribute('aria-expanded', String(!expanded));
+    nav.hidden = expanded;
+  }
+
+  function toggleExpenseNav() {
+    const button = $('expenseNav');
+    const nav = $('expenseWorkspaceNav');
+    const expanded = button.getAttribute('aria-expanded') === 'true';
+    button.setAttribute('aria-expanded', String(!expanded));
+    nav.hidden = expanded;
   }
 
   document.querySelectorAll('.nav-item[data-view]').forEach(b =>
@@ -4336,7 +4530,7 @@ function deleteCurrentTask() {
       const lines = pdf.splitTextToSize(String(text || ''), right - margin);
       lines.forEach(line => { ensureSpace(6); pdf.text(line, margin, y); y += 6; });
     };
-    pdf.setProperties({ title: invoice.name || invoice.number || 'Invoice', author: invoice.senderName, creator: 'Task Timeline Planner' });
+    pdf.setProperties({ title: invoice.name || invoice.number || 'Invoice', author: invoice.senderName, creator: 'Multi Purpose Planner' });
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(22);
     pdf.text('INVOICE', margin, y);
@@ -4457,6 +4651,302 @@ function deleteCurrentTask() {
       Math.abs(numberHours * 100 - Math.round(numberHours * 100)) > 0.000001 ||
       Math.abs(numberRate * 100 - Math.round(numberRate * 100)) > 0.000001) return null;
     return Math.round(Math.round(numberHours * 100) * Math.round(numberRate * 100) / 100);
+  }
+
+  function newExpenseDraft() {
+    const workspace = state.expenses;
+    return {
+      id: '', date: workspace.today || dateKey(new Date()), merchant: '', category: 'Other', description: '',
+      amount: '', currency: 'USD', paymentMethod: 'Card', status: 'Pending', notes: '', receiptUrl: '', revision: 0
+    };
+  }
+
+  function setExpenseOptions(id, values, current, allLabel) {
+    const select = $(id);
+    const options = allLabel ? [['', allLabel]] : [];
+    values.forEach(value => options.push([value, value]));
+    select.innerHTML = options.map(([value, label]) => `<option value="${esc(value)}">${esc(label)}</option>`).join('');
+    select.value = current;
+  }
+
+  function renderExpenseForm() {
+    const workspace = state.expenses;
+    const expense = workspace.editor || (workspace.editor = newExpenseDraft());
+    $('expenseFormTitle').textContent = expense.id ? 'Edit expense' : 'Add an expense';
+    $('expenseDate').value = expense.date || '';
+    $('expenseMerchant').value = expense.merchant || '';
+    $('expenseAmount').value = expense.amount == null ? '' : expense.amount;
+    $('expenseDescription').value = expense.description || '';
+    $('expenseReceiptUrl').value = expense.receiptUrl || '';
+    $('expenseNotes').value = expense.notes || '';
+    setExpenseOptions('expenseCategory', workspace.categories, expense.category || 'Other');
+    setExpenseOptions('expenseCurrency', workspace.currencies, expense.currency || 'USD');
+    setExpenseOptions('expensePaymentMethod', workspace.paymentMethods, expense.paymentMethod || 'Card');
+    setExpenseOptions('expenseStatus', workspace.statuses, expense.status || 'Pending');
+    $('expenseFormError').textContent = workspace.formError || '';
+  }
+
+  function updateExpenseBusy() {
+    const workspace = state.expenses;
+    const fields = $('expenseFields');
+    if (fields) fields.disabled = !workspace.loaded || workspace.loading || state.writing || state.syncing;
+    document.querySelectorAll('[data-expense-command]').forEach(button => {
+      button.disabled = !workspace.loaded || workspace.loading || state.writing || state.syncing;
+    });
+    const refresh = $('expenseRefreshBtn');
+    if (refresh) refresh.disabled = workspace.loading || state.writing;
+    const save = $('saveExpenseBtn');
+    if (save) save.textContent = state.writing ? 'Saving...' : workspace.editor?.id ? 'Update expense' : 'Save expense';
+  }
+
+  function renderExpenseNotice() {
+    const workspace = state.expenses;
+    const notice = $('expenseNotice');
+    notice.hidden = !workspace.error;
+    notice.classList.toggle('error', Boolean(workspace.error));
+    notice.innerHTML = workspace.error
+      ? `${workspace.loaded ? 'Showing the last loaded expenses. ' : ''}${esc(workspace.error)} <button class="btn" onclick="loadExpenseWorkspace(state.syncing)">Retry</button>`
+      : '';
+  }
+
+  function loadExpenseWorkspace(reconcile = false) {
+    const workspace = state.expenses;
+    if (workspace.loading || state.writing) return;
+    const request = ++workspace.request;
+    workspace.loading = true;
+    workspace.error = '';
+    renderExpenseWorkspace();
+    if (typeof google === 'undefined' || !google.script) {
+      fail(new Error('Apps Script connection unavailable. Use the deployed web app URL.'));
+      return;
+    }
+    google.script.run.withSuccessHandler(response => {
+      if (request !== workspace.request) return;
+      if (!response || response.success !== true || !Array.isArray(response.expenses) || !Array.isArray(response.categories) || !Array.isArray(response.currencies)) {
+        fail(new Error('The server returned unexpected expense data.'));
+        return;
+      }
+      workspace.records = response.expenses;
+      workspace.today = response.today || dateKey(new Date());
+      workspace.categories = response.categories;
+      workspace.currencies = response.currencies;
+      workspace.paymentMethods = response.paymentMethods || [];
+      workspace.statuses = response.statuses || [];
+      workspace.loaded = true;
+      workspace.loading = false;
+      workspace.error = '';
+      if (!workspace.month) workspace.month = workspace.today.slice(0, 7);
+      if (!workspace.editor || (!workspace.editor.id && !workspace.dirty)) workspace.editor = newExpenseDraft();
+      if (reconcile) state.syncing = false;
+      renderExpenseNotice();
+      renderExpenseWorkspace();
+      updateDataNotice();
+    }).withFailureHandler(fail).getExpenses();
+
+    function fail(error) {
+      if (request !== workspace.request) return;
+      workspace.loading = false;
+      workspace.error = String(error.message || error);
+      renderExpenseNotice();
+      renderExpenseWorkspace();
+      updateDataNotice();
+    }
+  }
+
+  function setExpenseField(key, value) {
+    const workspace = state.expenses;
+    if (!workspace.editor) workspace.editor = newExpenseDraft();
+    workspace.editor[key] = value;
+    workspace.dirty = true;
+    workspace.formError = '';
+    $('expenseFormError').textContent = '';
+  }
+
+  function resetExpenseForm() {
+    if (state.expenses.dirty && !confirm('Clear the unsaved expense changes?')) return;
+    state.expenses.editor = newExpenseDraft();
+    state.expenses.dirty = false;
+    state.expenses.formError = '';
+    renderExpenseForm();
+  }
+
+  function focusExpenseForm() {
+    if (state.activeView !== 'expenses') switchView('expenses');
+    if (state.activeView !== 'expenses') return;
+    const workspace = state.expenses;
+    if (workspace.dirty && !confirm('Discard the unsaved expense changes before starting another expense?')) return;
+    workspace.editor = newExpenseDraft();
+    workspace.dirty = false;
+    workspace.formError = '';
+    renderExpenseForm();
+    $('expenseMerchant').focus();
+    $('expenseFormTitle').scrollIntoView({ block: 'nearest' });
+  }
+
+  function editExpense(expenseId) {
+    const workspace = state.expenses;
+    const expense = workspace.records.find(record => record.id === expenseId);
+    if (!expense || state.writing || state.syncing) return;
+    if (workspace.dirty && !confirm('Discard the current unsaved expense changes?')) return;
+    workspace.editor = { ...expense, amount: (expense.amountMinor / 100).toFixed(2) };
+    workspace.dirty = false;
+    workspace.formError = '';
+    renderExpenseForm();
+    $('expenseMerchant').focus();
+  }
+
+  function saveExpenseForm(event) {
+    event.preventDefault();
+    const workspace = state.expenses;
+    if (!workspace.loaded || state.writing || state.syncing) return;
+    const expense = { ...workspace.editor, amount: Number(workspace.editor.amount) };
+    workspace.formError = '';
+    mutationRunner()
+      .withFailureHandler(error => {
+        workspace.formError = String(error.message || error);
+        $('expenseFormError').textContent = workspace.formError;
+        updateExpenseBusy();
+      })
+      .withReconciliationHandler(() => loadExpenseWorkspace(true))
+      .withSuccessHandler(result => {
+        workspace.dirty = false;
+        workspace.formError = '';
+        workspace.editor = newExpenseDraft();
+        showToast(result.message || 'Expense saved.');
+        loadExpenseWorkspace(true);
+      })
+      .saveExpense(expense);
+  }
+
+  function deleteExpenseRecord(expenseId) {
+    const workspace = state.expenses;
+    const expense = workspace.records.find(record => record.id === expenseId);
+    if (!expense || state.writing || state.syncing) return;
+    if (workspace.dirty && workspace.editor?.id === expenseId && !confirm('Discard the unsaved changes to this expense before deleting it?')) return;
+    if (!confirm(`Delete the ${expense.currency} expense for ${expense.merchant}?`)) return;
+    mutationRunner()
+      .withReconciliationHandler(() => loadExpenseWorkspace(true))
+      .withSuccessHandler(result => {
+        if (workspace.editor?.id === expenseId) resetExpenseForm();
+        showToast(result.message || 'Expense deleted.');
+        loadExpenseWorkspace(true);
+      })
+      .deleteExpense(expense.id, expense.revision);
+  }
+
+  function setExpenseFilter(key, value) {
+    state.expenses.filters[key] = value;
+    renderExpenseTable();
+  }
+
+  function setExpenseMonth(value) {
+    if (!parseDate(value + '-01')) return;
+    state.expenses.month = value;
+    renderExpenseDashboard();
+  }
+
+  function moveExpenseMonth(offset) {
+    const [year, month] = (state.expenses.month || state.expenses.today.slice(0, 7)).split('-').map(Number);
+    state.expenses.month = dateKey(new Date(year, month - 1 + offset, 1)).slice(0, 7);
+    renderExpenseDashboard();
+  }
+
+  function expenseMoney(minor, currency) {
+    try { return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(minor / 100); }
+    catch (_) { return currency + ' ' + (minor / 100).toFixed(2); }
+  }
+
+  function expenseMonthTotal(records, currency, month) {
+    return records.filter(expense => expense.currency === currency && expense.date.slice(0, 7) === month)
+      .reduce((total, expense) => total + expense.amountMinor, 0);
+  }
+
+  function expenseBreakdown(records, key) {
+    const totals = new Map();
+    records.forEach(expense => {
+      const label = expense[key] || 'Uncategorized';
+      totals.set(label, (totals.get(label) || 0) + expense.amountMinor);
+    });
+    const rows = [...totals].sort((first, second) => second[1] - first[1] || first[0].localeCompare(second[0])).slice(0, 5);
+    const maximum = Math.max(1, ...rows.map(row => row[1]));
+    if (!rows.length) return '<div class="expense-quiet">No expenses in this month.</div>';
+    return rows.map(([label, amount]) => `<div class="expense-breakdown-row"><span title="${esc(label)}">${esc(label)}</span><span class="expense-breakdown-track" aria-hidden="true"><span style="width:${Math.max(2, amount / maximum * 100)}%"></span></span><strong>${expenseMoney(amount, records[0].currency)}</strong></div>`).join('');
+  }
+
+  function renderExpenseDashboard() {
+    const workspace = state.expenses;
+    const month = workspace.month || (workspace.today || dateKey(new Date())).slice(0, 7);
+    const monthDate = parseDate(month + '-01');
+    const currencies = [...new Set(workspace.records.map(expense => expense.currency))].sort();
+    const monthLabel = monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    let content = `<div class="expense-dashboard-head"><div><h3>Spending overview</h3><span class="panel-subtitle">Totals stay separate by currency</span></div><div class="expense-period"><button class="btn" onclick="moveExpenseMonth(-1)" aria-label="Previous expense month">&#8592;</button><strong aria-live="polite">${esc(monthLabel)}</strong><button class="btn" onclick="moveExpenseMonth(1)" aria-label="Next expense month">&#8594;</button></div></div>`;
+    if (!currencies.length) {
+      content += '<div class="expense-empty">No expenses yet. Add a record to start your dashboard.</div>';
+      $('expenseDashboard').innerHTML = content;
+      return;
+    }
+    const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+    const trendMonths = Array.from({ length: 6 }, (_, index) => dateKey(new Date(monthStart.getFullYear(), monthStart.getMonth() - 5 + index, 1)).slice(0, 7));
+    content += currencies.map(currency => {
+      const monthRecords = workspace.records.filter(expense => expense.currency === currency && expense.date.slice(0, 7) === month);
+      const total = monthRecords.reduce((sum, expense) => sum + expense.amountMinor, 0);
+      const paid = monthRecords.filter(expense => expense.status === 'Paid').reduce((sum, expense) => sum + expense.amountMinor, 0);
+      const pending = monthRecords.filter(expense => expense.status === 'Pending').reduce((sum, expense) => sum + expense.amountMinor, 0);
+      const paidPercent = total ? paid / total * 100 : 0;
+      const pendingPercent = total ? pending / total * 100 : 0;
+      const trend = trendMonths.map(key => ({ key, total: expenseMonthTotal(workspace.records, currency, key) }));
+      const maximum = Math.max(1, ...trend.map(item => item.total));
+      return `<section class="expense-currency-block" aria-label="${currency} expense summary"><div class="expense-currency-heading"><h4>${currency}</h4><span>${monthRecords.length} ${monthRecords.length === 1 ? 'expense' : 'expenses'}</span></div><div class="expense-summary-grid"><div><span>Spent this month</span><strong>${expenseMoney(total, currency)}</strong></div><div><span>Paid</span><strong>${expenseMoney(paid, currency)}</strong></div><div><span>Pending</span><strong>${expenseMoney(pending, currency)}</strong></div></div><div class="expense-status-block"><h5>Payment status</h5><div class="expense-status-chart" role="img" aria-label="${currency}: ${expenseMoney(paid, currency)} paid, ${expenseMoney(pending, currency)} pending"><span class="paid" style="width:${paidPercent}%"></span><span class="pending" style="width:${pendingPercent}%"></span></div><div class="expense-status-legend"><span>Paid <strong>${expenseMoney(paid, currency)}</strong></span><span>Pending <strong>${expenseMoney(pending, currency)}</strong></span></div></div><div class="expense-analysis-grid"><div><h5>Six-month trend</h5><div class="expense-trend" role="list" aria-label="Six-month ${currency} spending trend">${trend.map(item => `<div class="expense-trend-item" role="listitem" title="${item.key}: ${expenseMoney(item.total, currency)}"><span>${parseDate(item.key + '-01').toLocaleDateString('en-US', { month: 'short' })}</span><span class="expense-trend-track" aria-hidden="true"><span style="width:${item.total ? Math.max(2, item.total / maximum * 100) : 0}%"></span></span><strong>${expenseMoney(item.total, currency)}</strong></div>`).join('')}</div></div><div><h5>Top categories</h5>${expenseBreakdown(monthRecords, 'category')}</div><div><h5>Top merchants</h5>${expenseBreakdown(monthRecords, 'merchant')}</div></div></section>`;
+    }).join('');
+    $('expenseDashboard').innerHTML = content;
+  }
+
+  function renderExpenseTable() {
+    const workspace = state.expenses;
+    if (!workspace.loaded) { $('expenseTable').innerHTML = ''; return; }
+    const filters = workspace.filters;
+    setExpenseOptions('expenseListCategory', workspace.categories, filters.category, 'All categories');
+    setExpenseOptions('expenseListStatus', workspace.statuses, filters.status, 'All statuses');
+    setExpenseOptions('expenseListCurrency', workspace.currencies, filters.currency, 'All currencies');
+    const search = filters.search.trim().toLowerCase();
+    const records = workspace.records.filter(expense =>
+      (!search || `${expense.merchant} ${expense.description} ${expense.notes}`.toLowerCase().includes(search)) &&
+      (!filters.category || expense.category === filters.category) &&
+      (!filters.status || expense.status === filters.status) &&
+      (!filters.currency || expense.currency === filters.currency));
+    $('expenseRecordCount').textContent = `${records.length} ${records.length === 1 ? 'record' : 'records'}`;
+    if (!records.length) {
+      $('expenseTable').innerHTML = `<div class="expense-empty">${workspace.records.length ? 'No expenses match these filters.' : 'No expenses recorded yet.'}</div>`;
+      return;
+    }
+    $('expenseTable').innerHTML = `<table><thead><tr><th>Date</th><th>Expense</th><th>Category</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead><tbody>${records.map(expense => {
+      const argument = esc(JSON.stringify(expense.id));
+      return `<tr><td>${displayDate(expense.date, true)}</td><td><strong>${esc(expense.merchant)}</strong><div class="task-meta">${esc(expense.description || expense.paymentMethod)}${expense.receiptUrl ? ` · <a href="${esc(expense.receiptUrl)}" target="_blank" rel="noopener noreferrer">Receipt</a>` : ''}</div></td><td>${esc(expense.category)}</td><td class="expense-amount">${expenseMoney(expense.amountMinor, expense.currency)}</td><td><span class="pill ${expense.status === 'Paid' ? 'done' : 'todo'}">${esc(expense.status)}</span></td><td><div class="expense-row-actions"><button class="subtask-link" data-expense-command onclick="editExpense(${argument})">Edit</button><button class="expense-delete" data-expense-command aria-label="Delete ${esc(expense.merchant)} expense" onclick="deleteExpenseRecord(${argument})">Delete</button></div></td></tr>`;
+    }).join('')}</tbody></table>`;
+    updateExpenseBusy();
+  }
+
+  function renderExpenseWorkspace() {
+    const workspace = state.expenses;
+    renderExpenseNotice();
+    if (!workspace.loaded) {
+      if (state.activeView === 'expenses') {
+        renderExpenseForm();
+        $('expenseTable').innerHTML = workspace.error ? '<div class="expense-empty">Expense data could not be loaded.</div>' : loadingMarkup('expenses');
+      } else {
+        $('expenseDashboard').innerHTML = workspace.error ? '<div class="expense-empty">Expense data could not be loaded.</div>' : loadingMarkup('expenseDashboard');
+      }
+      if (!workspace.loading && !workspace.error) loadExpenseWorkspace();
+      updateExpenseBusy();
+      return;
+    }
+    if (state.activeView === 'expenses') {
+      renderExpenseForm();
+      renderExpenseTable();
+    } else {
+      renderExpenseDashboard();
+    }
+    updateExpenseBusy();
   }
 
   function invoiceMoney(minor, currency) {

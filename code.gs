@@ -1257,7 +1257,7 @@ function formatTimeline() {
  */
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('App')
-    .setTitle('Video Production Manager')
+    .setTitle('Multi Purpose Planner')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 // Deletes a task without changing its former parent's schedule.
@@ -1664,6 +1664,165 @@ function saveInvoiceSettings(input, revision) {
     if (!sheet.getLastRow()) sheet.getRange(1, 1, 1, 2).setValues([['Settings JSON', 'Revision']]);
     sheet.getRange(2, 1, 1, 2).setValues([[JSON.stringify(settings), revision + 1]]);
     return { success: true, settings, revision: revision + 1, message: 'Billing defaults saved.' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+const EXPENSE_CONFIG = {
+  SHEET: 'Expense_Master',
+  HEADERS: ['Expense ID', 'Date', 'Merchant', 'Category', 'Description', 'Amount Minor', 'Currency', 'Payment Method', 'Status', 'Notes', 'Receipt URL', 'Created At', 'Updated At', 'Revision'],
+  CATEGORIES: ['Meals', 'Travel', 'Supplies', 'Software', 'Utilities', 'Other'],
+  CURRENCIES: INVOICE_CONFIG.CURRENCIES,
+  PAYMENT_METHODS: ['Cash', 'Card', 'Bank transfer', 'Digital wallet', 'Other'],
+  STATUSES: ['Pending', 'Paid']
+};
+
+function expenseText_(value, label, maximum) {
+  const text = String(value == null ? '' : value).trim();
+  if (text.length > maximum) throw new Error(label + ' is too long.');
+  return text;
+}
+
+function expenseAmountMinor_(value) {
+  if (typeof value !== 'number' && typeof value !== 'string') throw new Error('Amount must be a number.');
+  const amount = Number(value);
+  const minor = Math.round(amount * 100);
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 10000000 || Math.abs(amount * 100 - minor) > 0.000001) {
+    throw new Error('Amount must be greater than zero, no more than 10000000, and have at most two decimal places.');
+  }
+  return minor;
+}
+
+function normalizeExpense_(input) {
+  if (!input || typeof input !== 'object') throw new Error('Expense details are required.');
+  const id = String(input.id || '');
+  if (id && !/^EXP-[a-zA-Z0-9-]{8,80}$/.test(id)) throw new Error('Invalid expense ID.');
+  const date = expenseText_(input.date, 'Date', 10);
+  if (!parseLocalDate(date) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Choose a valid expense date.');
+  const merchant = expenseText_(input.merchant, 'Merchant', 120);
+  if (!merchant) throw new Error('Enter a merchant.');
+  const category = String(input.category || '');
+  if (!EXPENSE_CONFIG.CATEGORIES.includes(category)) throw new Error('Choose a valid expense category.');
+  const currency = String(input.currency || '');
+  if (!EXPENSE_CONFIG.CURRENCIES.includes(currency)) throw new Error('Choose a supported expense currency.');
+  const paymentMethod = String(input.paymentMethod || '');
+  if (!EXPENSE_CONFIG.PAYMENT_METHODS.includes(paymentMethod)) throw new Error('Choose a valid payment method.');
+  const status = input.status || 'Pending';
+  if (!EXPENSE_CONFIG.STATUSES.includes(status)) throw new Error('Choose a valid payment status.');
+  const receiptUrl = expenseText_(input.receiptUrl, 'Receipt link', 2000);
+  if (receiptUrl && !/^https?:\/\/[^\s/$.?#][^\s]*$/i.test(receiptUrl)) throw new Error('Receipt link must be an HTTP or HTTPS URL.');
+  const revision = Number(input.revision || 0);
+  if (!Number.isSafeInteger(revision) || revision < 0) throw new Error('Invalid expense revision.');
+  return {
+    id, date, merchant, category,
+    description: expenseText_(input.description, 'Description', 200),
+    amountMinor: expenseAmountMinor_(input.amount),
+    currency, paymentMethod, status,
+    notes: expenseText_(input.notes, 'Notes', 2000), receiptUrl, revision
+  };
+}
+
+function expenseSheet_(create) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(EXPENSE_CONFIG.SHEET);
+  if (!sheet && create) sheet = ss.insertSheet(EXPENSE_CONFIG.SHEET);
+  if (!sheet) return null;
+  if (!sheet.getLastRow()) {
+    if (create) {
+      sheet.getRange(1, 1, 1, EXPENSE_CONFIG.HEADERS.length).setValues([EXPENSE_CONFIG.HEADERS]);
+      sheet.setFrozenRows(1);
+    }
+    return sheet;
+  }
+  const headers = sheet.getRange(1, 1, 1, EXPENSE_CONFIG.HEADERS.length).getValues()[0];
+  if (headers.join('|') !== EXPENSE_CONFIG.HEADERS.join('|')) throw new Error('Expense_Master headers do not match. No expense data was changed.');
+  return sheet;
+}
+
+function expenseRows_() {
+  const sheet = expenseSheet_(false);
+  return { sheet, rows: !sheet || sheet.getLastRow() < 2 ? [] : sheet.getRange(2, 1, sheet.getLastRow() - 1, EXPENSE_CONFIG.HEADERS.length).getValues() };
+}
+
+function expenseDateKey_(value) {
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    const timezone = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
+    return Utilities.formatDate(value, timezone, 'yyyy-MM-dd');
+  }
+  return String(value == null ? '' : value).trim();
+}
+
+function readExpenseRecord_(row) {
+  const expense = normalizeExpense_({
+    id: String(row[0]), date: expenseDateKey_(row[1]), merchant: row[2], category: row[3], description: row[4],
+    amount: Number(row[5]) / 100, currency: row[6], paymentMethod: row[7], status: row[8],
+    notes: row[9], receiptUrl: row[10], revision: Number(row[13])
+  });
+  if (!Number.isSafeInteger(Number(row[5])) || expense.amountMinor !== Number(row[5])) throw new Error('Stored expense amount is invalid.');
+  return { ...expense, createdAt: String(row[11] || ''), updatedAt: String(row[12] || '') };
+}
+
+function getExpenses() {
+  const records = expenseRows_().rows.filter(row => row[0]).map(readExpenseRecord_);
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  return {
+    success: true,
+    expenses: records.sort((first, second) => second.date.localeCompare(first.date) || second.updatedAt.localeCompare(first.updatedAt)),
+    today: Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd'),
+    categories: EXPENSE_CONFIG.CATEGORIES.slice(),
+    currencies: EXPENSE_CONFIG.CURRENCIES.slice(),
+    paymentMethods: EXPENSE_CONFIG.PAYMENT_METHODS.slice(),
+    statuses: EXPENSE_CONFIG.STATUSES.slice()
+  };
+}
+
+function writeExpense_(sheet, row, expense) {
+  if (row > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), row - sheet.getMaxRows());
+  const date = parseTaskDate_(expense.date);
+  if (!date) throw new Error('Choose a valid expense date in the spreadsheet time zone.');
+  sheet.getRange(row, 1, 1, EXPENSE_CONFIG.HEADERS.length).setValues([[
+    expense.id, date, literalText_(expense.merchant), literalText_(expense.category), literalText_(expense.description),
+    expense.amountMinor, expense.currency, literalText_(expense.paymentMethod), expense.status, literalText_(expense.notes),
+    literalText_(expense.receiptUrl), expense.createdAt, expense.updatedAt, expense.revision
+  ]]);
+  sheet.getRange(row, 2).setNumberFormat('mmm d, yyyy');
+}
+
+function saveExpense(input) {
+  const expense = normalizeExpense_(input);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const store = expenseRows_();
+    const index = expense.id ? store.rows.findIndex(row => row[0] === expense.id) : -1;
+    if (expense.id && index < 0) throw new Error('Expense not found. Refresh the expense list before saving.');
+    const current = index < 0 ? null : readExpenseRecord_(store.rows[index]);
+    if (expense.revision !== (current ? current.revision : 0)) throw new Error('This expense changed in another session. Reopen it before updating.');
+    const now = new Date().toISOString();
+    expense.id = current ? current.id : 'EXP-' + Utilities.getUuid();
+    expense.revision = (current ? current.revision : 0) + 1;
+    expense.createdAt = current ? current.createdAt : now;
+    expense.updatedAt = now;
+    const sheet = expenseSheet_(true);
+    writeExpense_(sheet, index < 0 ? sheet.getLastRow() + 1 : index + 2, expense);
+    return { success: true, expense, message: 'Expense saved.' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteExpense(expenseId, revision) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const store = expenseRows_();
+    const index = store.rows.findIndex(row => row[0] === expenseId);
+    if (index < 0) throw new Error('Expense not found. Refresh the expense list.');
+    const expense = readExpenseRecord_(store.rows[index]);
+    if (expense.revision !== Number(revision)) throw new Error('This expense changed in another session. Refresh before deleting.');
+    store.sheet.deleteRows(index + 2, 1);
+    return { success: true, message: 'Expense deleted.' };
   } finally {
     lock.releaseLock();
   }
