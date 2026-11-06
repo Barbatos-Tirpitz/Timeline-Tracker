@@ -695,6 +695,9 @@ test('Metrics custom ranges validate inclusive dates, navigate by their length a
   app.setDashboardCustomDate('customEnd', '2026-11-02');
   assert.equal(state.dashboard.customEnd, '2026-11-06');
   assert.match(messages[0], /through date must be on or after/);
+  app.setDashboardCustomDate('customEnd', '');
+  assert.equal(state.dashboard.customEnd, '2026-11-06');
+  assert.match(messages[1], /Choose a valid date/);
   app.moveDashboardPeriod(1);
   assert.equal(state.dashboard.customStart, '2026-11-07');
   assert.equal(state.dashboard.customEnd, '2026-11-10');
@@ -1501,6 +1504,65 @@ test('invoice client accepts typed names, canonicalizes suggestions and keeps ne
   assert.doesNotMatch(html, /invoiceVideoPicker|addMatchingVideosBtn|invoiceVideoDateBasis|invoiceVideoScope|Add matching videos/);
   assert.match(html, /id="addManualInvoiceLine" onclick="addInvoiceLine\(\)"/);
   assert.match(html, /Your name \/ business/);
+});
+
+test('invoice client edits preserve lines when cleared or canceled and update a confirmed switch in place', () => {
+  const app = client();
+  const state = app.getState();
+  state.clientOptions = ['Acme', 'Beta'];
+  state.invoices.records = [];
+  state.invoices.settings = { defaultRate: 25 };
+  state.invoices.editor = invoiceDraft({ client: 'Acme', clientDetails: 'Existing billing contact' });
+  let clientInput;
+  app.renderInvoices = () => {
+    state.invoiceRenderCount = (state.invoiceRenderCount || 0) + 1;
+    if (clientInput) clientInput.value = state.invoices.editor.client;
+  };
+  app.updateInvoicePreview = () => {};
+  app.updateInvoiceReadiness = () => {};
+  app.showToast = () => {};
+  clientInput = { value: 'Acme' };
+  const rateInput = { value: '' };
+  const detailsInput = { value: 'Existing billing contact' };
+  const currencyInput = { disabled: true };
+  const editorStatus = { textContent: 'Draft' };
+  const lineCount = { textContent: '1 invoice lines' };
+  const linesBody = { innerHTML: '<tr></tr>' };
+  app.elements.set('invoiceField-client', clientInput);
+  app.elements.set('invoiceField-defaultRate', rateInput);
+  app.elements.set('invoiceField-clientDetails', detailsInput);
+  app.elements.set('invoiceField-currency', currencyInput);
+  app.elements.set('invoiceEditorStatus', editorStatus);
+  app.elements.set('invoiceLineCount', lineCount);
+  app.elements.set('invoiceLinesBody', linesBody);
+
+  clientInput.value = '';
+  app.setInvoiceClient('');
+  assert.equal(state.invoices.editor.client, 'Acme');
+  assert.equal(state.invoices.editor.lines.length, 1);
+  assert.equal(clientInput.value, 'Acme');
+
+  app.confirm = () => false;
+  clientInput.value = 'Beta';
+  app.setInvoiceClient('Beta');
+  assert.equal(state.invoices.editor.client, 'Acme');
+  assert.equal(state.invoices.editor.lines.length, 1);
+  assert.equal(clientInput.value, 'Acme');
+
+  app.confirm = () => true;
+  currencyInput.disabled = true;
+  clientInput.value = 'Beta';
+  app.setInvoiceClient('Beta');
+  assert.equal(state.invoices.editor.client, 'Beta');
+  assert.equal(state.invoices.editor.lines.length, 0);
+  assert.equal(clientInput.value, 'Beta');
+  assert.equal(rateInput.value, '25.00');
+  assert.equal(detailsInput.value, '');
+  assert.equal(currencyInput.disabled, false);
+  assert.equal(editorStatus.textContent, 'Draft · Unsaved changes');
+  assert.equal(lineCount.textContent, '0 invoice lines');
+  assert.match(linesBody.innerHTML, /No invoice lines/);
+  assert.equal(state.invoiceRenderCount || 0, 2);
 });
 
 test('invoice draft preview shows only the total label and amount', () => {
