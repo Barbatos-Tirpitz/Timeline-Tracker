@@ -22,13 +22,15 @@ Each user or team deploys its own copy of the spreadsheet and bound Apps Script 
 
 Review task progress, workload, and current status.
 
-<img width="1854" height="938" alt="Metrics workspace" src="https://github.com/user-attachments/assets/e8a5142d-3c24-41bf-b427-b7ff01c157bd" />
+<img width="1815" height="953" alt="image" src="https://github.com/user-attachments/assets/17b155ca-0ef9-4aee-87f6-caccfcc6a2fc" />
+
 
 ### Timeline
 
 Visualize schedules on a Gantt-style timeline, navigate across dates, and reschedule tasks by dragging their bars.
 
-<img width="1856" height="932" alt="Timeline workspace" src="https://github.com/user-attachments/assets/5c76a682-3cf7-4688-8d5b-f3cde6056f27" />
+<img width="1846" height="932" alt="image" src="https://github.com/user-attachments/assets/4386db74-e671-4de9-9a4d-62ad5db8a24f" />
+
 
 ### Task management
 
