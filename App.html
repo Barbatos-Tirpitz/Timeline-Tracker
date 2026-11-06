@@ -1541,7 +1541,7 @@
     clientSelections: {},
     spreadsheetToday: '',
     spreadsheetTimeZone: '',
-    dashboard: { period: 'monthly', anchor: null, client: '' },
+    dashboard: { period: 'monthly', anchor: null, customStart: '', customEnd: '', client: '' },
     invoices: { loaded: false, loading: false, error: '', request: 0, records: [], settings: null, settingsRevision: 0, editor: null, dirty: false, historyClient: '', historyPage: 1 },
     expenses: { loaded: false, loading: false, error: '', formError: '', request: 0, records: [], today: '', categories: [], currencies: [], paymentMethods: [], statuses: [], editor: null, dirty: false, month: '', filters: { search: '', category: '', status: '', currency: '' } },
     earnings: { loaded: false, loading: false, error: '', formError: '', request: 0, records: [], today: '', categories: [], currencies: [], statuses: [], editor: null, dirty: false, filters: { search: '', category: '', status: '', currency: '' } },
@@ -2880,7 +2880,14 @@ html += `<div class="task-cell"
       .deleteTasks(ids);
   }
 
-  function dashboardRange(period, anchor) {
+  function dashboardRange(period, anchor, customStart = state.dashboard.customStart, customEnd = state.dashboard.customEnd) {
+    if (period === 'custom') {
+      const start = parseDate(customStart);
+      const end = parseDate(customEnd);
+      if (start && end && end >= start) return { start, end };
+      const fallback = parseDate(anchor) || parseDate(state.spreadsheetToday) || new Date();
+      return { start: fallback, end: fallback };
+    }
     const reference = new Date(anchor);
     reference.setHours(0, 0, 0, 0);
     let start = reference;
@@ -2904,7 +2911,37 @@ html += `<div class="task-cell"
   }
 
   function setDashboardPeriod(period) {
+    if (period === 'custom' && state.dashboard.period !== 'custom') {
+      const range = dashboardRange(state.dashboard.period, state.dashboard.anchor);
+      state.dashboard.customStart = dateKey(range.start);
+      state.dashboard.customEnd = dateKey(range.end);
+    }
     state.dashboard.period = period;
+    renderDashboard();
+  }
+
+  function setDashboardCustomDate(key, value) {
+    if (!['customStart', 'customEnd'].includes(key) || !parseDate(value)) return;
+    const dashboard = state.dashboard;
+    const start = key === 'customStart' ? value : dashboard.customStart;
+    const end = key === 'customEnd' ? value : dashboard.customEnd;
+    if (!parseDate(start) || !parseDate(end) || end < start) {
+      showToast('The through date must be on or after the from date.');
+      renderDashboard();
+      return;
+    }
+    dashboard[key] = value;
+    renderDashboard();
+  }
+
+  function setDashboardToday() {
+    const today = parseDate(state.spreadsheetToday) || new Date();
+    if (state.dashboard.period === 'custom') {
+      state.dashboard.customStart = dateKey(today);
+      state.dashboard.customEnd = dateKey(today);
+    } else {
+      state.dashboard.anchor = today;
+    }
     renderDashboard();
   }
 
@@ -2972,6 +3009,13 @@ html += `<div class="task-cell"
   function moveDashboardPeriod(direction) {
     const dashboard = state.dashboard;
     const { start } = dashboardRange(dashboard.period, dashboard.anchor);
+    if (dashboard.period === 'custom') {
+      const days = dayDiff(parseDate(dashboard.customStart), parseDate(dashboard.customEnd)) + 1;
+      dashboard.customStart = dateKey(addDays(parseDate(dashboard.customStart), direction * days));
+      dashboard.customEnd = dateKey(addDays(parseDate(dashboard.customEnd), direction * days));
+      renderDashboard();
+      return;
+    }
     dashboard.anchor = dashboard.period === 'monthly' ? new Date(start.getFullYear(), start.getMonth() + direction, 1)
       : dashboard.period === 'yearly' ? new Date(start.getFullYear() + direction, 0, 1)
       : addDays(start, direction * (dashboard.period === 'fortnightly' ? 14 : dashboard.period === 'weekly' ? 7 : 1));
@@ -3001,12 +3045,14 @@ html += `<div class="task-cell"
     $('dashboardContent').innerHTML = `
       <div class="filters metrics-controls">
         <div class="zoom-switch" role="group" aria-label="Dashboard period">
-          ${['daily', 'weekly', 'fortnightly', 'monthly', 'yearly'].map(period => `<button type="button" class="zoom-btn ${dashboard.period === period ? 'active' : ''}" aria-pressed="${dashboard.period === period}" title="${period === 'fortnightly' ? '14 days' : period}" onclick="setDashboardPeriod('${period}')">${period === 'fortnightly' ? 'Biweekly' : period[0].toUpperCase() + period.slice(1)}</button>`).join('')}
+          ${['daily', 'weekly', 'fortnightly', 'monthly', 'yearly', 'custom'].map(period => `<button type="button" class="zoom-btn ${dashboard.period === period ? 'active' : ''}" aria-pressed="${dashboard.period === period}" title="${period === 'fortnightly' ? '14 days' : period}" onclick="setDashboardPeriod('${period}')">${period === 'fortnightly' ? 'Biweekly' : period[0].toUpperCase() + period.slice(1)}</button>`).join('')}
         </div>
         <button class="btn" aria-label="Previous dashboard period" title="Previous period" onclick="moveDashboardPeriod(-1)">&#8592;</button>
-        <label>Date <input class="field-control" id="dashboardAnchor" type="date" value="${dateKey(dashboard.anchor)}" onchange="if(parseDate(this.value)){state.dashboard.anchor=parseDate(this.value);renderDashboard()}"></label>
+        ${dashboard.period === 'custom'
+          ? `<label>From <input class="field-control" id="dashboardCustomStart" type="date" value="${esc(dashboard.customStart)}" onchange="setDashboardCustomDate('customStart',this.value)"></label><label>Through <input class="field-control" id="dashboardCustomEnd" type="date" value="${esc(dashboard.customEnd)}" onchange="setDashboardCustomDate('customEnd',this.value)"></label>`
+          : `<label>Reference date <input class="field-control" id="dashboardAnchor" type="date" value="${dateKey(dashboard.anchor)}" onchange="if(parseDate(this.value)){state.dashboard.anchor=parseDate(this.value);renderDashboard()}"></label>`}
         <button class="btn" aria-label="Next dashboard period" title="Next period" onclick="moveDashboardPeriod(1)">&#8594;</button>
-        <button class="btn" onclick="state.dashboard.anchor=parseDate(state.spreadsheetToday)||new Date();renderDashboard()">Today</button>
+        <button class="btn" onclick="setDashboardToday()">Today</button>
         <label>Client <select class="field-control" id="dashboardClient" onchange="state.dashboard.client=this.value;renderDashboard()">${clientFilterOptions(dashboard.client)}</select></label>
       </div>
       <div class="panel-subtitle" style="margin-top:14px"><strong title="Current date in the spreadsheet time zone">Today:</strong> ${displayDate(today, true)} <span aria-hidden="true">·</span> <strong>Selected period:</strong> ${displayDateRange(range.start, range.end)} · ${total} scheduled tasks · ${model.parents} parent/standalone · ${model.subtasks} subtasks${dashboard.client ? ' · ' + esc(dashboard.client === 'unassigned' ? 'Unassigned' : dashboard.client.slice(7)) : ''}</div>
@@ -3025,7 +3071,7 @@ html += `<div class="task-cell"
   function persistMetricsPreferences() {
     try {
       if (typeof localStorage === 'undefined') return;
-      localStorage.setItem('timeline.metrics.preferences', JSON.stringify({ period: state.dashboard.period, client: state.dashboard.client, anchor: dateKey(state.dashboard.anchor) }));
+      localStorage.setItem('timeline.metrics.preferences', JSON.stringify({ period: state.dashboard.period, client: state.dashboard.client, anchor: dateKey(state.dashboard.anchor), customStart: state.dashboard.customStart, customEnd: state.dashboard.customEnd }));
     } catch { }
   }
 
@@ -3033,9 +3079,11 @@ html += `<div class="task-cell"
     try {
       if (typeof localStorage === 'undefined') return;
       const saved = JSON.parse(localStorage.getItem('timeline.metrics.preferences') || 'null');
-      if (!saved || !['daily', 'weekly', 'fortnightly', 'monthly', 'yearly'].includes(saved.period)) return;
+      if (!saved || !['daily', 'weekly', 'fortnightly', 'monthly', 'yearly', 'custom'].includes(saved.period)) return;
       state.dashboard.period = saved.period;
       state.dashboard.anchor = parseDate(saved.anchor);
+      state.dashboard.customStart = parseDate(saved.customStart) ? saved.customStart : '';
+      state.dashboard.customEnd = parseDate(saved.customEnd) ? saved.customEnd : '';
       state.dashboard.client = typeof saved.client === 'string' && (saved.client === '' || saved.client === 'unassigned' || saved.client.startsWith('client:')) ? saved.client : '';
     } catch { }
   }
@@ -4334,8 +4382,16 @@ function deleteCurrentTask() {
     const workspace = state.invoices;
     const invoice = workspace.editor;
     const known = normalizeClientNames([...state.clientOptions, ...workspace.records.map(record => record.client), invoice.client]);
-    const selected = known.find(client => client.toLowerCase() === String(value || '').trim().toLowerCase());
-    if (!selected || selected === invoice.client) { renderInvoices(); return; }
+    const entered = String(value || '').trim();
+    if (!entered || entered.length > 100) {
+      if (entered.length > 100) showToast('Client names can be up to 100 characters.');
+      invoice.client = entered.slice(0, 100);
+      workspace.dirty = true;
+      renderInvoices();
+      return;
+    }
+    const selected = known.find(client => client.toLowerCase() === entered.toLowerCase()) || entered;
+    if (selected === invoice.client) { renderInvoices(); return; }
     if (invoice.lines.length && !confirm('Changing the client removes the current invoice lines. Continue?')) {
       renderInvoices();
       return;
@@ -4453,7 +4509,7 @@ function deleteCurrentTask() {
           <div class="form-grid">
             <label class="form-field">Invoice number<input class="field-control" id="invoiceNumber" maxlength="40" value="${esc(invoice.number || '')}" placeholder="Automatic if blank" oninput="setInvoiceField('number',this.value)"></label>
             <label class="form-field">Invoice name<input class="field-control" id="invoiceName" maxlength="120" value="${esc(invoice.name || '')}" oninput="setInvoiceField('name',this.value)"></label>
-            <label class="form-field">Client<select class="field-control" id="invoiceField-client" required onchange="setInvoiceClient(this.value)"><option value="" disabled ${invoice.client ? '' : 'selected'}>Choose a client</option>${clients.map(client => `<option value="${esc(client)}" ${invoice.client === client ? 'selected' : ''}>${esc(client)}</option>`).join('')}</select></label>
+            <label class="form-field">Client<input class="field-control" id="invoiceField-client" list="invoiceClientSuggestions" maxlength="100" required autocomplete="organization" placeholder="Type or choose a client" value="${esc(invoice.client)}" onchange="setInvoiceClient(this.value)"><datalist id="invoiceClientSuggestions">${clients.map(client => `<option value="${esc(client)}"></option>`).join('')}</datalist></label>
             <label class="form-field">Currency<select class="field-control" id="invoiceField-currency" ${invoice.lines.length ? 'disabled' : ''} onchange="setInvoiceField('currency',this.value);renderInvoices()">${currencies.map(currency => `<option ${invoice.currency === currency ? 'selected' : ''}>${currency}</option>`).join('')}</select></label>
             <label class="form-field">Billing timeline<select class="field-control" id="invoicePeriodMode" onchange="setInvoiceRange('periodMode',this.value)"><option value="fortnight" ${(invoice.periodMode || 'fortnight') === 'fortnight' ? 'selected' : ''}>Two weeks</option><option value="custom" ${invoice.periodMode === 'custom' ? 'selected' : ''}>Custom dates</option></select></label>
             <label class="form-field">From<input class="field-control" id="invoicePeriodStart" type="date" value="${esc(invoice.periodStart)}" onchange="setInvoiceRange('periodStart',this.value)"></label>
