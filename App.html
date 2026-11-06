@@ -2921,8 +2921,13 @@ html += `<div class="task-cell"
   }
 
   function setDashboardCustomDate(key, value) {
-    if (!['customStart', 'customEnd'].includes(key) || !parseDate(value)) return;
+    if (!['customStart', 'customEnd'].includes(key)) return;
     const dashboard = state.dashboard;
+    if (!parseDate(value)) {
+      showToast('Choose a valid date for the custom range.');
+      renderDashboard();
+      return;
+    }
     const start = key === 'customStart' ? value : dashboard.customStart;
     const end = key === 'customEnd' ? value : dashboard.customEnd;
     if (!parseDate(start) || !parseDate(end) || end < start) {
@@ -4385,14 +4390,16 @@ function deleteCurrentTask() {
     const known = normalizeClientNames([...state.clientOptions, ...workspace.records.map(record => record.client), invoice.client]);
     const entered = String(value || '').trim();
     if (!entered || entered.length > 100) {
-      if (entered.length > 100) showToast('Client names can be up to 100 characters.');
-      invoice.client = entered.slice(0, 100);
-      workspace.dirty = true;
+      showToast(entered ? 'Client names can be up to 100 characters.' : 'A client is required.');
       renderInvoices();
       return;
     }
     const selected = known.find(client => client.toLowerCase() === entered.toLowerCase()) || entered;
-    if (selected === invoice.client) { renderInvoices(); return; }
+    const clientInput = $('invoiceField-client');
+    if (selected === invoice.client) {
+      if (clientInput) clientInput.value = selected;
+      return;
+    }
     if (invoice.lines.length && !confirm('Changing the client removes the current invoice lines. Continue?')) {
       renderInvoices();
       return;

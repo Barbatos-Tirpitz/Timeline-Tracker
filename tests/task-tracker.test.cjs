@@ -695,6 +695,9 @@ test('Metrics custom ranges validate inclusive dates, navigate by their length a
   app.setDashboardCustomDate('customEnd', '2026-11-02');
   assert.equal(state.dashboard.customEnd, '2026-11-06');
   assert.match(messages[0], /through date must be on or after/);
+  app.setDashboardCustomDate('customEnd', '');
+  assert.equal(state.dashboard.customEnd, '2026-11-06');
+  assert.match(messages[1], /Choose a valid date/);
   app.moveDashboardPeriod(1);
   assert.equal(state.dashboard.customStart, '2026-11-07');
   assert.equal(state.dashboard.customEnd, '2026-11-10');
