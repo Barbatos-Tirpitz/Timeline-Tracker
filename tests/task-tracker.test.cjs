@@ -682,6 +682,42 @@ test('dashboard calendar periods cover leap months, Monday-Sunday weeks and year
   }
 });
 
+test('Metrics custom ranges validate inclusive dates, navigate by their length and drill down with exact bounds', () => {
+  const app = client();
+  const state = app.getState();
+  const messages = [];
+  app.renderDashboard = () => {};
+  app.showToast = message => messages.push(message);
+  state.dashboard = { period: 'custom', anchor: app.parseDate('2026-11-04'), customStart: '2026-11-03', customEnd: '2026-11-06', client: 'client:Acme' };
+  let range = app.dashboardRange('custom', state.dashboard.anchor);
+  assert.equal(app.dateKey(range.start), '2026-11-03');
+  assert.equal(app.dateKey(range.end), '2026-11-06');
+  app.setDashboardCustomDate('customEnd', '2026-11-02');
+  assert.equal(state.dashboard.customEnd, '2026-11-06');
+  assert.match(messages[0], /through date must be on or after/);
+  app.moveDashboardPeriod(1);
+  assert.equal(state.dashboard.customStart, '2026-11-07');
+  assert.equal(state.dashboard.customEnd, '2026-11-10');
+  app.switchView = () => {};
+  app.openMetricTasks('hours');
+  assert.equal(state.list.metricFocus.start, '2026-11-07');
+  assert.equal(state.list.metricFocus.end, '2026-11-10');
+});
+
+test('Metrics custom mode starts from the selected preset and Today resets its full range', () => {
+  const app = client();
+  const state = app.getState();
+  app.renderDashboard = () => {};
+  state.dashboard = { period: 'fortnightly', anchor: app.parseDate('2026-11-04'), customStart: '', customEnd: '', client: '' };
+  app.setDashboardPeriod('custom');
+  assert.equal(state.dashboard.customStart, '2026-11-02');
+  assert.equal(state.dashboard.customEnd, '2026-11-15');
+  state.spreadsheetToday = '2026-12-09';
+  app.setDashboardToday();
+  assert.equal(state.dashboard.customStart, '2026-12-09');
+  assert.equal(state.dashboard.customEnd, '2026-12-09');
+});
+
 test('dashboard counts scheduled overlap once per multi-client task and excludes invalid dates', () => {
   const app = client();
   const range = app.dashboardRange('daily', app.parseDate('2026-11-03'));
@@ -1426,7 +1462,7 @@ test('invoice periods support a custom timeline while preserving strict two-week
   assert.throws(() => app.context.normalizeInvoice_(invoiceDraft({ periodMode: 'custom', videoDateBasis: 'unknown' })), /valid invoice timeline/);
 });
 
-test('invoice client selection is limited to known clients and new lines are always manual', () => {
+test('invoice client accepts typed names, canonicalizes suggestions and keeps new lines manual', () => {
   const app = client();
   const state = app.getState();
   state.clientOptions = ['Acme'];
@@ -1435,21 +1471,24 @@ test('invoice client selection is limited to known clients and new lines are alw
   state.invoices.editor = invoiceDraft({ client: 'Acme', lines: [], defaultRate: 30 });
   app.renderInvoices = () => {};
   state.tasks = [listTask('VID-1', '', { category: 'Video editing', clients: ['Acme'], start: app.parseDate('2026-11-03'), end: app.parseDate('2026-11-16'), duration: 14 })];
-  app.setInvoiceClient('Unlisted client');
+  app.setInvoiceClient(' acme ');
   assert.equal(state.invoices.editor.client, 'Acme');
+  app.setInvoiceClient('Unlisted client');
+  assert.equal(state.invoices.editor.client, 'Unlisted client');
   app.addInvoiceLine();
   assert.equal(state.invoices.editor.lines.length, 1);
   assert.equal(state.invoices.editor.lines[0].taskId, '');
   assert.equal(state.invoices.editor.lines[0].description, '');
   assert.equal(state.invoices.editor.lines[0].hours, '');
-  assert.equal(state.invoices.editor.lines[0].rate, 30);
+  assert.equal(state.invoices.editor.lines[0].rate, 25);
   state.invoices.editor.lines[0].hours = 3.5;
   app.addInvoiceLine();
   assert.equal(state.invoices.editor.lines.length, 2);
   assert.equal(state.invoices.editor.lines[1].taskId, '');
   assert.equal(state.invoices.editor.lines[1].description, '');
-  assert.equal(app.invoiceTotals(state.invoices.editor).minor, 10500);
-  assert.match(html, /label class="form-field">Client<select class="field-control" id="invoiceField-client" required/);
+  assert.equal(app.invoiceTotals(state.invoices.editor).minor, 8750);
+  assert.match(html, /label class="form-field">Client<input class="field-control" id="invoiceField-client" list="invoiceClientSuggestions" maxlength="100" required/);
+  assert.match(html, /<datalist id="invoiceClientSuggestions">/);
   assert.doesNotMatch(html, /invoiceVideoPicker|addMatchingVideosBtn|invoiceVideoDateBasis|invoiceVideoScope|Add matching videos/);
   assert.match(html, /id="addManualInvoiceLine" onclick="addInvoiceLine\(\)"/);
   assert.match(html, /Your name \/ business/);
@@ -1800,6 +1839,15 @@ test('timeline summary is not repeated in other workspaces and Metrics owns its 
   app.renderStats();
   assert.equal(app.elements.get('stats').hidden, false);
   assert.match(app.elements.get('stats').innerHTML, /Hours logged/);
+  state.activeView = 'dashboard';
+  state.dashboard.period = 'custom';
+  state.dashboard.customStart = '2026-10-28';
+  state.dashboard.customEnd = '2026-11-04';
+  app.renderDashboard();
+  assert.match(app.elements.get('dashboardContent').innerHTML, /id="dashboardCustomStart" type="date"/);
+  assert.match(app.elements.get('dashboardContent').innerHTML, /id="dashboardCustomEnd" type="date"/);
+  assert.match(app.elements.get('dashboardContent').innerHTML, /Selected period:<\/strong> <time class="date-label" datetime="2026-10-28"/);
+  assert.match(app.elements.get('dashboardContent').innerHTML, /<time class="date-label" datetime="2026-11-04"/);
 });
 
 test('metrics model separates actual completions from schedules and counts leaf hours by parent once', () => {
@@ -1897,13 +1945,17 @@ test('metrics preferences persist safely without assuming browser storage access
   const values = new Map();
   app.localStorage = { getItem: key => values.get(key), setItem: (key, value) => values.set(key, value) };
   const dashboard = app.getState().dashboard;
-  dashboard.period = 'weekly'; dashboard.client = 'client:Acme'; dashboard.anchor = app.parseDate('2026-11-04');
+  dashboard.period = 'custom'; dashboard.client = 'client:Acme'; dashboard.anchor = app.parseDate('2026-11-04');
+  dashboard.customStart = '2026-10-28'; dashboard.customEnd = '2026-11-04';
   app.persistMetricsPreferences();
   dashboard.period = 'monthly'; dashboard.client = ''; dashboard.anchor = null;
+  dashboard.customStart = ''; dashboard.customEnd = '';
   app.restoreMetricsPreferences();
-  assert.equal(dashboard.period, 'weekly');
+  assert.equal(dashboard.period, 'custom');
   assert.equal(dashboard.client, 'client:Acme');
   assert.equal(app.dateKey(dashboard.anchor), '2026-11-04');
+  assert.equal(dashboard.customStart, '2026-10-28');
+  assert.equal(dashboard.customEnd, '2026-11-04');
   app.localStorage.getItem = () => { throw new Error('Storage blocked'); };
   assert.doesNotThrow(() => app.restoreMetricsPreferences());
 });

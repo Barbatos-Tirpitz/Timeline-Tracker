@@ -54,7 +54,7 @@ Create, edit, search, and filter tasks while keeping their details organized.
 | Collapse / Expand | Show or hide subtasks in the timeline |
 | Progress Tracking | Monitor task completion and status |
 | Search and Filters | Find tasks based on available criteria |
-| Metrics Workspace | Daily, weekly, biweekly, monthly, and yearly task/hour summaries |
+| Metrics Workspace | Daily, weekly, biweekly, monthly, yearly, and custom-date task/hour summaries |
 | Invoices | Biweekly hourly billing, saved client copies, paid tracking, PDF print and CSV export |
 | Finance | Expense, earnings, and recurring ledgers with a per-currency income/spending dashboard |
 
@@ -106,7 +106,7 @@ Subtask rows display their own client assignments as compact tags, independently
 
 ## Metrics and Timeline Summary
 
-The former Dashboard is now the dedicated **Metrics** workspace. Sticky Daily, Weekly, Biweekly, Monthly, and Yearly controls, reference date, previous/next arrows, Today, and client filter determine its analysis period. Monthly remains the default. The last period/date/client is remembered locally when browser storage is permitted. These analytics belong inside Metrics rather than repeating at the top of every workspace.
+The former Dashboard is now the dedicated **Metrics** workspace. Daily, Weekly, Biweekly, Monthly, Yearly, and Custom controls determine its analysis period. Presets use an editable reference date; Custom provides editable inclusive From and Through dates. Previous/next moves by the selected range's length, and Today resets the selected date or custom range. Monthly remains the default. The last period/date/client is remembered locally when browser storage is permitted. These analytics belong inside Metrics rather than repeating at the top of every workspace.
 
 Four actionable tiles show actual completions in the selected period, recorded hours on scheduled work, current overdue work for the selected client, and blocked scheduled work. Parent/standalone and subtask counts are separated. Overdue is explicitly **now**, not a historical snapshot of the selected month.
 
@@ -201,7 +201,7 @@ Open **Invoices** in the sidebar or **Open invoices** in Metrics. The invoice wo
 
 1. Open Billing defaults and set your name/business, contact details, currency, hourly rate, payment instructions, and the first date of a 14-day billing cycle.
 2. Save the defaults. Initial defaults are USD, a zero hourly rate, and today's spreadsheet date as the cycle anchor; these are placeholders, not an assumed billing agreement.
-3. Create a new invoice and choose one client from the required list. The list comes from task client assignments and saved invoice history; add a new client to a task before using it on an invoice. Billing timeline offers Two weeks (start date plus 13 days, inclusive) or Custom dates (your own start/end). The period arrows move by the selected range's length. The default biweekly period is anchored to Billing cycle starts, not twice per calendar month.
+3. Create a new invoice and type a client name or choose a suggestion. Suggestions come from task client assignments and saved invoice history; new names can be entered directly. Billing timeline offers Two weeks (start date plus 13 days, inclusive) or Custom dates (your own start/end). The period arrows move by the selected range's length. The default biweekly period is anchored to Billing cycle starts, not twice per calendar month.
 4. Add each invoice line manually. Enter its description, hours, and hourly rate; task videos are never imported or billed automatically. The total is the sum of each line's hours multiplied by its rate. Rates default from the most recent saved invoice for that client/currency, or the global default; every line can be overridden. Use up to two decimals for hours and rates. A task may have several clients, but each invoice is explicitly for one client; hours are not automatically allocated, duplicated, or inferred from task dates/status.
 5. Set an optional Invoice number and Invoice name, save draft, review the client preview, then Issue invoice when ready. A blank number is allocated automatically. Custom numbers are unique across saved invoices (case-insensitive) and editable while Draft; issued copies remain immutable. Names appear in the client preview, generated PDF, CSV/text copies and export filenames. Positive hours/rates and sender/client details are required for client copies and issuance.
 
