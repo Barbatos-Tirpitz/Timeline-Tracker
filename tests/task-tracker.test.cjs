@@ -740,6 +740,15 @@ test('Metrics labels spreadsheet today separately from its selected reporting pe
   const markup = app.elements.get('dashboardContent').innerHTML;
   assert.match(markup, /Today:<\/strong>.*November 4, 2026/);
   assert.match(markup, /Selected period:<\/strong>.*October 4, 2026/);
+  state.dashboard.period = 'custom';
+  state.dashboard.customStart = '2026-10-28';
+  state.dashboard.customEnd = '2026-11-04';
+  app.renderDashboard();
+  assert.match(app.elements.get('dashboardContent').innerHTML, /Selected period:<\/strong>.* · 8 days · /);
+  state.dashboard.customStart = '2026-10-28';
+  state.dashboard.customEnd = '2026-10-28';
+  app.renderDashboard();
+  assert.match(app.elements.get('dashboardContent').innerHTML, /Selected period:<\/strong>.* · 1 day · /);
 });
 
 test('subtask panel selects only visible children and keeps selection separate from All tasks', () => {

@@ -3028,6 +3028,7 @@ html += `<div class="task-cell"
     if (!dashboard.anchor) dashboard.anchor = parseDate(state.spreadsheetToday) || new Date();
     persistMetricsPreferences();
     const range = dashboardRange(dashboard.period, dashboard.anchor);
+    const customDayCount = dashboard.period === 'custom' ? dayDiff(range.start, range.end) + 1 : 0;
     const today = parseDate(state.spreadsheetToday) || new Date();
     const model = buildMetricsModel(state.tasks, range, dashboard.client, today, dashboard.period);
     dashboard.model = model;
@@ -3055,7 +3056,7 @@ html += `<div class="task-cell"
         <button class="btn" onclick="setDashboardToday()">Today</button>
         <label>Client <select class="field-control" id="dashboardClient" onchange="state.dashboard.client=this.value;renderDashboard()">${clientFilterOptions(dashboard.client)}</select></label>
       </div>
-      <div class="panel-subtitle" style="margin-top:14px"><strong title="Current date in the spreadsheet time zone">Today:</strong> ${displayDate(today, true)} <span aria-hidden="true">·</span> <strong>Selected period:</strong> ${displayDateRange(range.start, range.end)} · ${total} scheduled tasks · ${model.parents} parent/standalone · ${model.subtasks} subtasks${dashboard.client ? ' · ' + esc(dashboard.client === 'unassigned' ? 'Unassigned' : dashboard.client.slice(7)) : ''}</div>
+      <div class="panel-subtitle" style="margin-top:14px"><strong title="Current date in the spreadsheet time zone">Today:</strong> ${displayDate(today, true)} <span aria-hidden="true">·</span> <strong>Selected period:</strong> ${displayDateRange(range.start, range.end)}${dashboard.period === 'custom' ? ` · ${customDayCount} day${customDayCount === 1 ? '' : 's'}` : ''} · ${total} scheduled tasks · ${model.parents} parent/standalone · ${model.subtasks} subtasks${dashboard.client ? ' · ' + esc(dashboard.client === 'unassigned' ? 'Unassigned' : dashboard.client.slice(7)) : ''}</div>
       <section class="metrics-tiles" id="dashboardMetrics" aria-label="Selected period metrics">${tiles.map(([label, value, note, kind]) => `<button type="button" class="stat metrics-tile" onclick="openMetricTasks('${kind}')"><div class="stat-label">${label}</div><div class="stat-number">${value}</div><div class="stat-foot">${note}</div>${kind === 'hours' ? renderHoursProgress(model.hours.completed, model.hours.total, false, false) : ''}</button>`).join('')}</section>
       <div class="metrics-charts">
         <section class="metrics-section" aria-labelledby="metricsDeliveryHeading"><div class="metrics-section-head"><h3 id="metricsDeliveryHeading">Planned vs Actual Finish</h3><button class="subtask-link" ${model.finishVariance.length ? '' : 'disabled'} onclick="openMetricTasks('finishVariance')">View completed (${model.finishVariance.length})</button></div><div class="metrics-caption">Completed in this period · days variance = actual completion minus planned end; positive is late, negative is early.</div>${renderMetricsFinishVariance(model)}</section>
