@@ -1497,6 +1497,7 @@ test('invoice client accepts typed names, canonicalizes suggestions and keeps ne
   assert.equal(state.invoices.editor.lines[1].description, '');
   assert.equal(app.invoiceTotals(state.invoices.editor).minor, 8750);
   assert.match(html, /label class="form-field">Client<input class="field-control" id="invoiceField-client" list="invoiceClientSuggestions" maxlength="100" required/);
+  assert.match(html, /key === 'clientDetails' \? 'id="invoiceField-clientDetails"'/);
   assert.match(html, /<datalist id="invoiceClientSuggestions">/);
   assert.doesNotMatch(html, /invoiceVideoPicker|addMatchingVideosBtn|invoiceVideoDateBasis|invoiceVideoScope|Add matching videos/);
   assert.match(html, /id="addManualInvoiceLine" onclick="addInvoiceLine\(\)"/);
@@ -1559,7 +1560,7 @@ test('invoice client edits preserve lines when cleared or canceled and update a 
   assert.equal(editorStatus.textContent, 'Draft · Unsaved changes');
   assert.equal(lineCount.textContent, '0 invoice lines');
   assert.match(linesBody.innerHTML, /No invoice lines/);
-  assert.equal(state.invoiceRenderCount || 0, 2);
+  assert.equal(state.invoiceRenderCount || 0, 1);
 });
 
 test('invoice draft preview shows only the total label and amount', () => {
