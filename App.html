@@ -906,6 +906,7 @@
     border-top: 1px solid var(--border);
   }
   .task-time-entry-actions .btn { min-width: 116px; }
+  .task-time-entry-form { min-width: 0; margin: 0; padding: 0; border: 0; }
   @media (max-width: 540px) {
     .task-time-entry-actions { align-items: stretch; flex-direction: column; }
     .task-time-entry-actions .btn { align-self: flex-end; }
@@ -1507,14 +1508,14 @@
       <section class="subtask-section" aria-labelledby="taskTimeEntriesHeading">
         <div class="subtask-section-heading"><h4 id="taskTimeEntriesHeading">Time entries</h4><span class="panel-subtitle" id="taskTimeEntriesTotal"></span></div>
         <div id="taskTimeEntryParentNotice" class="task-meta" hidden>Time can only be logged on subtasks. Open a subtask to add an entry.</div>
-        <div id="taskTimeEntryForm">
+        <fieldset id="taskTimeEntryForm" class="task-time-entry-form" disabled>
           <div class="form-grid">
             <label class="form-field">Work date<input class="field-control" id="timeEntryDate" type="date" required></label>
             <label class="form-field">Entry hours *<input class="field-control" id="timeEntryHours" type="number" min="0.01" max="24" step="0.01" placeholder="e.g. 1.5" required></label>
             <label class="form-field full">Note<input class="field-control" id="timeEntryNote" maxlength="200" placeholder="What did you work on?"></label>
           </div>
           <div class="task-time-entry-actions"><span class="invoice-field-error" id="timeEntryError" role="alert"></span><button class="btn btn-primary" type="button" id="saveTimeEntryBtn" onclick="saveTaskTimeEntry()">Log time</button></div>
-        </div>
+        </fieldset>
         <div id="taskTimeEntriesList" aria-live="polite"></div>
       </section>
     </div>
@@ -3959,6 +3960,7 @@ function createSubtask() {
     state.editId = null;
     state.timeEntries = { taskId: '', items: [], loading: false, error: '', request: state.timeEntries.request + 1 };
     $('taskTimeEntriesSection').hidden = true;
+    $('taskTimeEntryForm').disabled = true;
 
     resetSubtaskPanel();
     $('taskForm').reset();
@@ -4056,6 +4058,7 @@ function populateParentTaskOptions() {
     $('taskTimeEntriesSection').hidden = false;
     const canLogTime = taskCanLogTime(t);
     $('taskTimeEntryForm').hidden = !canLogTime;
+    $('taskTimeEntryForm').disabled = !canLogTime;
     $('taskTimeEntryParentNotice').hidden = canLogTime;
     $('timeEntryDate').value = state.spreadsheetToday || dateKey(new Date());
     $('timeEntryHours').value = '';
@@ -4108,6 +4111,7 @@ function populateParentTaskOptions() {
     state.taskBaseline = null;
     state.timeEntries = { taskId: '', items: [], loading: false, error: '', request: state.timeEntries.request + 1 };
     $('taskTimeEntriesSection').hidden = true;
+    $('taskTimeEntryForm').disabled = true;
     resetSubtaskPanel();
     if (state.taskReturnFocus?.isConnected) state.taskReturnFocus.focus();
     state.taskReturnFocus = null;
@@ -4187,7 +4191,7 @@ function populateParentTaskOptions() {
 
     if (isEdit) {
       if (data.hours !== undefined && Number(data.hours || 0) !== Number(currentTask.hours || 0) && taskDetailsMatch(currentTask, data)) {
-        runner.updateTaskHours(data.taskId, data.hours);
+        runner.updateTaskHours(data.taskId, data.hours, currentTask.updatedAt);
       } else runner.updateTask(data);
     } else {
       runner.createTask(data);

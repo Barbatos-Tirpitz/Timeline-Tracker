@@ -641,8 +641,11 @@ function deleteTimeEntriesForTasks_(taskIds) {
   if (!sheet || sheet.getLastRow() < 2) return;
   const ids = new Set(taskIds.map(String));
   const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, TIME_ENTRY_CONFIG.HEADERS.length).getValues();
-  rows.map((row, index) => ids.has(String(row[1] || '')) ? index + 2 : 0)
-    .filter(Boolean).reverse().forEach(row => sheet.deleteRows(row, 1));
+  const matches = rows.reduce((records, row, index) => {
+    if (ids.has(String(row[1] || ''))) records.push({ rowNumber: index + 2 });
+    return records;
+  }, []);
+  contiguousRows_(matches).reverse().forEach(group => sheet.deleteRows(group[0].rowNumber, group.length));
 }
 
 function readTimeEntry_(row, timezone) {

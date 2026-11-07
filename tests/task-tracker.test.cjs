@@ -340,8 +340,9 @@ function server(records, missingSheet = false, failAfter = Infinity, documentLoc
   const ui = { answer: 'YES', Button: { YES: 'YES' }, ButtonSet: { YES_NO: 'YES_NO' }, alert() { return this.answer; } };
   function makeLedgerSheet() {
     const ledgerRows = [];
+    const deletions = [];
     return {
-      rows: ledgerRows,
+      rows: ledgerRows, deletions,
       getLastRow: () => ledgerRows.length,
       getMaxRows: () => 10000,
       getRange(row, column, height = 1, width = 1) {
@@ -357,7 +358,7 @@ function server(records, missingSheet = false, failAfter = Infinity, documentLoc
           setNumberFormat() { return this; }
         };
       },
-      deleteRows(row, count) { ledgerRows.splice(row - 1, count); }
+      deleteRows(row, count) { deletions.push([row, count]); ledgerRows.splice(row - 1, count); }
     };
   }
   const spreadsheet = {
@@ -447,10 +448,12 @@ test('dated time entries use a separate lazy ledger and validate dates, hours, t
   app.context.saveTaskTimeEntry('VID-001', '2026-11-05', 2, 'Second');
   assert.equal(app.context.deleteTasks(['VID-001']).success, true);
   assert.equal(app.ledgers.get('Time_Entry_Master').rows.length, 1);
+  assert.deepEqual(Array.from(app.ledgers.get('Time_Entry_Master').deletions.at(-1)), [2, 2]);
 });
 
 test('task editor exposes dated time entry controls and renders a separate logged-hours list', () => {
   assert.match(html, /\.form-field\[hidden\], \.form-grid\[hidden\] \{ display: none; \}/);
+  assert.match(html, /<fieldset id="taskTimeEntryForm" class="task-time-entry-form" disabled>/);
   assert.match(html, /id="timeEntryDate" type="date" required/);
   assert.match(html, /id="timeEntryHours" type="number" min="0\.01" max="24" step="0\.01" placeholder="e.g. 1\.5" required/);
   assert.match(html, /Entry hours \*<input class="field-control" id="timeEntryHours"/);
@@ -1107,6 +1110,28 @@ test('recurring task validation rejects unsupported, inverted, nested, and overs
   assert.equal(app.rows.length, 1);
 });
 
+test('ordinary task creation persists standalone tasks and inherited subtask defaults', () => {
+  const app = server([taskRow('VID-001')]);
+  app.context.initializeTaskHeaders_(app.sheet);
+  app.rows[1][14] = '["Acme"]';
+  const common = {
+    taskName: 'Prepare review', category: 'Scheduling', priority: 'High',
+    startDate: '2026-11-09', endDate: '2026-11-10', description: 'Review work'
+  };
+  const standalone = app.context.createTask({ ...common, clients: ['Beta'] });
+  assert.equal(standalone.success, true);
+  assert.equal(standalone.created, 1);
+  assert.equal(app.rows[2][0], standalone.taskId);
+  assert.equal(app.rows[2][13], '');
+  assert.equal(app.rows[2][14], '["Beta"]');
+
+  const child = app.context.createTask({ ...common, taskName: 'Review pass', parentTaskId: 'VID-001', hours: 2.5 });
+  assert.equal(child.success, true);
+  assert.equal(app.rows[3][13], 'VID-001');
+  assert.equal(app.rows[3][14], '["Acme"]');
+  assert.equal(app.rows[3][15], 2.5);
+});
+
 test('recurrence controls enable only for standalone task creation', () => {
   assert.match(html, /id="repeatTask" type="checkbox" onchange="updateTaskRecurrenceControl\(\)"/);
   assert.match(html, /id="taskRecurrenceThrough" type="date" required/);
@@ -1167,6 +1192,40 @@ test('new task form submits the selected recurrence frequency and through date',
   assert.equal(submitted.taskName, 'Weekly review');
   assert.deepEqual({ ...submitted.recurrence }, { frequency: 'Weekly', throughDate: '2026-02-02' });
   assert.equal(state.writing, false);
+});
+
+test('ordinary task form submits through createTask without recurrence', () => {
+  const app = client();
+  const state = app.getState();
+  let submitted;
+  let prevented = false;
+  const runner = {
+    withRejectionHandler() { return runner; },
+    withSuccessHandler() { return runner; },
+    withFailureHandler() { return runner; },
+    createTask(data) { submitted = data; }
+  };
+  app.mutationRunner = () => runner;
+  state.loaded = true;
+  state.clientSelections.taskClients = ['Acme'];
+  const fields = {
+    taskName: { value: 'Design review' }, category: { value: 'Graphic Design' }, priority: { value: 'High' },
+    startDate: { value: '2026-11-09' }, endDate: { value: '2026-11-10' }, description: { value: 'Review draft' },
+    parentTaskId: { value: '' }, taskHours: { value: '0', readOnly: true }, repeatTask: { checked: false },
+    saveBtn: { disabled: false, textContent: 'Create task' }, formError: { style: { display: 'none' }, textContent: '' }
+  };
+  Object.entries(fields).forEach(([id, element]) => app.elements.set(id, element));
+
+  app.saveTask({ preventDefault() { prevented = true; } });
+
+  assert.equal(prevented, true);
+  assert.equal(submitted.taskName, 'Design review');
+  assert.equal(submitted.startDate, '2026-11-09');
+  assert.equal(submitted.endDate, '2026-11-10');
+  assert.equal(submitted.parentTaskId, '');
+  assert.deepEqual(Array.from(submitted.clients), ['Acme']);
+  assert.equal(submitted.recurrence, undefined);
+  assert.equal(fields.saveBtn.disabled, true);
 });
 
 test('subtask client tags use each child assignment, show Unassigned, and escape all names', () => {
@@ -2036,7 +2095,7 @@ test('editing only a subtask hours value routes through the hours-only endpoint'
   app.elements.set('saveBtn', {});
   app.saveTask({ preventDefault() {} });
   assert.equal(app.calls[0].method, 'updateTaskHours');
-  assert.deepEqual(Array.from(app.calls[0].args), ['VID-2', '3.5']);
+  assert.deepEqual(Array.from(app.calls[0].args), ['VID-2', '3.5', child.updatedAt]);
 });
 
 test('completed hours and parent totals update on reopening, transfer and deletion without changing planned dates', () => {
