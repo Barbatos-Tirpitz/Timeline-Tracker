@@ -450,6 +450,7 @@ test('dated time entries use a separate lazy ledger and validate dates, hours, t
 });
 
 test('task editor exposes dated time entry controls and renders a separate logged-hours list', () => {
+  assert.match(html, /\.form-field\[hidden\], \.form-grid\[hidden\] \{ display: none; \}/);
   assert.match(html, /id="timeEntryDate" type="date" required/);
   assert.match(html, /id="timeEntryHours" type="number" min="0\.01" max="24" step="0\.01" placeholder="e.g. 1\.5" required/);
   assert.match(html, /Entry hours \*<input class="field-control" id="timeEntryHours"/);
