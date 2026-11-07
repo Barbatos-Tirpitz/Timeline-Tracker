@@ -1817,6 +1817,8 @@
     description: String(get('description') || ''),
     parentTaskId: String(get('parentTaskId') || '').trim(),
     hours: Number(get('hours') || 0),
+    timeEntryHours: Number(get('timeEntryHours') || 0),
+    hasTimeEntries: Boolean(get('hasTimeEntries')),
     totalHours: Number(get('totalHours') || get('hours') || 0),
     subtaskHours: Number(get('subtaskHours') || 0),
     completedHours: Number(get('completedHours') || 0),
@@ -2684,7 +2686,7 @@ html += `<div class="task-cell"
           ${childCount ? `<button class="group-toggle" aria-label="${list.collapsed.has(task.id) ? 'Expand' : 'Collapse'} subtasks of ${esc(task.name)}" aria-expanded="${!list.collapsed.has(task.id)}" onclick="toggleListGroup(${argument})">${list.collapsed.has(task.id) ? '&#9654;' : '&#9660;'}</button>` : '<span class="group-toggle"></span>'}
           <div><a href="#" onclick="openEdit(${argument});return false">${esc(task.name || 'Untitled task')}</a>
           <div class="task-meta">${esc(task.id)}${contextOnly ? ' · Parent context' : ''}${!child && task.parentTaskId && !state.taskById.has(task.parentTaskId) ? ' · Parent unavailable' : ''}${childCount ? ` · ${childCount} matching subtasks` : ''}</div></div></div></td>
-        <td>${esc(task.category)}</td><td class="client-cell">${esc((task.clients || []).join(', ') || 'Unassigned')}</td><td>${esc(task.priority)}</td><td>${!task.parentTaskId || state.childrenByParent.has(task.id) || contextOnly ? `<span title="Calculated from subtasks">${formatHours(task.totalHours || 0)} h</span>` : `<div class="inline-hours"><input class="field-control" id="inlineHours-${esc(task.id)}" type="number" min="0" max="10000" step="0.01" aria-label="Hours for ${esc(task.name)}" value="${esc(list.hourDrafts.has(task.id) ? list.hourDrafts.get(task.id) : task.hours || 0)}" ${busy ? 'disabled' : ''} oninput="state.list.hourDrafts.set(${argument},this.value);updateInlineHoursState(${argument})" onkeydown="if(event.key==='Enter'){event.preventDefault();saveInlineTaskHours(${argument})}"><button class="btn" id="inlineSave-${esc(task.id)}" ${busy ? 'disabled' : ''} title="Save hours for ${esc(task.name)}" onclick="saveInlineTaskHours(${argument})">Save</button></div><output class="inline-hours-note" id="inlineNote-${esc(task.id)}" aria-live="polite"></output>`}</td>
+        <td>${esc(task.category)}</td><td class="client-cell">${esc((task.clients || []).join(', ') || 'Unassigned')}</td><td>${esc(task.priority)}</td><td>${!task.parentTaskId || state.childrenByParent.has(task.id) || contextOnly || task.hasTimeEntries ? `<span title="${task.hasTimeEntries ? 'Includes dated time-entry hours' : 'Calculated from subtasks'}">${formatHours(task.totalHours || 0)} h</span>` : `<div class="inline-hours"><input class="field-control" id="inlineHours-${esc(task.id)}" type="number" min="0" max="10000" step="0.01" aria-label="Manual hours for ${esc(task.name)}" value="${esc(list.hourDrafts.has(task.id) ? list.hourDrafts.get(task.id) : task.hours || 0)}" ${busy ? 'disabled' : ''} oninput="state.list.hourDrafts.set(${argument},this.value);updateInlineHoursState(${argument})" onkeydown="if(event.key==='Enter'){event.preventDefault();saveInlineTaskHours(${argument})}"><button class="btn" id="inlineSave-${esc(task.id)}" ${busy ? 'disabled' : ''} title="Save manual hours for ${esc(task.name)}" onclick="saveInlineTaskHours(${argument})">Save</button></div><output class="inline-hours-note" id="inlineNote-${esc(task.id)}" aria-live="polite"></output>`}</td>
         <td><select class="field-control row-status" aria-label="Status for ${esc(task.name)}" ${busy || contextOnly ? 'disabled' : ''} onchange="changeInlineStatus(${argument},this)">
           ${['To Do', 'In Progress', 'Blocked', 'Done'].map(status => `<option ${task.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select></td>
         <td>${displayDate(task.start)}</td><td>${displayDate(task.end)}</td></tr>`;
@@ -3038,13 +3040,13 @@ html += `<div class="task-cell"
     const overdue = clientTasks.filter(task => task.status !== 'Done' && task.end && task.end < today);
     const blocked = scoped.filter(task => task.status === 'Blocked');
     const dueToday = clientTasks.filter(task => task.status !== 'Done' && task.end && dateKey(task.end) === dateKey(today));
-    const missingHours = scopedLeaves.filter(task => task.parentTaskId && task.category === 'Video editing' && task.status === 'Done' && !Number(task.hours || 0));
+    const missingHours = scopedLeaves.filter(task => task.parentTaskId && task.category === 'Video editing' && task.status === 'Done' && !taskOwnHours(task));
     const hourGroups = new Map();
     scopedLeaves.filter(task => task.parentTaskId).forEach(task => {
       const parent = byId.get(task.parentTaskId) || task;
       if (!hourGroups.has(parent.id)) hourGroups.set(parent.id, { id: parent.id, name: parent.name, units: 0, completedUnits: 0, ids: [] });
       const group = hourGroups.get(parent.id);
-      const units = Math.round(Number(task.hours || 0) * 100);
+      const units = Math.round(taskOwnHours(task) * 100);
       group.units += units;
       if (task.status === 'Done') group.completedUnits += units;
       group.ids.push(task.id);
@@ -3344,7 +3346,10 @@ html += `<div class="task-cell"
       const topLevel = !task.parentTaskId;
       const hasChildren = state.childrenByParent.has(task.id);
       const argument = esc(JSON.stringify(task.id));
-      return `<tr><td class="metrics-attention-name"><button class="subtask-link" onclick="openEdit(${argument})">${esc(task.name || task.id)}</button><div class="task-meta">${esc(task.id)}${parent ? ' · ' + esc(parent.name) : ''}</div></td><td><span class="pill ${reason === 'Overdue now' ? 'blocked' : ''}">${reason}</span></td><td>${displayDate(task.end, true)}</td><td><div class="metrics-task-actions"><select class="field-control" data-metric-command aria-label="Status for ${esc(task.name)}" onchange="updateSelectedStatuses([${argument}],this.value)">${['To Do', 'In Progress', 'Blocked', 'Done'].map(status => `<option ${task.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select>${topLevel ? `<button class="btn" onclick="openEdit(${argument})">${hasChildren ? 'Edit subtasks' : 'Add subtasks'}</button>` : `<input class="field-control" id="metricHours-${esc(task.id)}" aria-label="Hours for ${esc(task.name)}" type="number" min="0" max="10000" step="0.01" value="${esc(task.hours || 0)}"><button class="btn" data-metric-command onclick="saveMetricsHours(${argument})">Save hours</button>`}</div></td></tr>`;
+      const hoursAction = topLevel ? `<button class="btn" onclick="openEdit(${argument})">${hasChildren ? 'Edit subtasks' : 'Add subtasks'}</button>`
+        : task.hasTimeEntries ? `<span class="task-meta">${formatHours(task.totalHours || 0)} h including time entries</span><button class="btn" onclick="openEdit(${argument})">View entries</button>`
+          : `<input class="field-control" id="metricHours-${esc(task.id)}" aria-label="Manual hours for ${esc(task.name)}" type="number" min="0" max="10000" step="0.01" value="${esc(task.hours || 0)}"><button class="btn" data-metric-command onclick="saveMetricsHours(${argument})">Save hours</button>`;
+      return `<tr><td class="metrics-attention-name"><button class="subtask-link" onclick="openEdit(${argument})">${esc(task.name || task.id)}</button><div class="task-meta">${esc(task.id)}${parent ? ' · ' + esc(parent.name) : ''}</div></td><td><span class="pill ${reason === 'Overdue now' ? 'blocked' : ''}">${reason}</span></td><td>${displayDate(task.end, true)}</td><td><div class="metrics-task-actions"><select class="field-control" data-metric-command aria-label="Status for ${esc(task.name)}" onchange="updateSelectedStatuses([${argument}],this.value)">${['To Do', 'In Progress', 'Blocked', 'Done'].map(status => `<option ${task.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select>${hoursAction}</div></td></tr>`;
     }).join('')}</tbody></table></div>`;
   }
 
@@ -3521,7 +3526,7 @@ html += `<div class="task-cell"
             ${esc(child.name)}
           </button>
           <div class="task-meta">
-            ${esc(child.id)} · ${esc(child.category)} · ${formatHours(child.hours || 0)} h
+            ${esc(child.id)} · ${esc(child.category)} · ${formatHours(child.totalHours || 0)} h
           </div>
           ${renderSubtaskClientTags(child)}
         </div>
@@ -4178,7 +4183,7 @@ function populateParentTaskOptions() {
       data.recurrence = { frequency: $('taskRecurrenceFrequency').value, throughDate };
     }
     const currentTask = isEdit ? state.taskById.get(state.editId) : null;
-    if (isEdit ? Boolean(currentTask?.parentTaskId) : Boolean(data.parentTaskId)) data.hours = $('taskHours').value;
+    if (isEdit ? Boolean(currentTask?.parentTaskId) && !$('taskHours').readOnly : Boolean(data.parentTaskId)) data.hours = $('taskHours').value;
     if (isEdit) {
       data.taskId = state.editId;
       data.expectedUpdatedAt = currentTask.updatedAt;
@@ -4309,7 +4314,7 @@ function deleteCurrentTask() {
     input.readOnly = !isSubtask;
     if (!isSubtask || resetValue || wasReadOnly) input.value = '0';
     input.max = '10000';
-    $('taskHoursLabel').textContent = isSubtask ? 'Task total hours' : 'Task total hours (subtasks only)';
+    $('taskHoursLabel').textContent = isSubtask ? 'Manual task hours' : 'Manual task hours (subtasks only)';
     $('taskHoursProgress').innerHTML = '';
     updateTaskRecurrenceControl();
   }
@@ -4330,10 +4335,11 @@ function deleteCurrentTask() {
   function updateTaskHoursControl(task, resetValue = false) {
     const input = $('taskHours');
     const isSubtask = Boolean(task.parentTaskId);
-    input.readOnly = !isSubtask;
-    if (resetValue || !isSubtask) input.value = String(isSubtask ? task.hours || 0 : task.totalHours || 0);
+    const hasTimeEntries = isSubtask && task.hasTimeEntries === true;
+    input.readOnly = !isSubtask || hasTimeEntries;
+    if (resetValue || !isSubtask || hasTimeEntries) input.value = String(isSubtask ? hasTimeEntries ? task.totalHours || 0 : task.hours || 0 : task.totalHours || 0);
     if (isSubtask) input.max = '10000'; else input.removeAttribute('max');
-    $('taskHoursLabel').textContent = isSubtask ? 'Task total hours' : 'Total subtask hours (calculated)';
+    $('taskHoursLabel').textContent = !isSubtask ? 'Total subtask hours (calculated)' : hasTimeEntries ? 'Total hours (manual + time entries)' : 'Manual task hours';
     $('taskHoursProgress').innerHTML = renderHoursProgress(task.completedHours || 0, task.totalHours || 0);
   }
 
@@ -4433,6 +4439,7 @@ function deleteCurrentTask() {
       updateDataNotice();
       renderTaskTimeEntries();
       showToast('Time entry saved.');
+      loadTasks();
     }).saveTaskTimeEntry(taskId, dateInput.value, hoursInput.value, noteInput.value);
   }
 
@@ -4448,6 +4455,7 @@ function deleteCurrentTask() {
       updateDataNotice();
       renderTaskTimeEntries();
       showToast('Time entry deleted.');
+      loadTasks();
     }).deleteTaskTimeEntry(taskId, entryId);
   }
 
@@ -4457,7 +4465,7 @@ function deleteCurrentTask() {
       if (!task.parentTaskId) return;
       if (!sums.has(task.parentTaskId)) sums.set(task.parentTaskId, { units: 0, completed: 0 });
       const sum = sums.get(task.parentTaskId);
-      const units = Math.round(Number(task.hours || 0) * 100);
+      const units = Math.round(taskOwnHours(task) * 100);
       sum.units += units;
       if (task.status === 'Done') sum.completed += units;
     });
@@ -4465,9 +4473,13 @@ function deleteCurrentTask() {
       const sum = sums.get(task.id);
       if (!task.parentTaskId) task.hours = 0;
       task.subtaskHours = sum ? sum.units / 100 : 0;
-      task.totalHours = sum ? sum.units / 100 : task.parentTaskId ? Number(task.hours || 0) : 0;
-      task.completedHours = sum ? sum.completed / 100 : task.parentTaskId && task.status === 'Done' ? Number(task.hours || 0) : 0;
+      task.totalHours = sum ? sum.units / 100 : task.parentTaskId ? taskOwnHours(task) : 0;
+      task.completedHours = sum ? sum.completed / 100 : task.parentTaskId && task.status === 'Done' ? taskOwnHours(task) : 0;
     });
+  }
+
+  function taskOwnHours(task) {
+    return Math.round((Number(task.hours || 0) + Number(task.timeEntryHours || 0)) * 100) / 100;
   }
 
   function taskHourMetrics(tasks, hierarchy = state.tasks) {
@@ -4476,7 +4488,7 @@ function deleteCurrentTask() {
     let completed = 0;
     tasks.forEach(task => {
       if (!task.parentTaskId || parents.has(task.id)) return;
-      const units = Math.round(Number(task.hours || 0) * 100);
+      const units = Math.round(taskOwnHours(task) * 100);
       total += units;
       if (task.status === 'Done') completed += units;
     });

@@ -451,6 +451,64 @@ test('dated time entries use a separate lazy ledger and validate dates, hours, t
   assert.deepEqual(Array.from(app.ledgers.get('Time_Entry_Master').deletions.at(-1)), [2, 2]);
 });
 
+test('dated subtask entries feed task and parent progress without writing Task_Master Hours', () => {
+  const parent = taskRow('VID-000');
+  const completedChild = taskRow('VID-001', 'VID-000', 'Done');
+  const app = server([parent, completedChild]);
+  app.context.initializeTaskHeaders_(app.sheet);
+
+  app.context.saveTaskTimeEntry('VID-001', '2026-11-05', 0.5, 'Final review');
+  const updatedAt = app.context.getTasks().tasks.find(task => task.taskId === 'VID-001').updatedAt;
+  assert.throws(() => app.context.updateTaskHours('VID-001', 1, updatedAt), /dated time entries/);
+  assert.throws(() => app.context.updateSubtasks('VID-000', ['VID-001'], { hours: 1 }), /dated time entries/);
+  assert.throws(() => app.context.setTaskParent('VID-001', ''), /dated entries/);
+
+  const tasks = app.context.getTasks().tasks;
+  const loadedParent = tasks.find(task => task.taskId === 'VID-000');
+  const loadedChild = tasks.find(task => task.taskId === 'VID-001');
+  assert.equal(loadedChild.hours, 0);
+  assert.equal(loadedChild.timeEntryHours, 0.5);
+  assert.equal(loadedChild.totalHours, 0.5);
+  assert.equal(loadedChild.completedHours, 0.5);
+  assert.equal(loadedParent.totalHours, 0.5);
+  assert.equal(loadedParent.completedHours, 0.5);
+  assert.equal(app.rows[2][15], undefined);
+  app.context.updateTaskStatus('VID-001', 'In Progress');
+  const activeTasks = app.context.getTasks().tasks;
+  assert.equal(activeTasks.find(task => task.taskId === 'VID-001').totalHours, 0.5);
+  assert.equal(activeTasks.find(task => task.taskId === 'VID-001').completedHours, 0);
+  assert.equal(activeTasks.find(task => task.taskId === 'VID-000').completedHours, 0);
+});
+
+test('dated entries feed progress bars and lock manual Hours to avoid double counting', () => {
+  const app = client();
+  const state = app.getState();
+  const parent = app.normalizeTask({ taskId: 'VID-PARENT', taskName: 'Project', status: 'To Do' });
+  const child = app.normalizeTask({ taskId: 'VID-CHILD', taskName: 'Review', parentTaskId: 'VID-PARENT', status: 'Done', hours: 0, timeEntryHours: 0.5, hasTimeEntries: true });
+  state.tasks = [parent, child];
+  state.childrenByParent.set(parent.id, [child]);
+  app.applyTaskHourRollups(state.tasks);
+  assert.equal(child.totalHours, 0.5);
+  assert.equal(child.completedHours, 0.5);
+  assert.equal(parent.totalHours, 0.5);
+  assert.equal(parent.completedHours, 0.5);
+
+  app.elements.set('taskHours', { value: '', readOnly: false, removeAttribute() {} });
+  app.elements.set('taskHoursLabel', { textContent: '' });
+  app.elements.set('taskHoursProgress', { innerHTML: '' });
+  app.updateTaskHoursControl(child, true);
+  assert.equal(app.elements.get('taskHours').readOnly, true);
+  assert.equal(app.elements.get('taskHours').value, '0.5');
+  assert.equal(app.elements.get('taskHoursLabel').textContent, 'Total hours (manual + time entries)');
+  assert.match(app.elements.get('taskHoursProgress').innerHTML, /0\.5 \/ 0\.5 hours on completed work/);
+
+  child.status = 'In Progress';
+  app.applyTaskHourRollups(state.tasks);
+  assert.equal(child.totalHours, 0.5);
+  assert.equal(child.completedHours, 0);
+  assert.equal(parent.completedHours, 0);
+});
+
 test('task editor exposes dated time entry controls and renders a separate logged-hours list', () => {
   assert.match(html, /\.form-field\[hidden\], \.form-grid\[hidden\] \{ display: none; \}/);
   assert.match(html, /<fieldset id="taskTimeEntryForm" class="task-time-entry-form" disabled>/);
@@ -510,6 +568,32 @@ test('Metrics renders dated actual entries separately from task Hours totals', (
   assert.match(report, /Cut review/);
 });
 
+test('dated entries feed subtask and parent progress while locking manual Hours', () => {
+  const app = client();
+  const state = app.getState();
+  const parent = app.normalizeTask({ taskId: 'VID-PARENT', taskName: 'Project', status: 'To Do' });
+  const child = app.normalizeTask({
+    taskId: 'VID-CHILD', taskName: 'Review', parentTaskId: 'VID-PARENT', status: 'Done',
+    hours: 0, timeEntryHours: 0.5, hasTimeEntries: true
+  });
+  state.tasks = [parent, child];
+  state.childrenByParent.set(parent.id, [child]);
+  app.applyTaskHourRollups(state.tasks);
+  assert.equal(child.totalHours, 0.5);
+  assert.equal(child.completedHours, 0.5);
+  assert.equal(parent.totalHours, 0.5);
+  assert.equal(parent.completedHours, 0.5);
+
+  app.elements.set('taskHours', { value: '', readOnly: false, removeAttribute() {} });
+  app.elements.set('taskHoursLabel', { textContent: '' });
+  app.elements.set('taskHoursProgress', { innerHTML: '' });
+  app.updateTaskHoursControl(child, true);
+  assert.equal(app.elements.get('taskHours').readOnly, true);
+  assert.equal(app.elements.get('taskHours').value, '0.5');
+  assert.equal(app.elements.get('taskHoursLabel').textContent, 'Total hours (manual + time entries)');
+  assert.match(app.elements.get('taskHoursProgress').innerHTML, /0\.5 \/ 0\.5 hours on completed work/);
+});
+
 test('task time-entry form submits its task, date, hours and note then clears the draft fields', () => {
   const app = client();
   const state = app.getState();
@@ -529,6 +613,8 @@ test('task time-entry form submits its task, date, hours and note then clears th
   app.google = { script: { run: runner } };
   app.updateDataNotice = () => {};
   app.showToast = () => {};
+  let taskRefreshes = 0;
+  app.loadTasks = () => { taskRefreshes++; };
   app.elements.set('timeEntryDate', { value: '2026-11-08', checkValidity: () => true, reportValidity() {} });
   app.elements.set('timeEntryHours', { value: '1.5', checkValidity: () => true, reportValidity() {} });
   app.elements.set('timeEntryNote', { value: 'Cut review' });
@@ -541,6 +627,7 @@ test('task time-entry form submits its task, date, hours and note then clears th
 
   assert.deepEqual(calls, [['VID-001', '2026-11-08', '1.5', 'Cut review']]);
   assert.equal(state.timeEntries.items.length, 1);
+  assert.equal(taskRefreshes, 1);
   assert.equal(app.elements.get('timeEntryHours').value, '');
   assert.equal(app.elements.get('timeEntryNote').value, '');
   assert.match(app.elements.get('taskTimeEntriesList').innerHTML, /Cut review/);

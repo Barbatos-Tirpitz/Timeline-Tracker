@@ -272,6 +272,11 @@ function getTasks() {
   // Calculate child counts for every parent.
   const childStats = Object.create(null);
   const ownHours = new Map(taskRows.map(row => [String(row[0]), withHours ? normalizeTaskHours_(row[15], row[0]) : 0]));
+  const timeEntryHours = timeEntryTotalsByTask_(taskRows, timezone);
+  const totalTaskHours = new Map(taskRows.map(row => {
+    const taskId = String(row[0]);
+    return [taskId, ownHours.get(taskId) + (timeEntryHours.get(taskId) || 0)];
+  }));
 
   taskRows.forEach(row => {
     const parentId = String(row[13] || '').trim();
@@ -288,11 +293,11 @@ function getTasks() {
     }
 
     childStats[parentId].total++;
-    childStats[parentId].hourUnits += Math.round(ownHours.get(String(row[0])) * 100);
+    childStats[parentId].hourUnits += Math.round(totalTaskHours.get(String(row[0])) * 100);
 
     if (String(row[4]) === 'Done') {
       childStats[parentId].completed++;
-      childStats[parentId].completedHourUnits += Math.round(ownHours.get(String(row[0])) * 100);
+      childStats[parentId].completedHourUnits += Math.round(totalTaskHours.get(String(row[0])) * 100);
     }
   });
 
@@ -333,9 +338,12 @@ function getTasks() {
       parentTaskId: String(row[13] || ''),
       clients: withClients ? readClients_(row[14], taskId) : [],
       hours: String(row[13] || '').trim() ? ownHours.get(taskId) : 0,
+      manualHours: String(row[13] || '').trim() ? ownHours.get(taskId) : 0,
+      timeEntryHours: timeEntryHours.get(taskId) || 0,
+      hasTimeEntries: timeEntryHours.has(taskId),
       subtaskHours: stats.hourUnits / 100,
-      totalHours: stats.total ? stats.hourUnits / 100 : String(row[13] || '').trim() ? ownHours.get(taskId) : 0,
-      completedHours: stats.total ? stats.completedHourUnits / 100 : String(row[13] || '').trim() && String(row[4]) === 'Done' ? ownHours.get(taskId) : 0,
+      totalHours: stats.total ? stats.hourUnits / 100 : String(row[13] || '').trim() ? totalTaskHours.get(taskId) : 0,
+      completedHours: stats.total ? stats.completedHourUnits / 100 : String(row[13] || '').trim() && String(row[4]) === 'Done' ? totalTaskHours.get(taskId) : 0,
       subtaskCount: stats.total,
       completedSubtaskCount: stats.completed,
 
@@ -589,6 +597,7 @@ function assertEditableTaskHours_(sheet, taskId, rowNumber) {
   }
   const taskParentId = String(sheet.getRange(rowNumber || findTaskRow(sheet, taskId), 14).getValue() || '').trim();
   if (!taskParentId) throw new Error('Only subtasks can record hours. Parent totals are calculated from subtasks.');
+  if (timeEntryTaskIds_().has(taskId)) throw new Error('This task has dated time entries. Edit the entries instead of manual Hours.');
 }
 
 function updateTaskHours(taskId, value, expectedUpdatedAt) {
@@ -659,6 +668,30 @@ function readTimeEntry_(row, timezone) {
     hours: normalizeTimeEntryHours_(row[3]), note: String(row[4] || ''),
     createdAt: String(row[5] || '')
   };
+}
+
+function timeEntryTotalsByTask_(taskRows, timezone) {
+  const taskParents = new Map(taskRows.filter(row => row[0]).map(row => [String(row[0]), String(row[13] || '').trim()]));
+  const parentIds = new Set([...taskParents.values()].filter(Boolean));
+  const sheet = timeEntrySheet_(false);
+  const totals = new Map();
+  if (!sheet || sheet.getLastRow() < 2) return totals;
+  const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, TIME_ENTRY_CONFIG.HEADERS.length).getValues();
+  rows.forEach(row => {
+    const taskId = String(row[1] || '').trim();
+    const parentTaskId = taskParents.get(taskId);
+    if (!parentTaskId || parentIds.has(taskId)) return;
+    const entry = readTimeEntry_(row, timezone);
+    totals.set(taskId, Math.round(((totals.get(taskId) || 0) + entry.hours) * 100) / 100);
+  });
+  return totals;
+}
+
+function timeEntryTaskIds_() {
+  const sheet = timeEntrySheet_(false);
+  if (!sheet || sheet.getLastRow() < 2) return new Set();
+  return new Set(sheet.getRange(2, 1, sheet.getLastRow() - 1, TIME_ENTRY_CONFIG.HEADERS.length).getValues()
+    .map(row => String(row[1] || '').trim()).filter(Boolean));
 }
 
 function assertTimeEntrySubtask_(sheet, taskId) {
@@ -984,6 +1017,8 @@ function updateSubtasks(parentTaskId, taskIds, patch) {
       if (!hasHoursColumn_(selection.sheet)) throw new Error('Run Upgrade Categories, Clients and Hours from the spreadsheet menu first.');
       const parents = new Set(selection.rows.map(values => String(values[13] || '').trim()).filter(Boolean));
       if (selection.selected.some(record => parents.has(String(record.values[0])))) throw new Error('Parent hours are calculated from subtasks. Update the subtask hours instead.');
+      const tasksWithEntries = timeEntryTaskIds_();
+      if (selection.ids.some(id => tasksWithEntries.has(id))) throw new Error('Selected tasks with dated time entries cannot be edited through manual Hours.');
     }
     if (clients !== null && !hasClientsColumn_(selection.sheet)) throw new Error('Run Upgrade Categories and Clients first.');
     if (start || end) selection.selected.forEach(record => {
@@ -1544,11 +1579,12 @@ function setTaskParent(taskId, newParentTaskId) {
     const taskValues = rows.find(row => String(row[0] || '').trim() === taskId);
     const currentParentId = String(taskValues?.[13] || '').trim();
     const ownHours = hasHoursColumn_(sheet) ? normalizeTaskHours_(sheet.getRange(taskRow, 16).getValue(), taskId) : 0;
-    if (currentParentId && !newParentTaskId && ownHours > 0) {
-      throw new Error('This subtask has logged hours. Set its hours to zero before making it standalone.');
+    const hasTimeEntries = timeEntryTaskIds_().has(taskId);
+    if (currentParentId && !newParentTaskId && (ownHours > 0 || hasTimeEntries)) {
+      throw new Error('This subtask has logged hours or dated entries. Resolve them before making it standalone.');
     }
-    if (!currentParentId && newParentTaskId && ownHours > 0) {
-      throw new Error('This top-level task has stored Hours. Clear the legacy value before assigning it a parent.');
+    if (!currentParentId && newParentTaskId && (ownHours > 0 || hasTimeEntries)) {
+      throw new Error('This top-level task has stored Hours or dated entries. Resolve them before assigning it a parent.');
     }
 
     // Find the existing children of this task.
