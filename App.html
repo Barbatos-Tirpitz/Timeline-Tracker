@@ -2921,13 +2921,8 @@ html += `<div class="task-cell"
   }
 
   function setDashboardCustomDate(key, value) {
-    if (!['customStart', 'customEnd'].includes(key)) return;
+    if (!['customStart', 'customEnd'].includes(key) || !parseDate(value)) return;
     const dashboard = state.dashboard;
-    if (!parseDate(value)) {
-      showToast('Choose a valid date for the custom range.');
-      renderDashboard();
-      return;
-    }
     const start = key === 'customStart' ? value : dashboard.customStart;
     const end = key === 'customEnd' ? value : dashboard.customEnd;
     if (!parseDate(start) || !parseDate(end) || end < start) {
@@ -4391,15 +4386,14 @@ function deleteCurrentTask() {
     const entered = String(value || '').trim();
     if (!entered || entered.length > 100) {
       showToast(entered ? 'Client names can be up to 100 characters.' : 'A client is required.');
+      if (entered.length > 100) showToast('Client names can be up to 100 characters.');
+      invoice.client = entered.slice(0, 100);
+      workspace.dirty = true;
       renderInvoices();
       return;
     }
     const selected = known.find(client => client.toLowerCase() === entered.toLowerCase()) || entered;
-    const clientInput = $('invoiceField-client');
-    if (selected === invoice.client) {
-      if (clientInput) clientInput.value = selected;
-      return;
-    }
+    if (selected === invoice.client) { renderInvoices(); return; }
     if (invoice.lines.length && !confirm('Changing the client removes the current invoice lines. Continue?')) {
       renderInvoices();
       return;
@@ -4537,7 +4531,7 @@ function deleteCurrentTask() {
             <label class="form-field">From<input class="field-control" id="invoicePeriodStart" type="date" value="${esc(invoice.periodStart)}" onchange="setInvoiceRange('periodStart',this.value)"></label>
             <label class="form-field">Through<input class="field-control" id="invoicePeriodEnd" type="date" value="${esc(invoice.periodEnd)}" ${(invoice.periodMode || 'fortnight') === 'fortnight' ? 'disabled' : ''} onchange="setInvoiceRange('periodEnd',this.value)"></label>
             ${[['issueDate', 'Issue date', 'date'], ['dueDate', 'Due date', 'date'], ['senderName', 'Your name / business', 'text'], ['defaultRate', 'Hourly rate for new lines', 'number']].map(([key, label, type]) => `<label class="form-field">${label}<input class="field-control" id="invoiceField-${key}" type="${type === 'number' ? 'text' : type}" ${type === 'number' ? 'inputmode="decimal" maxlength="18"' : 'maxlength="200"'} value="${type === 'number' ? formatMoneyInputValue(invoice[key], invoice.currency) : esc(invoice[key])}" oninput="${type === 'number' ? `setInvoiceField('${key}',parseMoneyInputValue(this.value));validateMoneyInput(this,state.invoices.editor.currency,true,1000000)` : `setInvoiceField('${key}',this.value)`}" onblur="${type === 'number' ? `if(normalizeMoneyInput(this,state.invoices.editor.currency,true,1000000))setInvoiceField('${key}',parseMoneyInputValue(this.value))` : ''}"></label>`).join('')}
-            ${[['senderDetails', 'Your address / contact'], ['clientDetails', 'Bill to address / contact'], ['notes', 'Payment details / notes']].map(([key, label]) => `<label class="form-field ${key === 'notes' ? 'full' : ''}">${label}<textarea class="field-control" ${key === 'clientDetails' ? 'id="invoiceField-clientDetails"' : ''} maxlength="${key === 'notes' ? 1500 : 1000}" oninput="setInvoiceField('${key}',this.value)">${esc(invoice[key])}</textarea></label>`).join('')}
+            ${[['senderDetails', 'Your address / contact'], ['clientDetails', 'Bill to address / contact'], ['notes', 'Payment details / notes']].map(([key, label]) => `<label class="form-field ${key === 'notes' ? 'full' : ''}">${label}<textarea class="field-control" maxlength="${key === 'notes' ? 1500 : 1000}" oninput="setInvoiceField('${key}',this.value)">${esc(invoice[key])}</textarea></label>`).join('')}
           </div>
           <div class="invoice-toolbar" style="margin-top:18px"><span id="invoiceLineCount">${invoice.lines.length} invoice lines</span><span class="spacer"></span><button class="btn btn-primary" id="addManualInvoiceLine" onclick="addInvoiceLine()">Add manual line</button></div>
           <div class="table-wrap"><table class="invoice-lines"><thead><tr><th>Description</th><th>Hours</th><th>Hourly rate</th><th>Amount</th><th></th></tr></thead><tbody id="invoiceLinesBody">
