@@ -416,8 +416,10 @@ test('task version tokens use spreadsheet-stable second precision', () => {
 });
 
 test('dated time entries use a separate lazy ledger and validate dates, hours, tasks and deletes', () => {
-  const app = server([taskRow('VID-001')], false, Infinity, true, 'Asia/Manila');
+  const app = server([taskRow('VID-000'), taskRow('VID-001', 'VID-000')], false, Infinity, true, 'Asia/Manila');
   assert.deepEqual(Array.from(app.context.getTaskTimeEntries('VID-001').entries), []);
+  assert.equal(app.ledgers.has('Time_Entry_Master'), false);
+  assert.throws(() => app.context.saveTaskTimeEntry('VID-000', '2026-11-05', 1, 'Parent log'), /only be logged on subtasks/);
   assert.equal(app.ledgers.has('Time_Entry_Master'), false);
 
   const saved = app.context.saveTaskTimeEntry('VID-001', '2026-11-05', 2.5, 'Opening edit');
@@ -425,7 +427,8 @@ test('dated time entries use a separate lazy ledger and validate dates, hours, t
   assert.equal(saved.entry.date, '2026-11-05');
   assert.equal(saved.entry.hours, 2.5);
   assert.equal(app.rows[1][15], undefined);
-  app.rows[1][14] = '["Acme"]';
+  assert.equal(app.rows[2][15], undefined);
+  app.rows[2][14] = '["Acme"]';
   const listed = app.context.getTaskTimeEntries('VID-001').entries;
   assert.deepEqual(Array.from(listed, entry => [entry.date, entry.hours, entry.note]), [['2026-11-05', 2.5, 'Opening edit']]);
   const report = app.context.getTimeEntrySummary('2026-11-05', '2026-11-05', 'client:Acme');
@@ -453,6 +456,7 @@ test('task editor exposes dated time entry controls and renders a separate logge
   assert.match(html, /class="task-recurrence-toggle" for="repeatTask"/);
   assert.match(html, /class="task-time-entry-actions"/);
   assert.match(html, /id="timeEntryNote" maxlength="200"/);
+  assert.match(html, /id="taskTimeEntryParentNotice" class="task-meta" hidden/);
   const app = client();
   const state = app.getState();
   state.editId = 'VID-001';
@@ -468,6 +472,16 @@ test('task editor exposes dated time entry controls and renders a separate logge
   assert.equal(app.elements.get('taskTimeEntriesTotal').textContent, '3.5 hours logged');
   assert.match(app.elements.get('taskTimeEntriesList').innerHTML, /&lt;script&gt;unsafe&lt;\/script&gt;/);
   assert.match(app.elements.get('taskTimeEntriesList').innerHTML, /deleteTaskTimeEntry/);
+});
+
+test('only leaf subtasks can show the task time-entry form', () => {
+  const app = client();
+  const state = app.getState();
+  state.childrenByParent.set('VID-PARENT', []);
+  state.childrenByParent.set('VID-SUBTASK', ['VID-CHILD']);
+  assert.equal(app.taskCanLogTime(listTask('VID-PARENT')), false);
+  assert.equal(app.taskCanLogTime(listTask('VID-SUBTASK', 'VID-PARENT')), false);
+  assert.equal(app.taskCanLogTime(listTask('VID-LEAF', 'VID-PARENT')), true);
 });
 
 test('Metrics renders dated actual entries separately from task Hours totals', () => {

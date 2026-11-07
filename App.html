@@ -1504,12 +1504,15 @@
     <div class="form-field full" id="taskTimeEntriesSection" hidden>
       <section class="subtask-section" aria-labelledby="taskTimeEntriesHeading">
         <div class="subtask-section-heading"><h4 id="taskTimeEntriesHeading">Time entries</h4><span class="panel-subtitle" id="taskTimeEntriesTotal"></span></div>
-        <div class="form-grid">
-          <label class="form-field">Work date<input class="field-control" id="timeEntryDate" type="date" required></label>
-          <label class="form-field">Entry hours *<input class="field-control" id="timeEntryHours" type="number" min="0.01" max="24" step="0.01" placeholder="e.g. 1.5" required></label>
-          <label class="form-field full">Note<input class="field-control" id="timeEntryNote" maxlength="200" placeholder="What did you work on?"></label>
+        <div id="taskTimeEntryParentNotice" class="task-meta" hidden>Time can only be logged on subtasks. Open a subtask to add an entry.</div>
+        <div id="taskTimeEntryForm">
+          <div class="form-grid">
+            <label class="form-field">Work date<input class="field-control" id="timeEntryDate" type="date" required></label>
+            <label class="form-field">Entry hours *<input class="field-control" id="timeEntryHours" type="number" min="0.01" max="24" step="0.01" placeholder="e.g. 1.5" required></label>
+            <label class="form-field full">Note<input class="field-control" id="timeEntryNote" maxlength="200" placeholder="What did you work on?"></label>
+          </div>
+          <div class="task-time-entry-actions"><span class="invoice-field-error" id="timeEntryError" role="alert"></span><button class="btn btn-primary" type="button" id="saveTimeEntryBtn" onclick="saveTaskTimeEntry()">Log time</button></div>
         </div>
-        <div class="task-time-entry-actions"><span class="invoice-field-error" id="timeEntryError" role="alert"></span><button class="btn btn-primary" type="button" id="saveTimeEntryBtn" onclick="saveTaskTimeEntry()">Log time</button></div>
         <div id="taskTimeEntriesList" aria-live="polite"></div>
       </section>
     </div>
@@ -4049,6 +4052,9 @@ function populateParentTaskOptions() {
      // Display the parent task or its subtasks.
     renderSubtaskPanel(t);
     $('taskTimeEntriesSection').hidden = false;
+    const canLogTime = taskCanLogTime(t);
+    $('taskTimeEntryForm').hidden = !canLogTime;
+    $('taskTimeEntryParentNotice').hidden = canLogTime;
     $('timeEntryDate').value = state.spreadsheetToday || dateKey(new Date());
     $('timeEntryHours').value = '';
     $('timeEntryNote').value = '';
@@ -4309,6 +4315,10 @@ function deleteCurrentTask() {
     if (isSubtask) input.max = '10000'; else input.removeAttribute('max');
     $('taskHoursLabel').textContent = isSubtask ? 'Task total hours' : 'Total subtask hours (calculated)';
     $('taskHoursProgress').innerHTML = renderHoursProgress(task.completedHours || 0, task.totalHours || 0);
+  }
+
+  function taskCanLogTime(task) {
+    return Boolean(task?.parentTaskId) && !state.childrenByParent.has(task.id);
   }
 
   function loadTaskTimeEntries(taskId, reconcile = false) {
