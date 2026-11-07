@@ -658,6 +658,16 @@ function readTimeEntry_(row, timezone) {
   };
 }
 
+function assertTimeEntrySubtask_(sheet, taskId) {
+  const row = findTaskRow(sheet, taskId);
+  const parentTaskId = String(sheet.getRange(row, 14).getValue() || '').trim();
+  if (!parentTaskId) throw new Error('Time entries can only be logged on subtasks.');
+  const taskRows = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, 14).getValues() : [];
+  if (taskRows.some(values => String(values[13] || '').trim() === taskId)) {
+    throw new Error('Time entries can only be logged on subtasks without their own subtasks.');
+  }
+}
+
 function getTaskTimeEntries(taskId) {
   taskId = String(taskId || '').trim();
   if (!taskId) throw new Error('Task ID is required.');
@@ -685,8 +695,10 @@ function getTimeEntrySummary(startValue, endValue, clientFilter) {
   const timezone = ss.getSpreadsheetTimeZone();
   const taskRows = taskSheet.getLastRow() > 1
     ? taskSheet.getRange(2, 1, taskSheet.getLastRow() - 1, taskReadWidth_(taskSheet)).getValues() : [];
+  const parentIds = new Set(taskRows.map(row => String(row[13] || '').trim()).filter(Boolean));
   const tasks = new Map(taskRows.filter(row => row[0]).map(row => [String(row[0]), {
-    name: String(row[1] || ''), clients: hasClientsColumn_(taskSheet) ? readClients_(row[14], row[0]) : []
+    name: String(row[1] || ''), parentTaskId: String(row[13] || '').trim(), hasChildren: parentIds.has(String(row[0])),
+    clients: hasClientsColumn_(taskSheet) ? readClients_(row[14], row[0]) : []
   }]));
   const sheet = timeEntrySheet_(false);
   if (!sheet || sheet.getLastRow() < 2) return { success: true, entries: [], totalHours: 0 };
@@ -697,7 +709,7 @@ function getTimeEntrySummary(startValue, endValue, clientFilter) {
     .map(row => readTimeEntry_(row, timezone))
     .filter(entry => {
       const task = tasks.get(entry.taskId);
-      if (!task || entry.date < startKey || entry.date > endKey) return false;
+      if (!task || !task.parentTaskId || task.hasChildren || entry.date < startKey || entry.date > endKey) return false;
       if (!filter) return true;
       if (filter === 'unassigned') return !task.clients.length;
       if (!filter.startsWith('client:')) return false;
@@ -723,7 +735,7 @@ function saveTaskTimeEntry(taskId, dateValue, hoursValue, noteValue) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const taskSheet = ss.getSheetByName(CONFIG.SHEET_NAME);
     if (!taskSheet) throw new Error('Task_Master sheet not found.');
-    findTaskRow(taskSheet, taskId);
+    assertTimeEntrySubtask_(taskSheet, taskId);
     const sheet = timeEntrySheet_(true);
     const entry = {
       id: 'TE-' + Utilities.getUuid(), taskId, date: Utilities.formatDate(workDate, ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd'),
