@@ -492,13 +492,20 @@ test('Metrics renders dated actual entries separately from task Hours totals', (
   assert.match(html, /id="metricsTimeEntryReport"/);
   const app = client();
   app.getState().timeEntryReport = {
-    key: '2026-11-01|2026-11-30|client:Acme', loading: false, error: '', totalHours: 2.5,
-    entries: [{ id: 'TE-1', taskId: 'VID-001', taskName: 'Opening edit', date: '2026-11-05', hours: 2.5, note: 'Cut review' }]
+    key: '2026-11-01|2026-11-30|client:Acme', loading: false, error: '', totalHours: 6.5,
+    entries: [
+      { id: 'TE-1', taskId: 'VID-001', taskName: 'Opening edit', date: '2026-11-05', hours: 2.5, note: 'Cut review' },
+      { id: 'TE-2', taskId: 'VID-001', taskName: 'Opening edit', date: '2026-11-05', hours: 1.5, note: 'Second pass' },
+      { id: 'TE-3', taskId: 'VID-001', taskName: 'Opening edit', date: '2026-11-04', hours: 2.5, note: 'Review' }
+    ]
   };
   app.elements.set('metricsTimeEntryReport', { innerHTML: '' });
   app.renderDashboardTimeEntryReport();
   const report = app.elements.get('metricsTimeEntryReport').innerHTML;
-  assert.match(report, /2\.5 hours logged/);
+  assert.match(report, /6\.5 hours logged/);
+  assert.match(report, /4 h/);
+  assert.match(report, /2\.5 h/);
+  assert.match(report, /class="time-entry-day-fill" style="width:100%"/);
   assert.match(report, /Opening edit/);
   assert.match(report, /Cut review/);
 });

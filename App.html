@@ -301,6 +301,11 @@
     .metrics-task-actions input { width: 85px; }
     .metrics-attention-name { min-width: 180px; overflow-wrap: anywhere; }
     .metrics-zero { padding: 34px 12px; color: var(--muted); font-size: 12px; text-align: center; }
+    .time-entry-day-chart { margin: 12px 0 16px; }
+    .time-entry-day { display: grid; grid-template-columns: minmax(92px, max-content) minmax(72px, 1fr) max-content; align-items: center; gap: 10px; padding: 6px 0; }
+    .time-entry-day-track { display: block; height: 10px; background: #edf0f4; border-radius: 3px; overflow: hidden; }
+    .time-entry-day-fill { display: block; height: 100%; background: var(--green); border-radius: inherit; }
+    .time-entry-day-total { min-width: 54px; text-align: right; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
     @media (max-width: 900px) { .metrics-charts { grid-template-columns: minmax(0, 1fr); gap: 0; } }
     @media (max-width: 600px) { .metrics-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } .metrics-tile { padding: 12px; } }
     .hours-progress::-webkit-progress-bar { background: #e9edf3; border-radius: 4px; }
@@ -3160,8 +3165,17 @@ html += `<div class="task-cell"
       target.innerHTML = '<div class="metrics-zero">No dated time entries in this period.</div>';
       return;
     }
+    const dailyUnits = new Map();
+    report.entries.forEach(entry => dailyUnits.set(entry.date, (dailyUnits.get(entry.date) || 0) + Math.round(Number(entry.hours || 0) * 100)));
+    const dailyTotals = [...dailyUnits].sort((first, second) => second[0].localeCompare(first[0]));
+    const maximumDay = Math.max(1, ...dailyTotals.map(([, units]) => units));
+    const dailyBars = dailyTotals.slice(0, 14).map(([date, units]) => {
+      const hours = units / 100;
+      const label = `${formatDisplayDate(date)}: ${formatHours(hours)} hours logged`;
+      return `<div class="time-entry-day" role="listitem" aria-label="${esc(label)}"><span>${displayDate(date, true)}</span><span class="time-entry-day-track" aria-hidden="true"><span class="time-entry-day-fill" style="width:${units / maximumDay * 100}%"></span></span><strong class="time-entry-day-total">${formatHours(hours)} h</strong></div>`;
+    }).join('');
     const entries = report.entries.slice(0, 20);
-    target.innerHTML = `<div class="panel-subtitle">${formatHours(report.totalHours)} hours logged · ${report.entries.length} entries</div><div class="table-wrap"><table><thead><tr><th>Work date</th><th>Task</th><th>Hours</th><th>Note</th></tr></thead><tbody>${entries.map(entry => `<tr><td>${displayDate(entry.date, true)}</td><td>${esc(entry.taskName)} <span class="task-meta">${esc(entry.taskId)}</span></td><td>${formatHours(entry.hours)}</td><td>${esc(entry.note || '')}</td></tr>`).join('')}</tbody></table></div>${report.entries.length > entries.length ? `<div class="metrics-caption">Showing ${entries.length} of ${report.entries.length} entries.</div>` : ''}`;
+    target.innerHTML = `<div class="panel-subtitle">${formatHours(report.totalHours)} hours logged · ${report.entries.length} entries</div><div class="time-entry-day-chart" role="list" aria-label="Daily time-entry totals">${dailyBars}</div><div class="table-wrap"><table><thead><tr><th>Work date</th><th>Task</th><th>Hours</th><th>Note</th></tr></thead><tbody>${entries.map(entry => `<tr><td>${displayDate(entry.date, true)}</td><td>${esc(entry.taskName)} <span class="task-meta">${esc(entry.taskId)}</span></td><td>${formatHours(entry.hours)}</td><td>${esc(entry.note || '')}</td></tr>`).join('')}</tbody></table></div>${dailyTotals.length > 14 || report.entries.length > entries.length ? `<div class="metrics-caption">Showing ${Math.min(dailyTotals.length, 14)} of ${dailyTotals.length} dates and ${entries.length} of ${report.entries.length} entries.</div>` : ''}`;
   }
 
   function loadDashboardTimeEntryReport(range) {
