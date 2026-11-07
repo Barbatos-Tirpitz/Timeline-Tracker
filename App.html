@@ -865,6 +865,49 @@
     resize: vertical;
     min-height: 105px;
   }
+  .task-recurrence-toggle {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    gap: 9px;
+    width: auto;
+    min-height: 40px;
+    padding: 7px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: #f7f8fa;
+    cursor: pointer;
+  }
+  .task-recurrence-toggle input[type="checkbox"] {
+    flex: 0 0 18px;
+    width: 18px;
+    height: 18px;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    accent-color: var(--blue);
+  }
+  .task-recurrence-fields {
+    margin-top: 8px;
+    padding: 14px 0 0;
+    border: 0;
+    border-top: 1px solid var(--border);
+    min-width: 0;
+  }
+  .task-time-entry-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin: 16px 0 20px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .task-time-entry-actions .btn { min-width: 116px; }
+  @media (max-width: 540px) {
+    .task-time-entry-actions { align-items: stretch; flex-direction: column; }
+    .task-time-entry-actions .btn { align-self: flex-end; }
+  }
     .form-field input:focus, .form-field select:focus, .form-field textarea:focus { border-color: var(--blue); }
     .form-field textarea { resize: vertical; min-height: 88px; }
 
@@ -1444,8 +1487,8 @@
     </div>
 
     <div class="form-field full" id="taskRecurrenceControl">
-      <label for="repeatTask"><input id="repeatTask" type="checkbox" onchange="updateTaskRecurrenceControl()"> Repeat this task</label>
-      <fieldset id="taskRecurrenceFields" class="form-grid" disabled hidden>
+      <label class="task-recurrence-toggle" for="repeatTask"><input id="repeatTask" type="checkbox" onchange="updateTaskRecurrenceControl()"><span>Repeat this task</span></label>
+      <fieldset id="taskRecurrenceFields" class="form-grid task-recurrence-fields" disabled hidden>
         <label class="form-field">Frequency<select class="field-control" id="taskRecurrenceFrequency"><option>Weekly</option><option>Biweekly</option><option>Monthly</option></select></label>
         <label class="form-field">Through date<input class="field-control" id="taskRecurrenceThrough" type="date" required></label>
         <div class="form-field full task-meta">Creates independent tasks through the selected date, inclusive. Limit: 100 occurrences.</div>
@@ -1453,7 +1496,7 @@
     </div>
 
     <div class="form-field full">
-      <label for="taskHours" id="taskHoursLabel">Subtask hours only</label>
+      <label for="taskHours" id="taskHoursLabel">Task total hours (subtasks only)</label>
       <input id="taskHours" type="number" min="0" max="10000" step="0.01" value="0">
       <div id="taskHoursProgress"></div>
     </div>
@@ -1463,10 +1506,10 @@
         <div class="subtask-section-heading"><h4 id="taskTimeEntriesHeading">Time entries</h4><span class="panel-subtitle" id="taskTimeEntriesTotal"></span></div>
         <div class="form-grid">
           <label class="form-field">Work date<input class="field-control" id="timeEntryDate" type="date" required></label>
-          <label class="form-field">Hours<input class="field-control" id="timeEntryHours" type="number" min="0.01" max="24" step="0.01" required></label>
+          <label class="form-field">Entry hours *<input class="field-control" id="timeEntryHours" type="number" min="0.01" max="24" step="0.01" placeholder="e.g. 1.5" required></label>
           <label class="form-field full">Note<input class="field-control" id="timeEntryNote" maxlength="200" placeholder="What did you work on?"></label>
         </div>
-        <div class="invoice-toolbar"><span class="invoice-field-error" id="timeEntryError" role="alert"></span><span class="spacer"></span><button class="btn btn-primary" type="button" id="saveTimeEntryBtn" onclick="saveTaskTimeEntry()">Log time</button></div>
+        <div class="task-time-entry-actions"><span class="invoice-field-error" id="timeEntryError" role="alert"></span><button class="btn btn-primary" type="button" id="saveTimeEntryBtn" onclick="saveTaskTimeEntry()">Log time</button></div>
         <div id="taskTimeEntriesList" aria-live="polite"></div>
       </section>
     </div>
@@ -4240,7 +4283,7 @@ function deleteCurrentTask() {
     input.readOnly = !isSubtask;
     if (!isSubtask || resetValue || wasReadOnly) input.value = '0';
     input.max = '10000';
-    $('taskHoursLabel').textContent = isSubtask ? 'Hours' : 'Subtask hours only';
+    $('taskHoursLabel').textContent = isSubtask ? 'Task total hours' : 'Task total hours (subtasks only)';
     $('taskHoursProgress').innerHTML = '';
     updateTaskRecurrenceControl();
   }
@@ -4264,7 +4307,7 @@ function deleteCurrentTask() {
     input.readOnly = !isSubtask;
     if (resetValue || !isSubtask) input.value = String(isSubtask ? task.hours || 0 : task.totalHours || 0);
     if (isSubtask) input.max = '10000'; else input.removeAttribute('max');
-    $('taskHoursLabel').textContent = isSubtask ? 'Hours' : 'Total subtask hours (calculated)';
+    $('taskHoursLabel').textContent = isSubtask ? 'Task total hours' : 'Total subtask hours (calculated)';
     $('taskHoursProgress').innerHTML = renderHoursProgress(task.completedHours || 0, task.totalHours || 0);
   }
 
