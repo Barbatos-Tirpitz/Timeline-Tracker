@@ -1443,10 +1443,32 @@
       <input id="endDate" type="date" required>
     </div>
 
+    <div class="form-field full" id="taskRecurrenceControl">
+      <label for="repeatTask"><input id="repeatTask" type="checkbox" onchange="updateTaskRecurrenceControl()"> Repeat this task</label>
+      <fieldset id="taskRecurrenceFields" class="form-grid" disabled hidden>
+        <label class="form-field">Frequency<select class="field-control" id="taskRecurrenceFrequency"><option>Weekly</option><option>Biweekly</option><option>Monthly</option></select></label>
+        <label class="form-field">Through date<input class="field-control" id="taskRecurrenceThrough" type="date" required></label>
+        <div class="form-field full task-meta">Creates independent tasks through the selected date, inclusive. Limit: 100 occurrences.</div>
+      </fieldset>
+    </div>
+
     <div class="form-field full">
       <label for="taskHours" id="taskHoursLabel">Subtask hours only</label>
       <input id="taskHours" type="number" min="0" max="10000" step="0.01" value="0">
       <div id="taskHoursProgress"></div>
+    </div>
+
+    <div class="form-field full" id="taskTimeEntriesSection" hidden>
+      <section class="subtask-section" aria-labelledby="taskTimeEntriesHeading">
+        <div class="subtask-section-heading"><h4 id="taskTimeEntriesHeading">Time entries</h4><span class="panel-subtitle" id="taskTimeEntriesTotal"></span></div>
+        <div class="form-grid">
+          <label class="form-field">Work date<input class="field-control" id="timeEntryDate" type="date" required></label>
+          <label class="form-field">Hours<input class="field-control" id="timeEntryHours" type="number" min="0.01" max="24" step="0.01" required></label>
+          <label class="form-field full">Note<input class="field-control" id="timeEntryNote" maxlength="200" placeholder="What did you work on?"></label>
+        </div>
+        <div class="invoice-toolbar"><span class="invoice-field-error" id="timeEntryError" role="alert"></span><span class="spacer"></span><button class="btn btn-primary" type="button" id="saveTimeEntryBtn" onclick="saveTaskTimeEntry()">Log time</button></div>
+        <div id="taskTimeEntriesList" aria-live="polite"></div>
+      </section>
     </div>
 
     <div class="form-field full" id="taskClientsControl"></div>
@@ -1542,6 +1564,8 @@
     spreadsheetToday: '',
     spreadsheetTimeZone: '',
     dashboard: { period: 'monthly', anchor: null, customStart: '', customEnd: '', client: '' },
+    timeEntries: { taskId: '', items: [], loading: false, error: '', request: 0 },
+    timeEntryReport: { key: '', entries: [], totalHours: 0, loading: false, error: '', request: 0 },
     invoices: { loaded: false, loading: false, error: '', request: 0, records: [], settings: null, settingsRevision: 0, editor: null, dirty: false, historyClient: '', historyPage: 1 },
     expenses: { loaded: false, loading: false, error: '', formError: '', request: 0, records: [], today: '', categories: [], currencies: [], paymentMethods: [], statuses: [], editor: null, dirty: false, month: '', filters: { search: '', category: '', status: '', currency: '' } },
     earnings: { loaded: false, loading: false, error: '', formError: '', request: 0, records: [], today: '', categories: [], currencies: [], statuses: [], editor: null, dirty: false, filters: { search: '', category: '', status: '', currency: '' } },
@@ -3062,11 +3086,68 @@ html += `<div class="task-cell"
         <section class="metrics-section" aria-labelledby="metricsDeliveryHeading"><div class="metrics-section-head"><h3 id="metricsDeliveryHeading">Planned vs Actual Finish</h3><button class="subtask-link" ${model.finishVariance.length ? '' : 'disabled'} onclick="openMetricTasks('finishVariance')">View completed (${model.finishVariance.length})</button></div><div class="metrics-caption">Completed in this period · days variance = actual completion minus planned end; positive is late, negative is early.</div>${renderMetricsFinishVariance(model)}</section>
         <section class="metrics-section" aria-labelledby="metricsHoursHeading"><div class="metrics-section-head"><h3 id="metricsHoursHeading">Hours by Parent Task</h3><button class="subtask-link" onclick="openMetricTasks('hours')">View work</button></div><div class="metrics-caption">Recorded task totals · selected schedule window</div>${renderMetricsParentChart(model)}</section>
       </div>
+      <section class="metrics-section" aria-labelledby="metricsTimeEntriesHeading"><h3 id="metricsTimeEntriesHeading">Time logged by date</h3><div class="metrics-caption">Dated work entries for the selected period · separate from task Hours totals.</div><div id="metricsTimeEntryReport" aria-live="polite"></div></section>
       <section class="metrics-section" aria-labelledby="metricsAttentionHeading"><div class="metrics-section-head"><h3 id="metricsAttentionHeading">Needs Attention</h3><button class="subtask-link" onclick="openMetricTasks('attention')">View all (${model.attention.length})</button></div><div class="metrics-caption">Overdue and due-today items for ${esc(attentionClient)} are current and not limited to this period. Showing up to eight; View all opens every match. Blocked and missing-hour items use the selected schedule window.</div>${renderMetricsAttention(model)}</section>
       <div class="invoice-dashboard"><strong>Invoice review</strong><span class="subtitle">${dashboard.client && dashboard.client !== 'unassigned' ? esc(dashboard.client.slice(7)) : 'Select a client to prepare a draft'}</span><button class="btn" data-metric-command data-metric-invoice="true" ${!dashboard.client || dashboard.client === 'unassigned' ? 'disabled' : ''} onclick="reviewMetricsInvoice()">Review for invoicing</button><button class="btn" onclick="switchView('invoices')">Saved invoices</button></div>
       `;
+    loadDashboardTimeEntryReport(range);
     refreshDateInputLabels();
     updateMetricsBusy();
+  }
+
+  function renderDashboardTimeEntryReport() {
+    const target = $('metricsTimeEntryReport');
+    if (!target) return;
+    const report = state.timeEntryReport;
+    if (report.loading) {
+      target.innerHTML = '<div class="metrics-zero">Loading time entries...</div>';
+      return;
+    }
+    if (report.error) {
+      target.innerHTML = `<div class="metrics-zero">${esc(report.error)} <button type="button" class="subtask-link" onclick="state.timeEntryReport.key='';renderDashboard()">Retry</button></div>`;
+      return;
+    }
+    if (!report.entries.length) {
+      target.innerHTML = '<div class="metrics-zero">No dated time entries in this period.</div>';
+      return;
+    }
+    const entries = report.entries.slice(0, 20);
+    target.innerHTML = `<div class="panel-subtitle">${formatHours(report.totalHours)} hours logged · ${report.entries.length} entries</div><div class="table-wrap"><table><thead><tr><th>Work date</th><th>Task</th><th>Hours</th><th>Note</th></tr></thead><tbody>${entries.map(entry => `<tr><td>${displayDate(entry.date, true)}</td><td>${esc(entry.taskName)} <span class="task-meta">${esc(entry.taskId)}</span></td><td>${formatHours(entry.hours)}</td><td>${esc(entry.note || '')}</td></tr>`).join('')}</tbody></table></div>${report.entries.length > entries.length ? `<div class="metrics-caption">Showing ${entries.length} of ${report.entries.length} entries.</div>` : ''}`;
+  }
+
+  function loadDashboardTimeEntryReport(range) {
+    const report = state.timeEntryReport;
+    const key = [dateKey(range.start), dateKey(range.end), state.dashboard.client].join('|');
+    if (report.key === key && (report.loading || !report.error)) {
+      renderDashboardTimeEntryReport();
+      return;
+    }
+    report.key = key;
+    report.entries = [];
+    report.totalHours = 0;
+    report.loading = true;
+    report.error = '';
+    const request = ++report.request;
+    renderDashboardTimeEntryReport();
+    if (typeof google === 'undefined' || !google.script) {
+      report.loading = false;
+      report.error = 'Time-entry Metrics require the deployed Apps Script app.';
+      renderDashboardTimeEntryReport();
+      return;
+    }
+    google.script.run.withSuccessHandler(response => {
+      if (request !== report.request) return;
+      report.entries = Array.isArray(response?.entries) ? response.entries : [];
+      report.totalHours = Number(response?.totalHours) || 0;
+      report.loading = false;
+      report.error = '';
+      renderDashboardTimeEntryReport();
+    }).withFailureHandler(error => {
+      if (request !== report.request) return;
+      report.loading = false;
+      report.error = error.message || String(error);
+      renderDashboardTimeEntryReport();
+    }).getTimeEntrySummary(dateKey(range.start), dateKey(range.end), state.dashboard.client);
   }
 
   function persistMetricsPreferences() {
@@ -3828,9 +3909,14 @@ function createSubtask() {
     if (!confirmTaskDiscard()) return;
     if (!state.taskBaseline) state.taskReturnFocus = document.activeElement;
     state.editId = null;
+    state.timeEntries = { taskId: '', items: [], loading: false, error: '', request: state.timeEntries.request + 1 };
+    $('taskTimeEntriesSection').hidden = true;
 
     resetSubtaskPanel();
     $('taskForm').reset();
+    $('taskRecurrenceControl').hidden = false;
+    $('taskRecurrenceFields').hidden = true;
+    $('taskRecurrenceFields').disabled = true;
     $('taskContext').hidden = true;
     $('taskHours').value = '0';
     $('taskHours').readOnly = true;
@@ -3891,6 +3977,7 @@ function populateParentTaskOptions() {
 
     state.editId = id;
     $('taskForm').reset();
+    updateTaskRecurrenceControl();
     $('parentTaskField').style.display = 'none';
     $('modalTitle').textContent = t.parentTaskId ? 'Edit subtask' : 'Edit task';
     $('saveBtn').textContent = t.parentTaskId ? 'Save subtask' : 'Save changes';
@@ -3900,6 +3987,7 @@ function populateParentTaskOptions() {
     $('taskContext').innerHTML = `<span class="task-meta">${esc(t.id)}</span>${parent ? ` · <button type="button" class="subtask-link" onclick="openEdit(${esc(JSON.stringify(parent.id))})">${esc(parent.name)}</button>` : ''}`;
     $('saveBtn').disabled = false;
     $('taskName').value = t.name;
+    $('taskRecurrenceControl').hidden = true;
     $('category').value = t.category;
     $('priority').value = t.priority;
     $('startDate').value = dateKey(t.start);
@@ -3917,6 +4005,11 @@ function populateParentTaskOptions() {
 
      // Display the parent task or its subtasks.
     renderSubtaskPanel(t);
+    $('taskTimeEntriesSection').hidden = false;
+    $('timeEntryDate').value = state.spreadsheetToday || dateKey(new Date());
+    $('timeEntryHours').value = '';
+    $('timeEntryNote').value = '';
+    loadTaskTimeEntries(id);
     $('taskModal').classList.add('open');
     refreshDateInputLabels();
     state.taskBaseline = captureTaskForm();
@@ -3962,6 +4055,8 @@ function populateParentTaskOptions() {
     $('taskModal').classList.remove('open');
     state.editId = null;
     state.taskBaseline = null;
+    state.timeEntries = { taskId: '', items: [], loading: false, error: '', request: state.timeEntries.request + 1 };
+    $('taskTimeEntriesSection').hidden = true;
     resetSubtaskPanel();
     if (state.taskReturnFocus?.isConnected) state.taskReturnFocus.focus();
     state.taskReturnFocus = null;
@@ -3970,7 +4065,7 @@ function populateParentTaskOptions() {
 
   function setSaving(saving) {
     $('saveBtn').disabled = saving;
-    $('saveBtn').textContent = saving ? 'Saving…' : (state.editId ? state.taskById.get(state.editId)?.parentTaskId ? 'Save subtask' : 'Save changes' : 'Create task');
+    $('saveBtn').textContent = saving ? 'Saving…' : (state.editId ? state.taskById.get(state.editId)?.parentTaskId ? 'Save subtask' : 'Save changes' : $('repeatTask').checked ? 'Create recurring tasks' : 'Create task');
   }
 
   function saveTask(event) {
@@ -3999,6 +4094,20 @@ function populateParentTaskOptions() {
     if (!data.taskName) return;
 
     const isEdit = Boolean(state.editId);
+    if (!isEdit && $('repeatTask').checked) {
+      const throughDate = $('taskRecurrenceThrough').value;
+      if (data.parentTaskId) {
+        $('formError').textContent = 'Recurring tasks must be standalone tasks.';
+        $('formError').style.display = 'block';
+        return;
+      }
+      if (!parseDate(throughDate) || throughDate <= start) {
+        $('formError').textContent = 'Choose a through date after the first task date.';
+        $('formError').style.display = 'block';
+        return;
+      }
+      data.recurrence = { frequency: $('taskRecurrenceFrequency').value, throughDate };
+    }
     const currentTask = isEdit ? state.taskById.get(state.editId) : null;
     if (isEdit ? Boolean(currentTask?.parentTaskId) : Boolean(data.parentTaskId)) data.hours = $('taskHours').value;
     if (isEdit) {
@@ -4015,7 +4124,8 @@ function populateParentTaskOptions() {
         setSaving(false);
         state.taskBaseline = captureTaskForm();
         if (!hasPendingSubtaskWork()) closeModal(true);
-        showToast(`${isEdit ? 'Updated' : 'Created'} ${taskLabel({ name: data.taskName, id: data.taskId || result.taskId })}.`);
+        const label = !isEdit && result.created > 1 ? `${result.created} recurring tasks` : taskLabel({ name: data.taskName, id: data.taskId || result.taskId });
+        showToast(`${isEdit ? 'Updated' : 'Created'} ${label}.`);
         loadTasks();
       })
       .withFailureHandler(err => {
@@ -4132,6 +4242,20 @@ function deleteCurrentTask() {
     input.max = '10000';
     $('taskHoursLabel').textContent = isSubtask ? 'Hours' : 'Subtask hours only';
     $('taskHoursProgress').innerHTML = '';
+    updateTaskRecurrenceControl();
+  }
+
+  function updateTaskRecurrenceControl() {
+    const control = $('taskRecurrenceControl');
+    const checkbox = $('repeatTask');
+    const fields = $('taskRecurrenceFields');
+    if (!control || !checkbox || !fields) return;
+    const available = !state.editId && !$('parentTaskId').value;
+    control.hidden = !available;
+    if (!available) checkbox.checked = false;
+    fields.hidden = !available || !checkbox.checked;
+    fields.disabled = !available || !checkbox.checked;
+    if (!state.writing && $('saveBtn')) $('saveBtn').textContent = checkbox.checked && available ? 'Create recurring tasks' : 'Create task';
   }
 
   function updateTaskHoursControl(task, resetValue = false) {
@@ -4142,6 +4266,116 @@ function deleteCurrentTask() {
     if (isSubtask) input.max = '10000'; else input.removeAttribute('max');
     $('taskHoursLabel').textContent = isSubtask ? 'Hours' : 'Total subtask hours (calculated)';
     $('taskHoursProgress').innerHTML = renderHoursProgress(task.completedHours || 0, task.totalHours || 0);
+  }
+
+  function loadTaskTimeEntries(taskId, reconcile = false) {
+    const entries = state.timeEntries;
+    entries.taskId = taskId;
+    entries.loading = true;
+    entries.error = '';
+    const request = ++entries.request;
+    renderTaskTimeEntries();
+    if (typeof google === 'undefined' || !google.script) {
+      entries.loading = false;
+      entries.error = 'Time entries are available in the deployed Apps Script app.';
+      renderTaskTimeEntries();
+      return;
+    }
+    google.script.run.withSuccessHandler(response => {
+      if (request !== state.timeEntries.request || state.editId !== taskId) return;
+      entries.items = Array.isArray(response?.entries) ? response.entries : [];
+      entries.loading = false;
+      entries.error = '';
+      if (reconcile) {
+        state.syncing = false;
+        updateDataNotice();
+      }
+      renderTaskTimeEntries();
+    }).withFailureHandler(error => {
+      if (request !== state.timeEntries.request || state.editId !== taskId) return;
+      entries.loading = false;
+      entries.error = error.message || String(error);
+      if (reconcile) {
+        state.syncing = false;
+        updateDataNotice();
+      }
+      renderTaskTimeEntries();
+    }).getTaskTimeEntries(taskId);
+  }
+
+  function renderTaskTimeEntries() {
+    const entries = state.timeEntries;
+    const list = $('taskTimeEntriesList');
+    const total = $('taskTimeEntriesTotal');
+    const error = $('timeEntryError');
+    const saveButton = $('saveTimeEntryBtn');
+    if (!list || !total || !error || !saveButton) return;
+    error.textContent = entries.error || '';
+    saveButton.disabled = state.writing || state.syncing || entries.loading || !state.editId;
+    const hours = entries.items.reduce((sum, entry) => sum + Number(entry.hours || 0), 0);
+    total.textContent = `${formatHours(hours)} hours logged`;
+    if (entries.loading) {
+      list.innerHTML = '<div class="subtask-empty">Loading time entries...</div>';
+      return;
+    }
+    if (!entries.items.length) {
+      list.innerHTML = '<div class="subtask-empty">No time entries for this task.</div>';
+      return;
+    }
+    list.innerHTML = entries.items.map(entry => `<div class="subtask-row"><div class="subtask-info"><strong>${displayDate(entry.date, true)} · ${formatHours(entry.hours)} h</strong>${entry.note ? `<div class="task-meta">${esc(entry.note)}</div>` : ''}</div><button type="button" class="btn" aria-label="Delete ${formatHours(entry.hours)} hour entry from ${esc(entry.date)}" onclick="deleteTaskTimeEntry(${esc(JSON.stringify(entry.id))})">Delete</button></div>`).join('');
+  }
+
+  function timeEntryMutation() {
+    return mutationRunner()
+      .withReconciliationHandler(() => loadTaskTimeEntries(state.timeEntries.taskId, true))
+      .withFailureHandler(error => {
+        state.timeEntries.error = error.message || String(error);
+        renderTaskTimeEntries();
+        showToast('Time entry action failed: ' + state.timeEntries.error);
+      });
+  }
+
+  function saveTaskTimeEntry() {
+    const taskId = state.editId;
+    const dateInput = $('timeEntryDate');
+    const hoursInput = $('timeEntryHours');
+    const noteInput = $('timeEntryNote');
+    if (!taskId || state.writing || state.syncing) return;
+    if (!dateInput.checkValidity() || !parseDate(dateInput.value) || !hoursInput.checkValidity()) {
+      (dateInput.checkValidity() && parseDate(dateInput.value) ? hoursInput : dateInput).reportValidity();
+      return;
+    }
+    if (noteInput.value.length > 200) {
+      $('timeEntryError').textContent = 'Notes can be up to 200 characters.';
+      return;
+    }
+    timeEntryMutation().withSuccessHandler(result => {
+      state.syncing = false;
+      state.timeEntryReport.key = '';
+      state.timeEntries.items = [result.entry, ...state.timeEntries.items]
+        .sort((first, second) => second.date.localeCompare(first.date) || second.createdAt.localeCompare(first.createdAt));
+      state.timeEntries.error = '';
+      hoursInput.value = '';
+      noteInput.value = '';
+      updateDataNotice();
+      renderTaskTimeEntries();
+      showToast('Time entry saved.');
+    }).saveTaskTimeEntry(taskId, dateInput.value, hoursInput.value, noteInput.value);
+  }
+
+  function deleteTaskTimeEntry(entryId) {
+    const taskId = state.editId;
+    const entry = state.timeEntries.items.find(item => item.id === entryId);
+    if (!taskId || !entry || state.writing || state.syncing) return;
+    if (!confirm(`Delete the ${formatHours(entry.hours)} hour entry for ${entry.date}?`)) return;
+    timeEntryMutation().withSuccessHandler(() => {
+      state.syncing = false;
+      state.timeEntryReport.key = '';
+      state.timeEntries.items = state.timeEntries.items.filter(item => item.id !== entryId);
+      updateDataNotice();
+      renderTaskTimeEntries();
+      showToast('Time entry deleted.');
+    }).deleteTaskTimeEntry(taskId, entryId);
   }
 
   function applyTaskHourRollups(tasks) {

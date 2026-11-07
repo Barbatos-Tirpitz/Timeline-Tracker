@@ -296,6 +296,7 @@ function parseZonedDate(value, timezone) {
 function server(records, missingSheet = false, failAfter = Infinity, documentLock = true, timezone = 'UTC') {
   const headers = ['Task ID', 'Task Name', 'Category', 'Priority', 'Status', 'Start Date', 'End Date', 'Duration', 'Description', 'Actual Start', 'Actual End', 'Created At', 'Updated At', 'Parent Task ID', 'Clients'];
   const rows = [headers, ...records.map(row => row.slice())];
+  const ledgers = new Map();
   let maxColumns = 15;
   const writes = [];
   const backups = [];
@@ -337,7 +338,34 @@ function server(records, missingSheet = false, failAfter = Infinity, documentLoc
     }
   };
   const ui = { answer: 'YES', Button: { YES: 'YES' }, ButtonSet: { YES_NO: 'YES_NO' }, alert() { return this.answer; } };
-  const spreadsheet = { getSheetByName: () => missingSheet ? null : sheet, getSpreadsheetTimeZone: () => timezone, toast() {} };
+  function makeLedgerSheet() {
+    const ledgerRows = [];
+    return {
+      rows: ledgerRows,
+      getLastRow: () => ledgerRows.length,
+      getMaxRows: () => 10000,
+      getRange(row, column, height = 1, width = 1) {
+        return {
+          getValues: () => Array.from({ length: height }, (_, offset) => Array.from({ length: width }, (_, index) => ledgerRows[row - 1 + offset]?.[column - 1 + index] ?? '')),
+          setValues(values) {
+            values.forEach((valuesRow, offset) => {
+              if (!ledgerRows[row - 1 + offset]) ledgerRows[row - 1 + offset] = [];
+              valuesRow.forEach((value, index) => { ledgerRows[row - 1 + offset][column - 1 + index] = value; });
+            });
+            return this;
+          },
+          setNumberFormat() { return this; }
+        };
+      },
+      deleteRows(row, count) { ledgerRows.splice(row - 1, count); }
+    };
+  }
+  const spreadsheet = {
+    getSheetByName: name => missingSheet ? null : name === 'Task_Master' ? sheet : ledgers.get(name) || null,
+    insertSheet(name) { const result = makeLedgerSheet(); ledgers.set(name, result); return result; },
+    getSpreadsheetTimeZone: () => timezone,
+    toast() {}
+  };
   const context = vm.createContext({
     Date,
     Utilities: {
@@ -346,7 +374,8 @@ function server(records, missingSheet = false, failAfter = Infinity, documentLoc
         const parts = zonedParts(date, zone);
         if (format === 'yyyy-MM-dd') return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
         return date.toISOString().slice(0, 10);
-      }
+      },
+      getUuid: () => 'time-entry-test-id'
     },
     SpreadsheetApp: { getActiveSpreadsheet: () => spreadsheet, getUi: () => ui, flush() {} },
     LockService: {
@@ -355,7 +384,7 @@ function server(records, missingSheet = false, failAfter = Infinity, documentLoc
     }
   });
   vm.runInContext(backend, context);
-  return { context, rows, writes, backups, ui, sheet, setMaxColumns: count => { maxColumns = count; }, releases: () => releases };
+  return { context, rows, writes, backups, ui, sheet, ledgers, setMaxColumns: count => { maxColumns = count; }, releases: () => releases };
 }
 
 test('backend and frontend scripts parse', () => {
@@ -384,6 +413,109 @@ test('task version tokens use spreadsheet-stable second precision', () => {
   assert.ok(nextVersion > loadedVersion);
   assert.throws(() => app.context.updateTaskHours('VID-002', 2, loadedVersion), /changed since it was loaded/);
   assert.equal(app.context.nextTaskUpdatedAt_(timestamp, timestamp).getTime(), loadedVersion + 1000);
+});
+
+test('dated time entries use a separate lazy ledger and validate dates, hours, tasks and deletes', () => {
+  const app = server([taskRow('VID-001')], false, Infinity, true, 'Asia/Manila');
+  assert.deepEqual(Array.from(app.context.getTaskTimeEntries('VID-001').entries), []);
+  assert.equal(app.ledgers.has('Time_Entry_Master'), false);
+
+  const saved = app.context.saveTaskTimeEntry('VID-001', '2026-11-05', 2.5, 'Opening edit');
+  assert.equal(saved.success, true);
+  assert.equal(saved.entry.date, '2026-11-05');
+  assert.equal(saved.entry.hours, 2.5);
+  assert.equal(app.rows[1][15], undefined);
+  app.rows[1][14] = '["Acme"]';
+  const listed = app.context.getTaskTimeEntries('VID-001').entries;
+  assert.deepEqual(Array.from(listed, entry => [entry.date, entry.hours, entry.note]), [['2026-11-05', 2.5, 'Opening edit']]);
+  const report = app.context.getTimeEntrySummary('2026-11-05', '2026-11-05', 'client:Acme');
+  assert.equal(report.totalHours, 2.5);
+  assert.deepEqual(Array.from(report.entries, entry => [entry.taskName, entry.date]), [['VID-001', '2026-11-05']]);
+  assert.equal(app.context.getTimeEntrySummary('2026-11-04', '2026-11-04', 'client:Acme').entries.length, 0);
+  assert.equal(app.context.getTimeEntrySummary('2026-11-05', '2026-11-05', 'unassigned').entries.length, 0);
+
+  assert.throws(() => app.context.saveTaskTimeEntry('VID-001', '2026-02-30', 1, ''), /valid work date/);
+  assert.throws(() => app.context.saveTaskTimeEntry('VID-001', '2026-11-05', 24.01, ''), /no more than 24 hours/);
+  assert.throws(() => app.context.saveTaskTimeEntry('MISSING', '2026-11-05', 1, ''), /Task ID not found/);
+  assert.throws(() => app.context.deleteTaskTimeEntry('VID-001', 'TE-missing'), /Time entry not found/);
+  assert.equal(app.context.deleteTaskTimeEntry('VID-001', saved.entry.id).success, true);
+  assert.deepEqual(Array.from(app.context.getTaskTimeEntries('VID-001').entries), []);
+  app.context.saveTaskTimeEntry('VID-001', '2026-11-04', 1, 'First');
+  app.context.saveTaskTimeEntry('VID-001', '2026-11-05', 2, 'Second');
+  assert.equal(app.context.deleteTasks(['VID-001']).success, true);
+  assert.equal(app.ledgers.get('Time_Entry_Master').rows.length, 1);
+});
+
+test('task editor exposes dated time entry controls and renders a separate logged-hours list', () => {
+  assert.match(html, /id="timeEntryDate" type="date" required/);
+  assert.match(html, /id="timeEntryHours" type="number" min="0\.01" max="24" step="0\.01" required/);
+  assert.match(html, /id="timeEntryNote" maxlength="200"/);
+  const app = client();
+  const state = app.getState();
+  state.editId = 'VID-001';
+  state.timeEntries.items = [
+    { id: 'TE-1', date: '2026-11-05', hours: 2.5, note: '<script>unsafe</script>' },
+    { id: 'TE-2', date: '2026-11-04', hours: 1, note: '' }
+  ];
+  app.elements.set('taskTimeEntriesList', { innerHTML: '' });
+  app.elements.set('taskTimeEntriesTotal', { textContent: '' });
+  app.elements.set('timeEntryError', { textContent: '' });
+  app.elements.set('saveTimeEntryBtn', { disabled: false });
+  app.renderTaskTimeEntries();
+  assert.equal(app.elements.get('taskTimeEntriesTotal').textContent, '3.5 hours logged');
+  assert.match(app.elements.get('taskTimeEntriesList').innerHTML, /&lt;script&gt;unsafe&lt;\/script&gt;/);
+  assert.match(app.elements.get('taskTimeEntriesList').innerHTML, /deleteTaskTimeEntry/);
+});
+
+test('Metrics renders dated actual entries separately from task Hours totals', () => {
+  assert.match(html, /id="metricsTimeEntryReport"/);
+  const app = client();
+  app.getState().timeEntryReport = {
+    key: '2026-11-01|2026-11-30|client:Acme', loading: false, error: '', totalHours: 2.5,
+    entries: [{ id: 'TE-1', taskId: 'VID-001', taskName: 'Opening edit', date: '2026-11-05', hours: 2.5, note: 'Cut review' }]
+  };
+  app.elements.set('metricsTimeEntryReport', { innerHTML: '' });
+  app.renderDashboardTimeEntryReport();
+  const report = app.elements.get('metricsTimeEntryReport').innerHTML;
+  assert.match(report, /2\.5 hours logged/);
+  assert.match(report, /Opening edit/);
+  assert.match(report, /Cut review/);
+});
+
+test('task time-entry form submits its task, date, hours and note then clears the draft fields', () => {
+  const app = client();
+  const state = app.getState();
+  state.loaded = true;
+  state.editId = 'VID-001';
+  state.timeEntries.taskId = 'VID-001';
+  let success;
+  const calls = [];
+  const runner = {
+    withSuccessHandler(callback) { success = callback; return runner; },
+    withFailureHandler() { return runner; },
+    saveTaskTimeEntry(...args) {
+      calls.push(args);
+      success({ success: true, entry: { id: 'TE-new', taskId: 'VID-001', date: '2026-11-08', hours: 1.5, note: 'Cut review', createdAt: '2026-11-08T10:00:00Z' } });
+    }
+  };
+  app.google = { script: { run: runner } };
+  app.updateDataNotice = () => {};
+  app.showToast = () => {};
+  app.elements.set('timeEntryDate', { value: '2026-11-08', checkValidity: () => true, reportValidity() {} });
+  app.elements.set('timeEntryHours', { value: '1.5', checkValidity: () => true, reportValidity() {} });
+  app.elements.set('timeEntryNote', { value: 'Cut review' });
+  app.elements.set('taskTimeEntriesList', { innerHTML: '' });
+  app.elements.set('taskTimeEntriesTotal', { textContent: '' });
+  app.elements.set('timeEntryError', { textContent: '' });
+  app.elements.set('saveTimeEntryBtn', { disabled: false });
+
+  app.saveTaskTimeEntry();
+
+  assert.deepEqual(calls, [['VID-001', '2026-11-08', '1.5', 'Cut review']]);
+  assert.equal(state.timeEntries.items.length, 1);
+  assert.equal(app.elements.get('timeEntryHours').value, '');
+  assert.equal(app.elements.get('timeEntryNote').value, '');
+  assert.match(app.elements.get('taskTimeEntriesList').innerHTML, /Cut review/);
 });
 
 test('current date rolls over in the spreadsheet time zone and refreshes Metrics attention', () => {
@@ -908,6 +1040,115 @@ test('repeated creation appends without removing existing subtasks', () => {
   assert.equal(app.rows.length, 7);
   assert.deepEqual(app.rows.slice(2, 5).map(row => row[0]), firstIds);
   assert.equal(new Set(app.rows.slice(1).map(row => row[0])).size, 6);
+});
+
+test('recurring task creation generates independent monthly occurrences with anchored dates and duration', () => {
+  const app = server([]);
+  const result = app.context.createTask({
+    taskName: 'Monthly review', category: 'Scheduling', priority: 'High',
+    startDate: '2024-01-31', endDate: '2024-02-02', description: 'Review project', clients: ['Acme'],
+    recurrence: { frequency: 'Monthly', throughDate: '2024-04-30' }
+  });
+  assert.equal(result.created, 4);
+  assert.equal(result.taskIds.length, 4);
+  assert.deepEqual(app.rows.slice(1).map(row => app.context.Utilities.formatDate(row[5], 'UTC', 'yyyy-MM-dd')),
+    ['2024-01-31', '2024-02-29', '2024-03-31', '2024-04-30']);
+  assert.deepEqual(app.rows.slice(1).map(row => app.context.Utilities.formatDate(row[6], 'UTC', 'yyyy-MM-dd')),
+    ['2024-02-02', '2024-03-02', '2024-04-02', '2024-05-02']);
+  assert.deepEqual(app.rows.slice(1).map(row => row[0]), Array.from(result.taskIds));
+  assert.ok(app.rows.slice(1).every(row => row[1] === 'Monthly review' && row[13] === ''));
+});
+
+test('recurring task generation supports weekly and biweekly intervals', () => {
+  for (const [frequency, throughDate, expected] of [
+    ['Weekly', '2026-01-16', ['2026-01-01', '2026-01-08', '2026-01-15']],
+    ['Biweekly', '2026-01-16', ['2026-01-01', '2026-01-15']]
+  ]) {
+    const app = server([]);
+    app.context.createTask({
+      taskName: 'Recurring review', category: 'Scheduling', priority: 'Medium',
+      startDate: '2026-01-01', endDate: '2026-01-02', description: '', clients: [],
+      recurrence: { frequency, throughDate }
+    });
+    assert.deepEqual(app.rows.slice(1).map(row => app.context.Utilities.formatDate(row[5], 'UTC', 'yyyy-MM-dd')), expected);
+  }
+});
+
+test('recurring task validation rejects unsupported, inverted, nested, and oversized series before writing', () => {
+  const app = server([]);
+  const base = {
+    taskName: 'Weekly review', category: 'Scheduling', priority: 'Medium',
+    startDate: '2026-01-01', endDate: '2026-01-01', description: '', clients: []
+  };
+  assert.throws(() => app.context.createTask({ ...base, recurrence: { frequency: 'Daily', throughDate: '2026-01-10' } }), /weekly, biweekly, or monthly/);
+  assert.throws(() => app.context.createTask({ ...base, recurrence: { frequency: 'Weekly', throughDate: '2025-12-31' } }), /must be after/);
+  assert.throws(() => app.context.createTask({ ...base, recurrence: { frequency: 'Weekly', throughDate: '2026-01-01' } }), /must be after/);
+  const nested = server([taskRow('VID-001')]);
+  assert.throws(() => nested.context.createTask({ ...base, parentTaskId: 'VID-001', recurrence: { frequency: 'Weekly', throughDate: '2026-01-10' } }), /standalone/);
+  assert.throws(() => app.context.createTask({ ...base, recurrence: { frequency: 'Weekly', throughDate: '2028-01-01' } }), /at most 100 occurrences/);
+  assert.equal(app.rows.length, 1);
+});
+
+test('recurrence controls enable only for standalone task creation', () => {
+  assert.match(html, /id="repeatTask" type="checkbox" onchange="updateTaskRecurrenceControl\(\)"/);
+  assert.match(html, /id="taskRecurrenceThrough" type="date" required/);
+  const app = client();
+  const state = app.getState();
+  const control = { hidden: false };
+  const checkbox = { checked: false };
+  const fields = { hidden: false, disabled: false };
+  const parent = { value: '' };
+  const save = { textContent: '' };
+  app.elements.set('taskRecurrenceControl', control);
+  app.elements.set('repeatTask', checkbox);
+  app.elements.set('taskRecurrenceFields', fields);
+  app.elements.set('parentTaskId', parent);
+  app.elements.set('saveBtn', save);
+
+  app.updateTaskRecurrenceControl();
+  assert.equal(fields.hidden, true);
+  assert.equal(fields.disabled, true);
+  checkbox.checked = true;
+  app.updateTaskRecurrenceControl();
+  assert.equal(fields.hidden, false);
+  assert.equal(fields.disabled, false);
+  assert.equal(save.textContent, 'Create recurring tasks');
+  parent.value = 'VID-001';
+  app.updateTaskRecurrenceControl();
+  assert.equal(checkbox.checked, false);
+  assert.equal(fields.disabled, true);
+  assert.equal(save.textContent, 'Create task');
+  state.editId = 'VID-002';
+  checkbox.checked = true;
+  app.updateTaskRecurrenceControl();
+  assert.equal(control.hidden, true);
+  assert.equal(checkbox.checked, false);
+  assert.equal(fields.disabled, true);
+});
+
+test('new task form submits the selected recurrence frequency and through date', () => {
+  const app = client();
+  const state = app.getState();
+  let submitted;
+  const runner = {
+    withRejectionHandler() { return runner; },
+    withSuccessHandler() { return runner; },
+    withFailureHandler() { return runner; },
+    createTask(data) { submitted = data; }
+  };
+  app.mutationRunner = () => runner;
+  const fields = {
+    taskName: { value: 'Weekly review' }, category: { value: 'Scheduling' }, priority: { value: 'Medium' },
+    startDate: { value: '2026-01-05' }, endDate: { value: '2026-01-06' }, description: { value: 'Review progress' },
+    parentTaskId: { value: '' }, taskHours: { value: '0', readOnly: true }, repeatTask: { checked: true },
+    taskRecurrenceThrough: { value: '2026-02-02' }, taskRecurrenceFrequency: { value: 'Weekly' },
+    saveBtn: { disabled: false, textContent: '' }, formError: { style: {}, textContent: '' }
+  };
+  Object.entries(fields).forEach(([id, element]) => app.elements.set(id, element));
+  app.saveTask({ preventDefault() {} });
+  assert.equal(submitted.taskName, 'Weekly review');
+  assert.deepEqual({ ...submitted.recurrence }, { frequency: 'Weekly', throughDate: '2026-02-02' });
+  assert.equal(state.writing, false);
 });
 
 test('subtask client tags use each child assignment, show Unassigned, and escape all names', () => {
