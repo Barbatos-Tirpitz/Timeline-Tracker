@@ -10,6 +10,7 @@ Each user or team deploys its own copy of the spreadsheet and bound Apps Script 
 
 - **All tasks:** Search, filter, sort, paginate, and bulk-update tasks.
 - **Timeline:** View planned work by day, week, biweekly period, or month; drag task bars to reschedule.
+- **Recurring tasks:** Generate independent weekly, biweekly, or monthly task copies through an inclusive end date (up to 100 occurrences).
 - **Task hierarchy:** Group subtasks under parent tasks, track their progress and hours, and collapse or expand them in the timeline. The hierarchy supports one subtask level.
 - **Metrics:** Review completions, scheduled hours, overdue and blocked work, and period summaries.
 - **Invoices:** Prepare and save biweekly or custom-period hourly invoices for clients, then print or export copies.
@@ -54,10 +55,11 @@ Create, edit, search, and filter tasks while keeping their details organized.
 | Gantt Timeline | Visualize tasks against a calendar |
 | Drag Scheduling | Reschedule individual tasks through drag-and-drop |
 | Task Hierarchy | Organize work using parent tasks and subtasks |
+| Recurring Tasks | Generate standalone weekly, biweekly, or monthly task occurrences through a chosen date |
 | Collapse / Expand | Show or hide subtasks in the timeline |
 | Progress Tracking | Monitor task completion and status |
 | Search and Filters | Find tasks based on available criteria |
-| Metrics Workspace | Daily, weekly, biweekly, monthly, yearly, and custom-date task/hour summaries |
+| Metrics Workspace | Period summaries, finish variance, and date-stamped time-entry reports |
 | Invoices | Biweekly hourly billing, saved client copies, paid tracking, PDF print and CSV export |
 | Finance | Expense, earnings, and recurring ledgers with a per-currency income/spending dashboard |
 
@@ -91,6 +93,8 @@ Every top-level task shows a read-only total of its direct subtasks, including z
 
 Global and dashboard hour metrics sum subtask hours once, never parent rollups. Dashboard date/client filters apply to subtask records and use the full hierarchy to avoid double counting context parents. These are stored task totals for the selected schedule range, not dated work-session logs or prorated hours.
 
+Dated time entries can be logged from a task's edit dialog with a work date, hours, and optional note. They are stored in a separate `Time_Entry_Master` sheet, can be deleted individually, and are removed when their task is deleted. They do not change the task Hours value or invoice lines.
+
 Bulk Apply Hours assigns the same chosen value to every selected child, leaving unchecked fields unchanged. Hours-only saves write column P and Updated At only. They never alter timeline bar position/width/height, task dates, Duration formulas or invoice hours. Transfers/deletions change parent rollups on refresh but preserve the hours of remaining tasks. Invoice line hours and saved invoice snapshots stay independently controlled.
 
 Hours is stored in column P, after Clients in O. Existing/blank task hours read as zero without implicit writes. Before recording hours on an existing spreadsheet, run **Task Manager > Upgrade Categories, Clients and Hours (with backup)**. The upgrade rejects occupied P, preserves prior task columns/formulas, and creates a backup before adding the header. Deploy both frontend and backend together and verify the upgrade on a copied spreadsheet first.
@@ -115,7 +119,7 @@ Four actionable tiles show actual completions in the selected period, recorded h
 
 **Planned vs Actual Finish** compares each leaf task completed in the selected period with its planned end date. Each row shows both dates and a text result: a number of days early, on time, or a number of days late. Tasks without either date are excluded. Late finishes appear first, with up to eight rows shown and a View completed action for the full list. Completion is scoped by actual completion date, so the planned end can fall outside the selected period. Parent containers are excluded to avoid counting the same work twice.
 
-**Hours by Parent Task** shows the five largest groups by recorded subtask hours in the schedule window, with a View work shortcut for the full set. Shared-client subtasks count once for the selected client filter; hours are not split or added again for parent rollups. These are stored task totals, not hours worked on each calendar day. Accurate daily time-spent charts require dated time entries, which are not implemented.
+**Hours by Parent Task** shows the five largest groups by task-level subtask hours in the schedule window, with a View work shortcut for the full set. Shared-client subtasks count once for the selected client filter; hours are not split or added again for parent rollups. **Time logged by date** separately reports dated entries in the selected period and client scope.
 
 **Needs Attention** prioritizes current overdue tasks, blocked work in the schedule window, work due today, and completed scheduled videos with zero recorded subtask hours. It shows at most eight rows, with View all, edit links, quick status changes and subtask-hour saves. Top-level tasks link to add or edit subtasks instead of exposing an hour input. Actions use the existing write/cooldown guards and one follow-up task refresh.
 

@@ -417,17 +417,61 @@ function createTask(formData) {
       );
     }
 
-    const taskId = appendTasks_(sheet, [{ taskName, category, priority, startDate, endDate, description, clients, parentTaskId, hours }])[0];
+    let records = [{ taskName, category, priority, startDate, endDate, description, clients, parentTaskId, hours }];
+    if (formData.recurrence) {
+      if (parentTaskId) throw new Error('Recurring tasks must be standalone tasks.');
+      const startKey = Utilities.formatDate(startDate, SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+      const endKey = Utilities.formatDate(endDate, SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+      const durationDays = Math.round((Date.parse(endKey + 'T00:00:00Z') - Date.parse(startKey + 'T00:00:00Z')) / 86400000);
+      records = recurringTaskStarts_(startKey, formData.recurrence).map(date => ({
+        taskName, category, priority, startDate: parseTaskDate_(date),
+        endDate: parseTaskDate_(shiftTaskDateKey_(date, durationDays)), description, clients, parentTaskId: '', hours: 0
+      }));
+    }
+    const taskIds = appendTasks_(sheet, records);
 
     return {
       success: true,
-      taskId: taskId,
-      message: taskId + ' created successfully!'
+      taskId: taskIds[0],
+      taskIds,
+      created: taskIds.length,
+      message: taskIds.length === 1 ? taskIds[0] + ' created successfully!' : taskIds.length + ' recurring tasks created.'
     };
 
   } finally {
     lock.releaseLock();
   }
+}
+
+function shiftTaskDateKey_(value, days) {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
+function recurringTaskStarts_(startKey, recurrence) {
+  const frequency = String(recurrence.frequency || '');
+  if (!['Weekly', 'Biweekly', 'Monthly'].includes(frequency)) throw new Error('Choose a weekly, biweekly, or monthly task frequency.');
+  const throughDate = parseTaskDate_(recurrence.throughDate);
+  if (!throughDate) throw new Error('Choose a valid recurring-task through date.');
+  const timezone = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
+  const throughKey = Utilities.formatDate(throughDate, timezone, 'yyyy-MM-dd');
+  if (throughKey <= startKey) throw new Error('The recurrence through date must be after the first task date.');
+  const anchorDay = Number(startKey.slice(8, 10));
+  const starts = [];
+  let current = startKey;
+  while (current <= throughKey) {
+    starts.push(current);
+    if (starts.length > 100) throw new Error('A recurring task can create at most 100 occurrences. Choose an earlier through date.');
+    if (frequency === 'Weekly' || frequency === 'Biweekly') {
+      current = shiftTaskDateKey_(current, frequency === 'Weekly' ? 7 : 14);
+    } else {
+      const [year, month] = current.split('-').map(Number);
+      const nextMonth = new Date(Date.UTC(year, month, 1));
+      const lastDay = new Date(Date.UTC(nextMonth.getUTCFullYear(), nextMonth.getUTCMonth() + 1, 0)).getUTCDate();
+      current = `${nextMonth.getUTCFullYear()}-${String(nextMonth.getUTCMonth() + 1).padStart(2, '0')}-${String(Math.min(anchorDay, lastDay)).padStart(2, '0')}`;
+    }
+  }
+  return starts;
 }
 
 // Finds a task by its ID rather than relying on a row number.
@@ -560,6 +604,160 @@ function updateTaskHours(taskId, value, expectedUpdatedAt) {
     selection.sheet.getRange(row, 16).setValue(hours);
     selection.sheet.getRange(row, 13).setValue(nextTaskUpdatedAt_(currentUpdatedAt));
     return { success: true, taskId: selection.ids[0], hours, message: selection.ids[0] + ' hours updated.' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+const TIME_ENTRY_CONFIG = {
+  SHEET: 'Time_Entry_Master',
+  HEADERS: ['Entry ID', 'Task ID', 'Work Date', 'Hours', 'Note', 'Created At']
+};
+
+function normalizeTimeEntryHours_(value) {
+  const hours = Number(value);
+  if (!Number.isFinite(hours) || hours <= 0 || hours > 24 || Math.abs(hours * 100 - Math.round(hours * 100)) > 0.000001) {
+    throw new Error('Time entries must be greater than 0 and no more than 24 hours, with at most two decimal places.');
+  }
+  return Math.round(hours * 100) / 100;
+}
+
+function timeEntrySheet_(create) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(TIME_ENTRY_CONFIG.SHEET);
+  if (!sheet && create) sheet = ss.insertSheet(TIME_ENTRY_CONFIG.SHEET);
+  if (!sheet) return null;
+  if (!sheet.getLastRow()) {
+    if (create) sheet.getRange(1, 1, 1, TIME_ENTRY_CONFIG.HEADERS.length).setValues([TIME_ENTRY_CONFIG.HEADERS]);
+    return create ? sheet : null;
+  }
+  const headers = sheet.getRange(1, 1, 1, TIME_ENTRY_CONFIG.HEADERS.length).getValues()[0];
+  if (headers.join('|') !== TIME_ENTRY_CONFIG.HEADERS.join('|')) throw new Error('Time_Entry_Master headers do not match.');
+  return sheet;
+}
+
+function deleteTimeEntriesForTasks_(taskIds) {
+  const sheet = timeEntrySheet_(false);
+  if (!sheet || sheet.getLastRow() < 2) return;
+  const ids = new Set(taskIds.map(String));
+  const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, TIME_ENTRY_CONFIG.HEADERS.length).getValues();
+  rows.map((row, index) => ids.has(String(row[1] || '')) ? index + 2 : 0)
+    .filter(Boolean).reverse().forEach(row => sheet.deleteRows(row, 1));
+}
+
+function readTimeEntry_(row, timezone) {
+  const date = row[2] instanceof Date
+    ? Utilities.formatDate(row[2], timezone, 'yyyy-MM-dd') : String(row[2] || '').trim();
+  if (!String(row[0] || '').trim() || !String(row[1] || '').trim() || !parseLocalDate(date)) {
+    throw new Error('Stored time entry is invalid.');
+  }
+  return {
+    id: String(row[0]), taskId: String(row[1]), date,
+    hours: normalizeTimeEntryHours_(row[3]), note: String(row[4] || ''),
+    createdAt: String(row[5] || '')
+  };
+}
+
+function getTaskTimeEntries(taskId) {
+  taskId = String(taskId || '').trim();
+  if (!taskId) throw new Error('Task ID is required.');
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const taskSheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+  if (!taskSheet) throw new Error('Task_Master sheet not found.');
+  findTaskRow(taskSheet, taskId);
+  const sheet = timeEntrySheet_(false);
+  if (!sheet || sheet.getLastRow() < 2) return { success: true, entries: [] };
+  const timezone = ss.getSpreadsheetTimeZone();
+  const entries = sheet.getRange(2, 1, sheet.getLastRow() - 1, TIME_ENTRY_CONFIG.HEADERS.length).getValues()
+    .filter(row => String(row[1] || '') === taskId)
+    .map(row => readTimeEntry_(row, timezone))
+    .sort((first, second) => second.date.localeCompare(first.date) || second.createdAt.localeCompare(first.createdAt));
+  return { success: true, entries };
+}
+
+function getTimeEntrySummary(startValue, endValue, clientFilter) {
+  const start = parseTaskDate_(startValue);
+  const end = parseTaskDate_(endValue);
+  if (!start || !end || end < start) throw new Error('Choose a valid time-entry date range.');
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const taskSheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+  if (!taskSheet) throw new Error('Task_Master sheet not found.');
+  const timezone = ss.getSpreadsheetTimeZone();
+  const taskRows = taskSheet.getLastRow() > 1
+    ? taskSheet.getRange(2, 1, taskSheet.getLastRow() - 1, taskReadWidth_(taskSheet)).getValues() : [];
+  const tasks = new Map(taskRows.filter(row => row[0]).map(row => [String(row[0]), {
+    name: String(row[1] || ''), clients: hasClientsColumn_(taskSheet) ? readClients_(row[14], row[0]) : []
+  }]));
+  const sheet = timeEntrySheet_(false);
+  if (!sheet || sheet.getLastRow() < 2) return { success: true, entries: [], totalHours: 0 };
+  const startKey = Utilities.formatDate(start, timezone, 'yyyy-MM-dd');
+  const endKey = Utilities.formatDate(end, timezone, 'yyyy-MM-dd');
+  const filter = String(clientFilter || '');
+  const entries = sheet.getRange(2, 1, sheet.getLastRow() - 1, TIME_ENTRY_CONFIG.HEADERS.length).getValues()
+    .map(row => readTimeEntry_(row, timezone))
+    .filter(entry => {
+      const task = tasks.get(entry.taskId);
+      if (!task || entry.date < startKey || entry.date > endKey) return false;
+      if (!filter) return true;
+      if (filter === 'unassigned') return !task.clients.length;
+      if (!filter.startsWith('client:')) return false;
+      const client = filter.slice(7).toLowerCase();
+      return task.clients.some(name => name.toLowerCase() === client);
+    })
+    .map(entry => ({ ...entry, taskName: tasks.get(entry.taskId).name }))
+    .sort((first, second) => second.date.localeCompare(first.date) || second.createdAt.localeCompare(first.createdAt));
+  return { success: true, entries, totalHours: entries.reduce((sum, entry) => sum + entry.hours, 0) };
+}
+
+function saveTaskTimeEntry(taskId, dateValue, hoursValue, noteValue) {
+  taskId = String(taskId || '').trim();
+  if (!taskId) throw new Error('Task ID is required.');
+  const workDate = parseTaskDate_(dateValue);
+  if (!workDate) throw new Error('Choose a valid work date.');
+  const hours = normalizeTimeEntryHours_(hoursValue);
+  const note = String(noteValue || '').trim();
+  if (note.length > 200) throw new Error('Time entry notes can be up to 200 characters.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const taskSheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+    if (!taskSheet) throw new Error('Task_Master sheet not found.');
+    findTaskRow(taskSheet, taskId);
+    const sheet = timeEntrySheet_(true);
+    const entry = {
+      id: 'TE-' + Utilities.getUuid(), taskId, date: Utilities.formatDate(workDate, ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd'),
+      hours, note, createdAt: new Date().toISOString()
+    };
+    const row = sheet.getLastRow() + 1;
+    sheet.getRange(row, 1, 1, TIME_ENTRY_CONFIG.HEADERS.length).setValues([[
+      entry.id, entry.taskId, workDate, entry.hours, entry.note, entry.createdAt
+    ]]);
+    sheet.getRange(row, 3).setNumberFormat('mmm d, yyyy');
+    return { success: true, entry, message: 'Time entry saved.' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteTaskTimeEntry(taskId, entryId) {
+  taskId = String(taskId || '').trim();
+  entryId = String(entryId || '').trim();
+  if (!taskId || !entryId) throw new Error('Task and time entry IDs are required.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const taskSheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+    if (!taskSheet) throw new Error('Task_Master sheet not found.');
+    findTaskRow(taskSheet, taskId);
+    const sheet = timeEntrySheet_(false);
+    if (!sheet || sheet.getLastRow() < 2) throw new Error('Time entry not found.');
+    const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, TIME_ENTRY_CONFIG.HEADERS.length).getValues();
+    const index = rows.findIndex(row => String(row[0] || '') === entryId && String(row[1] || '') === taskId);
+    if (index < 0) throw new Error('Time entry not found.');
+    sheet.deleteRows(index + 2, 1);
+    return { success: true, message: 'Time entry deleted.' };
   } finally {
     lock.releaseLock();
   }
@@ -1284,6 +1482,7 @@ function deleteTasks(taskIds, parentTaskId) {
     contiguousRows_(selection.selected).reverse().forEach(group => {
       selection.sheet.deleteRows(group[0].rowNumber, group.length);
     });
+    deleteTimeEntriesForTasks_(selection.ids);
     SpreadsheetApp.flush();
     return {
       success: true,
