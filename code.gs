@@ -794,6 +794,59 @@ function saveTaskTimeEntry(taskId, dateValue, hoursValue, noteValue) {
   }
 }
 
+function saveTaskTimeEntries(parentTaskId, dateValue, entriesValue) {
+  parentTaskId = String(parentTaskId || '').trim();
+  if (!parentTaskId) throw new Error('Parent task ID is required.');
+  const workDate = parseTaskDate_(dateValue);
+  if (!workDate) throw new Error('Choose a valid work date.');
+  if (!Array.isArray(entriesValue) || !entriesValue.length || entriesValue.length > 100) {
+    throw new Error('Choose between 1 and 100 subtask entries.');
+  }
+  const seen = new Set();
+  const entries = entriesValue.map(value => {
+    const taskId = String(value && value.taskId || '').trim();
+    if (!taskId) throw new Error('Every time entry needs a task ID.');
+    if (seen.has(taskId)) throw new Error('Duplicate subtask IDs are not allowed.');
+    seen.add(taskId);
+    const hours = normalizeTimeEntryHours_(value.hours);
+    const note = String(value.note || '').trim();
+    if (note.length > 200) throw new Error('Time entry notes can be up to 200 characters.');
+    return { taskId, hours, note };
+  });
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const taskSheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+    if (!taskSheet) throw new Error('Task_Master sheet not found.');
+    findTaskRow(taskSheet, parentTaskId);
+    entries.forEach(entry => {
+      assertTimeEntrySubtask_(taskSheet, entry.taskId);
+      const taskRow = findTaskRow(taskSheet, entry.taskId);
+      if (String(taskSheet.getRange(taskRow, 14).getValue() || '').trim() !== parentTaskId) {
+        throw new Error('Every selected task must be a direct subtask of the chosen parent.');
+      }
+    });
+
+    const sheet = timeEntrySheet_(true);
+    const timezone = ss.getSpreadsheetTimeZone();
+    const savedEntries = entries.map(entry => ({
+      id: 'TE-' + Utilities.getUuid(), taskId: entry.taskId,
+      date: Utilities.formatDate(workDate, timezone, 'yyyy-MM-dd'),
+      hours: entry.hours, note: entry.note, createdAt: new Date().toISOString()
+    }));
+    const firstRow = sheet.getLastRow() + 1;
+    sheet.getRange(firstRow, 1, savedEntries.length, TIME_ENTRY_CONFIG.HEADERS.length).setValues(savedEntries.map(entry => [
+      entry.id, entry.taskId, workDate, entry.hours, entry.note, entry.createdAt
+    ]));
+    sheet.getRange(firstRow, 3, savedEntries.length, 1).setNumberFormat('mmm d, yyyy');
+    return { success: true, entries: savedEntries, message: 'Time entries saved.' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function deleteTaskTimeEntry(taskId, entryId) {
   taskId = String(taskId || '').trim();
   entryId = String(entryId || '').trim();

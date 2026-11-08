@@ -744,6 +744,13 @@
   .subtask-edit .form-grid { gap: 12px; }
   .subtask-edit .apply-field { display: flex; align-items: center; gap: 6px; }
   .subtask-edit .apply-field input { width: 16px; min-height: 0; height: 16px; }
+  .bulk-time-entry-rows { display: grid; gap: 8px; }
+  .bulk-time-entry-row { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(110px, .45fr) minmax(180px, 1fr); align-items: end; gap: 8px; padding: 8px 0; border-top: 1px solid var(--border); }
+  .bulk-time-entry-task { align-self: center; font-weight: 600; }
+  .bulk-time-entry-task small { display: block; color: var(--muted); font-weight: 400; }
+  .bulk-time-entry-row label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; }
+  .bulk-time-entry-row input { min-width: 0; }
+  @media (max-width: 620px) { .bulk-time-entry-row { grid-template-columns: minmax(0, 1fr) minmax(90px, .5fr); } .bulk-time-entry-task { grid-column: 1 / -1; } }
 
   .subtask-transfer {
     display: flex;
@@ -1627,7 +1634,7 @@
     financeRefreshing: false,
     financeRefreshPending: new Set(),
     financeFx: { base: 'USD', rates: null, rateDate: '', requestedOn: '', source: '', loaded: false, loading: false, stale: false, error: '', request: 0 },
-    subtaskPanel: { parentId: null, page: 1, selected: new Set(), draft: '', quantity: 1, patch: {}, editOpen: false, status: 'To Do' },
+    subtaskPanel: { parentId: null, page: 1, selected: new Set(), draft: '', quantity: 1, patch: {}, editOpen: false, status: 'To Do', timeEntryOpen: false, timeEntryDate: '', timeEntryDrafts: Object.create(null) },
     list: {
       period: 'all', anchor: null,
       page: 1, pageSize: 25, sort: 'id', direction: 1,
@@ -3577,6 +3584,14 @@ html += `<div class="task-cell"
               <span>Subtasks page ${subtaskState.page} / ${pages}</span>
               <button type="button" class="btn" aria-label="Next subtask page" ${subtaskState.page === pages ? 'disabled' : ''} onclick="changePanelPage(1)">&#8594;</button>
             </div>
+            <details class="subtask-edit subtask-section" ${subtaskState.timeEntryOpen ? 'open' : ''} ontoggle="state.subtaskPanel.timeEntryOpen=this.open">
+              <summary>Log time for selected subtasks</summary>
+              <div class="form-grid">
+                <label class="form-field">Work date<input class="field-control" id="panelTimeEntryDate" type="date" value="${esc(subtaskState.timeEntryDate)}" onchange="state.subtaskPanel.timeEntryDate=this.value;updatePanelTimeEntryControls()"></label>
+                <div class="form-field full" id="panelTimeEntryRows">${renderPanelTimeEntryRows()}</div>
+              </div>
+              <div class="task-time-entry-actions"><output class="invoice-field-error" id="panelTimeEntryError" role="alert"></output><button type="button" class="btn btn-primary" id="panelLogTimeBtn" onclick="savePanelTimeEntries()">Log time</button></div>
+            </details>
             <details class="subtask-edit subtask-section" ${subtaskState.editOpen ? 'open' : ''} ontoggle="state.subtaskPanel.editOpen=this.open"><summary>Bulk edit selected subtasks</summary>
               <div class="form-grid">
                 ${[['category', 'Category'], ['priority', 'Priority'], ['hours', 'Hours per subtask'], ['startDate', 'Start date'], ['endDate', 'End date']].map(([key, label]) => {
@@ -3697,7 +3712,7 @@ function createSubtask() {
   }
 
   function resetSubtaskPanel(parentId = null) {
-    state.subtaskPanel = { parentId, page: 1, selected: new Set(), draft: '', quantity: 1, patch: {}, editOpen: false, status: 'To Do' };
+    state.subtaskPanel = { parentId, page: 1, selected: new Set(), draft: '', quantity: 1, patch: {}, editOpen: false, status: 'To Do', timeEntryOpen: false, timeEntryDate: '', timeEntryDrafts: Object.create(null) };
     state.clientSelections.bulkClients = [];
   }
 
@@ -3771,6 +3786,8 @@ function createSubtask() {
     document.querySelectorAll('[data-child-id]').forEach(input => {
       input.closest('.subtask-row').classList.toggle('is-selected', panel.selected.has(input.dataset.childId));
     });
+    renderPanelTimeEntryRows();
+    updatePanelTimeEntryControls();
     updateBulkEditSummary();
   }
 
@@ -3840,6 +3857,99 @@ function createSubtask() {
       $('bulkApplyBtn').textContent = `Apply ${fields.length} ${fields.length === 1 ? 'field' : 'fields'} to ${panel.selected.size} ${panel.selected.size === 1 ? 'subtask' : 'subtasks'}`;
       $('bulkApplyBtn').disabled = !fields.length || !panel.selected.size || state.writing || state.syncing;
     }
+  }
+
+  function renderPanelTimeEntryRows() {
+    const panel = state.subtaskPanel;
+    const container = $('panelTimeEntryRows');
+    const selected = [...panel.selected].map(id => state.taskById.get(id)).filter(Boolean);
+    const parentIds = new Set(state.tasks.map(task => task.parentTaskId).filter(Boolean));
+    const markup = selected.length ? `<div class="bulk-time-entry-rows">${selected.map((task, index) => {
+      const taskId = esc(JSON.stringify(task.id));
+      const draft = panel.timeEntryDrafts[task.id] || {};
+      const hasChildren = parentIds.has(task.id);
+      const disabled = hasChildren || state.writing || state.syncing;
+      return `<div class="bulk-time-entry-row">
+        <div class="bulk-time-entry-task">${esc(task.name)}<small>${esc(task.id)}${hasChildren ? ' · Log on leaf subtasks' : ''}</small></div>
+        <label for="panelTimeHours${index}">Hours *<input class="field-control" id="panelTimeHours${index}" type="number" min="0.01" max="24" step="0.01" value="${esc(draft.hours || '')}" ${disabled ? 'disabled' : ''} oninput="setPanelTimeEntryDraft(${taskId},'hours',this.value)"></label>
+        <label for="panelTimeNote${index}">Note<input class="field-control" id="panelTimeNote${index}" maxlength="200" value="${esc(draft.note || '')}" ${disabled ? 'disabled' : ''} oninput="setPanelTimeEntryDraft(${taskId},'note',this.value)"></label>
+      </div>`;
+    }).join('')}</div>` : '<div class="task-meta">Select subtasks above to log time.</div>';
+    if (container) container.innerHTML = markup;
+    return markup;
+  }
+
+  function setPanelTimeEntryDraft(taskId, field, value) {
+    const drafts = state.subtaskPanel.timeEntryDrafts;
+    if (!drafts[taskId]) drafts[taskId] = { hours: '', note: '' };
+    drafts[taskId][field] = value;
+    updatePanelTimeEntryControls();
+  }
+
+  function updatePanelTimeEntryControls() {
+    const panel = state.subtaskPanel;
+    const button = $('panelLogTimeBtn');
+    if (!button) return;
+    const selected = [...panel.selected].map(id => state.taskById.get(id)).filter(Boolean);
+    const parentIds = new Set(state.tasks.map(task => task.parentTaskId).filter(Boolean));
+    const dateValid = Boolean(parseDate(panel.timeEntryDate));
+    const withinLimit = selected.length <= 100;
+    const error = $('panelTimeEntryError');
+    if (error && selected.length > 100) error.textContent = 'Log time for no more than 100 subtasks at a time.';
+    else if (error && error.textContent === 'Log time for no more than 100 subtasks at a time.') error.textContent = '';
+    const rowsValid = selected.length > 0 && withinLimit && selected.every(task => {
+      const hours = Number(panel.timeEntryDrafts[task.id]?.hours);
+      const note = String(panel.timeEntryDrafts[task.id]?.note || '');
+      return !parentIds.has(task.id) && Number.isFinite(hours) && hours > 0 && hours <= 24 &&
+        Math.abs(hours * 100 - Math.round(hours * 100)) < 0.000001 && note.length <= 200;
+    });
+    button.textContent = `Log time for ${selected.length} ${selected.length === 1 ? 'subtask' : 'subtasks'}`;
+    button.disabled = !dateValid || !rowsValid || state.writing || state.syncing;
+  }
+
+  function savePanelTimeEntries() {
+    if (state.writing || state.syncing) return;
+    const panel = state.subtaskPanel;
+    const parent = state.taskById.get(panel.parentId);
+    const tasks = [...panel.selected].map(id => state.taskById.get(id)).filter(Boolean);
+    if (!parent || !tasks.length) return;
+    if (tasks.length > 100) {
+      $('panelTimeEntryError').textContent = 'Log time for no more than 100 subtasks at a time.';
+      return;
+    }
+    if (!parseDate(panel.timeEntryDate)) {
+      $('panelTimeEntryError').textContent = 'Choose a valid work date.';
+      return;
+    }
+    const parentIds = new Set(state.tasks.map(task => task.parentTaskId).filter(Boolean));
+    const entries = [];
+    for (const task of tasks) {
+      if (parentIds.has(task.id)) {
+        $('panelTimeEntryError').textContent = `Log time on leaf subtasks, not ${taskLabel(task)}.`;
+        return;
+      }
+      const draft = panel.timeEntryDrafts[task.id] || {};
+      const hours = Number(draft.hours);
+      const note = String(draft.note || '').trim();
+      if (!Number.isFinite(hours) || hours <= 0 || hours > 24 || Math.abs(hours * 100 - Math.round(hours * 100)) >= 0.000001) {
+        $('panelTimeEntryError').textContent = `Enter valid hours from 0.01 to 24 for ${taskLabel(task)}.`;
+        return;
+      }
+      if (note.length > 200) {
+        $('panelTimeEntryError').textContent = `Notes for ${taskLabel(task)} can be up to 200 characters.`;
+        return;
+      }
+      entries.push({ taskId: task.id, hours, note });
+    }
+    $('panelTimeEntryError').textContent = '';
+    mutationRunner().withSuccessHandler(result => {
+      tasks.forEach(task => { delete panel.timeEntryDrafts[task.id]; });
+      showToast(`Logged time for ${result.entries.length} subtasks under ${taskLabel(parent)}.`);
+      loadTasks();
+    }).withFailureHandler(error => {
+      $('panelTimeEntryError').textContent = 'Unable to log time: ' + (error.message || error);
+      updatePanelTimeEntryControls();
+    }).saveTaskTimeEntries(parent.id, panel.timeEntryDate, entries);
   }
 
   function runPanelSubtaskAction(action) {
