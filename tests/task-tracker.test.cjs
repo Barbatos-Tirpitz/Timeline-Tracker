@@ -301,6 +301,7 @@ function server(records, missingSheet = false, failAfter = Infinity, documentLoc
   const writes = [];
   const backups = [];
   let releases = 0;
+  let uuidCounter = 0;
   const sheet = {
     getLastRow: () => rows.length,
     getMaxColumns: () => maxColumns,
@@ -376,7 +377,7 @@ function server(records, missingSheet = false, failAfter = Infinity, documentLoc
         if (format === 'yyyy-MM-dd') return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
         return date.toISOString().slice(0, 10);
       },
-      getUuid: () => 'time-entry-test-id'
+      getUuid: () => 'time-entry-test-id-' + (++uuidCounter)
     },
     SpreadsheetApp: { getActiveSpreadsheet: () => spreadsheet, getUi: () => ui, flush() {} },
     LockService: {
@@ -452,6 +453,35 @@ test('dated time entries use a separate lazy ledger and validate dates, hours, t
   assert.equal(app.context.deleteTasks(['VID-001']).success, true);
   assert.equal(app.ledgers.get('Time_Entry_Master').rows.length, 1);
   assert.deepEqual(Array.from(app.ledgers.get('Time_Entry_Master').deletions.at(-1)), [2, 2]);
+});
+
+test('bulk time entries validate every direct leaf subtask before one ledger write', () => {
+  const app = server([
+    taskRow('VID-000'), taskRow('VID-001', 'VID-000'), taskRow('VID-002', 'VID-000'),
+    taskRow('VID-010'), taskRow('VID-011', 'VID-010')
+  ]);
+  const saved = app.context.saveTaskTimeEntries('VID-000', '2026-11-06', [
+    { taskId: 'VID-001', hours: 1.25, note: 'Review' },
+    { taskId: 'VID-002', hours: 0.5, note: 'Polish' }
+  ]);
+  assert.deepEqual(Array.from(saved.entries, entry => [entry.taskId, entry.date, entry.hours, entry.note]), [
+    ['VID-001', '2026-11-06', 1.25, 'Review'], ['VID-002', '2026-11-06', 0.5, 'Polish']
+  ]);
+  assert.equal(app.ledgers.get('Time_Entry_Master').rows.length, 3);
+  assert.equal(app.ledgers.get('Time_Entry_Master').rows[1][0] === app.ledgers.get('Time_Entry_Master').rows[2][0], false);
+  assert.equal(app.rows[2][15], undefined);
+  assert.equal(app.rows[3][15], undefined);
+
+  assert.throws(() => app.context.saveTaskTimeEntries('VID-000', '2026-11-06', [
+    { taskId: 'VID-001', hours: 1, note: '' }, { taskId: 'VID-011', hours: 1, note: '' }
+  ]), /direct subtask/);
+  assert.throws(() => app.context.saveTaskTimeEntries('VID-000', '2026-11-06', [
+    { taskId: 'VID-001', hours: 1, note: '' }, { taskId: 'VID-001', hours: 1, note: '' }
+  ]), /Duplicate/);
+  assert.throws(() => app.context.saveTaskTimeEntries('VID-000', '2026-11-06', [
+    { taskId: 'VID-001', hours: 1, note: '' }, { taskId: 'MISSING', hours: 1, note: '' }
+  ]), /not found/);
+  assert.equal(app.ledgers.get('Time_Entry_Master').rows.length, 3);
 });
 
 test('dated subtask entries feed task and parent progress without writing Task_Master Hours', () => {
@@ -532,6 +562,51 @@ test('bulk manual-Hours edits are rejected for selected tasks with dated entries
   app.runPanelSubtaskAction('edit');
 
   assert.match(app.elements.get('formError').textContent, /Manual Hours cannot be changed.*dated entries/);
+});
+
+test('parent subtask panel logs distinct entries for selected leaf subtasks in one request', () => {
+  const app = client();
+  const state = app.getState();
+  const parent = listTask('VID-PARENT', '', { name: 'Project' });
+  const first = listTask('VID-CHILD-1', parent.id, { name: 'Review' });
+  const second = listTask('VID-CHILD-2', parent.id, { name: 'Polish' });
+  state.tasks = [parent, first, second];
+  state.taskById = new Map(state.tasks.map(task => [task.id, task]));
+  app.resetSubtaskPanel(parent.id);
+  state.subtaskPanel.selected.add(first.id);
+  state.subtaskPanel.selected.add(second.id);
+  state.subtaskPanel.timeEntryDate = '2026-11-06';
+  app.setPanelTimeEntryDraft(first.id, 'hours', '1.25');
+  app.setPanelTimeEntryDraft(first.id, 'note', 'Review');
+  app.setPanelTimeEntryDraft(second.id, 'hours', '0.5');
+  app.setPanelTimeEntryDraft(second.id, 'note', 'Polish');
+  app.renderPanelTimeEntryRows();
+  const rows = app.elements.get('panelTimeEntryRows').innerHTML;
+  assert.match(rows, /Review/);
+  assert.match(rows, /Polish/);
+  assert.match(rows, /value="1\.25"/);
+  assert.match(rows, /value="0\.5"/);
+
+  let success;
+  let request;
+  let refreshed = false;
+  const runner = {
+    withSuccessHandler(callback) { success = callback; return this; },
+    withFailureHandler() { return this; },
+    saveTaskTimeEntries(...args) { request = args; success({ success: true, entries: [{}, {}] }); }
+  };
+  app.mutationRunner = () => runner;
+  app.showToast = () => {};
+  app.loadTasks = () => { refreshed = true; };
+  app.savePanelTimeEntries();
+
+  assert.equal(request[0], parent.id);
+  assert.equal(request[1], '2026-11-06');
+  assert.deepEqual(Array.from(request[2], entry => [entry.taskId, entry.hours, entry.note]), [
+    ['VID-CHILD-1', 1.25, 'Review'], ['VID-CHILD-2', 0.5, 'Polish']
+  ]);
+  assert.equal(refreshed, true);
+  assert.equal(Object.keys(state.subtaskPanel.timeEntryDrafts).length, 0);
 });
 
 test('task editor exposes dated time entry controls and renders a separate logged-hours list', () => {
