@@ -296,12 +296,11 @@ function getTasks() {
     }
 
     childStats[parentId].total++;
-    childStats[parentId].hourUnits += manualUnits + entryUnits;
-    childStats[parentId].completedHourUnits += entryUnits;
+    childStats[parentId].hourUnits += Math.round(totalTaskHours.get(String(row[0])) * 100);
 
     if (String(row[4]) === 'Done') {
       childStats[parentId].completed++;
-      childStats[parentId].completedHourUnits += manualUnits;
+      childStats[parentId].completedHourUnits += Math.round(totalTaskHours.get(String(row[0])) * 100);
     }
   });
 
