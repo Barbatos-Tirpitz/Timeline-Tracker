@@ -444,6 +444,9 @@ test('dated time entries use a separate lazy ledger and validate dates, hours, t
   assert.throws(() => app.context.deleteTaskTimeEntry('VID-001', 'TE-missing'), /Time entry not found/);
   assert.equal(app.context.deleteTaskTimeEntry('VID-001', saved.entry.id).success, true);
   assert.deepEqual(Array.from(app.context.getTaskTimeEntries('VID-001').entries), []);
+  const afterEntryDelete = app.context.getTasks().tasks;
+  assert.equal(afterEntryDelete.find(task => task.taskId === 'VID-001').totalHours, 0);
+  assert.equal(afterEntryDelete.find(task => task.taskId === 'VID-000').totalHours, 0);
   app.context.saveTaskTimeEntry('VID-001', '2026-11-04', 1, 'First');
   app.context.saveTaskTimeEntry('VID-001', '2026-11-05', 2, 'Second');
   assert.equal(app.context.deleteTasks(['VID-001']).success, true);
@@ -476,6 +479,8 @@ test('dated subtask entries feed task and parent progress without writing Task_M
   app.context.updateTaskStatus('VID-001', 'In Progress');
   const activeTasks = app.context.getTasks().tasks;
   assert.equal(activeTasks.find(task => task.taskId === 'VID-001').totalHours, 0.5);
+  assert.equal(activeTasks.find(task => task.taskId === 'VID-001').completedHours, 0.5);
+  assert.equal(activeTasks.find(task => task.taskId === 'VID-000').completedHours, 0.5);
   assert.equal(activeTasks.find(task => task.taskId === 'VID-001').completedHours, 0);
   assert.equal(activeTasks.find(task => task.taskId === 'VID-000').completedHours, 0);
 });
@@ -505,6 +510,8 @@ test('dated entries feed progress bars and lock manual Hours to avoid double cou
   child.status = 'In Progress';
   app.applyTaskHourRollups(state.tasks);
   assert.equal(child.totalHours, 0.5);
+  assert.equal(child.completedHours, 0.5);
+  assert.equal(parent.completedHours, 0.5);
   assert.equal(child.completedHours, 0);
   assert.equal(parent.completedHours, 0);
 });
