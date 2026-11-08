@@ -390,6 +390,7 @@ function server(records, missingSheet = false, failAfter = Infinity, documentLoc
 }
 
 test('backend and frontend scripts parse', () => {
+  assert.doesNotMatch(backend, /\|\|=|&&=|\?\?=/);
   new vm.Script(backend);
   new vm.Script(html.match(/<script>([\s\S]*?)<\/script>/)[1]);
 });

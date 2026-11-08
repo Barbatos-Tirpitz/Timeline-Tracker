@@ -295,7 +295,7 @@ function getTasks() {
 
     childStats[parentId].total++;
     childStats[parentId].hourUnits += manualUnits;
-    childStats[parentId].hasTimeEntries ||= hasEntries;
+    childStats[parentId].hasTimeEntries = childStats[parentId].hasTimeEntries || hasEntries;
 
     childStats[parentId].completedHourUnits += entryUnits;
     if (String(row[4]) === 'Done') {
