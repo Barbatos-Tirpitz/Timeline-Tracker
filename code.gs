@@ -28,6 +28,8 @@ const CONFIG = {
   PRIORITIES: ['Low', 'Medium', 'High']
 };
 
+const TASK_ID_SEQUENCE_PROPERTY = 'TIMELINE_TRACKER_LAST_TASK_ID';
+
 const LEGACY_CATEGORY_MAP = Object.freeze({
   'Graphics': 'Graphic Design',
   'Pre-production': 'Video editing',
@@ -231,6 +233,8 @@ function getTasks() {
       'Task_Master sheet not found. Initialize the task database first.'
     );
   }
+
+  ensureTaskIdSequence_(sheet);
 
   const timezone = ss.getSpreadsheetTimeZone();
   const lastRow = sheet.getLastRow();
@@ -989,18 +993,53 @@ function assertSubtaskSelection_(selection, parentTaskId) {
   return parent;
 }
 
+function taskIdSequenceValue_(value) {
+  if (value === null || value === '') return null;
+  const sequence = Number(value);
+  return Number.isSafeInteger(sequence) && sequence >= 0 ? sequence : null;
+}
+
+function highestTaskId_(rows) {
+  let maxId = 0;
+  rows.forEach(values => {
+    const match = String(values[0] || '').trim().match(/^VID-(\d+)$/);
+    if (!match) return;
+    const numericId = Number(match[1]);
+    if (!Number.isSafeInteger(numericId)) throw new Error('Task ID sequence exceeded the supported range.');
+    maxId = Math.max(maxId, numericId);
+  });
+  return maxId;
+}
+
+function ensureTaskIdSequence_(sheet) {
+  const properties = PropertiesService.getScriptProperties();
+  if (taskIdSequenceValue_(properties.getProperty(TASK_ID_SEQUENCE_PROPERTY)) !== null) return;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    if (taskIdSequenceValue_(properties.getProperty(TASK_ID_SEQUENCE_PROPERTY)) !== null) return;
+    const lastRow = sheet.getLastRow();
+    const rows = lastRow > 1 ? sheet.getRange(2, 1, lastRow - 1, 1).getValues() : [];
+    properties.setProperty(TASK_ID_SEQUENCE_PROPERTY, String(highestTaskId_(rows)));
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function appendTasks_(sheet, records, existingRows) {
   const lastRow = sheet.getLastRow();
   const rows = existingRows || (lastRow > 1 ? sheet.getRange(2, 1, lastRow - 1, 1).getValues() : []);
-  let maxId = 0;
+  let maxId = highestTaskId_(rows);
   const seen = new Set();
   rows.forEach(values => {
     const id = String(values[0] || '').trim();
     if (id && seen.has(id)) throw new Error('Duplicate task ID: ' + id);
     if (id) seen.add(id);
-    const match = id.match(/^VID-(\d+)$/);
-    if (match) maxId = Math.max(maxId, Number(match[1]));
   });
+  const properties = PropertiesService.getScriptProperties();
+  const storedSequence = taskIdSequenceValue_(properties.getProperty(TASK_ID_SEQUENCE_PROPERTY));
+  maxId = Math.max(maxId, storedSequence === null ? 0 : storedSequence);
+  if (!Number.isSafeInteger(maxId + records.length)) throw new Error('Task ID sequence exceeded the supported range.');
   const now = new Date();
   const ids = records.map((record, index) => 'VID-' + String(maxId + index + 1).padStart(3, '0'));
   const values = records.map((record, index) => {
@@ -1015,6 +1054,7 @@ function appendTasks_(sheet, records, existingRows) {
   if (records.some(record => !String(record.parentTaskId || '').trim() && normalizeTaskHours_(record.hours) > 0)) {
     throw new Error('Only subtasks can have expected hours. Parent totals are calculated from subtasks.');
   }
+  properties.setProperty(TASK_ID_SEQUENCE_PROPERTY, String(maxId + records.length));
   if (withHours) values.forEach((row, index) => row.push(normalizeTaskHours_(records[index].hours)));
   sheet.getRange(lastRow + 1, 1, records.length, withHours ? 16 : 15).setValues(values);
   sheet.getRange(lastRow + 1, 6, records.length, 2).setNumberFormat('mmm d, yyyy');
@@ -1637,7 +1677,7 @@ function setTaskParent(taskId, newParentTaskId) {
     const ownHours = hasHoursColumn_(sheet) ? normalizeTaskHours_(sheet.getRange(taskRow, 16).getValue(), taskId) : 0;
     const hasTimeEntries = timeEntryTaskIds_().has(taskId);
     if (currentParentId && !newParentTaskId && (ownHours > 0 || hasTimeEntries)) {
-      throw new Error('This subtask has logged hours or dated entries. Resolve them before making it standalone.');
+      throw new Error('This subtask has expected hours or dated entries. Resolve them before making it standalone.');
     }
     if (!currentParentId && newParentTaskId && (ownHours > 0 || hasTimeEntries)) {
       throw new Error('This top-level task has stored Hours or dated entries. Resolve them before assigning it a parent.');

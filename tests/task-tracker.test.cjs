@@ -78,6 +78,16 @@ test('refresh failure keeps last data and renders only the active view', () => {
   assert.ok(app.renders.every(view => view === 'tasks'));
 });
 
+test('task refresh invalidates the cached Metrics time-entry report', () => {
+  const app = loadingClient();
+  const state = app.getState();
+  state.activeView = 'tasks';
+  state.timeEntryReport.key = '2026-11-01|2026-11-30|';
+  app.loadTasks();
+  app.calls[0].success({ success: true, tasks: [] });
+  assert.equal(state.timeEntryReport.key, '');
+});
+
 test('opening outside Apps Script produces a recoverable connection error', () => {
   const app = loadingClient();
   vm.runInContext('google = undefined;', app);
@@ -300,6 +310,7 @@ function server(records, missingSheet = false, failAfter = Infinity, documentLoc
   let maxColumns = 15;
   const writes = [];
   const backups = [];
+  const scriptProperties = new Map();
   let releases = 0;
   let uuidCounter = 0;
   const sheet = {
@@ -383,10 +394,14 @@ function server(records, missingSheet = false, failAfter = Infinity, documentLoc
     LockService: {
       getDocumentLock: () => documentLock ? { waitLock() {}, releaseLock() { releases++; } } : null,
       getScriptLock: () => ({ waitLock() {}, releaseLock() { releases++; } })
-    }
+    },
+    PropertiesService: { getScriptProperties: () => ({
+      getProperty: key => scriptProperties.get(key) ?? null,
+      setProperty: (key, value) => scriptProperties.set(key, String(value))
+    }) }
   });
   vm.runInContext(backend, context);
-  return { context, rows, writes, backups, ui, sheet, ledgers, setMaxColumns: count => { maxColumns = count; }, releases: () => releases };
+  return { context, rows, writes, backups, ui, sheet, ledgers, scriptProperties, setMaxColumns: count => { maxColumns = count; }, releases: () => releases };
 }
 
 test('backend and frontend scripts parse', () => {
@@ -483,6 +498,26 @@ test('bulk time entries validate every direct leaf subtask before one ledger wri
     { taskId: 'VID-001', hours: 1, note: '' }, { taskId: 'MISSING', hours: 1, note: '' }
   ]), /not found/);
   assert.equal(app.ledgers.get('Time_Entry_Master').rows.length, 3);
+});
+
+test('deleted task IDs are not reused and orphaned entries are not attributed to new tasks', () => {
+  const app = server([taskRow('VID-100'), taskRow('VID-101', 'VID-100')]);
+  app.context.initializeTaskHeaders_(app.sheet);
+  app.context.getTasks();
+  app.context.saveTaskTimeEntry('VID-101', '2026-11-05', 1, 'Orphan after manual row deletion');
+
+  app.rows.splice(2, 1);
+  const created = app.context.createTask({
+    taskName: 'Replacement', category: 'Video editing', priority: 'Medium',
+    startDate: '2026-11-06', endDate: '2026-11-06'
+  });
+
+  assert.equal(created.taskId, 'VID-102');
+  assert.equal(app.context.getTasks().tasks.find(task => task.taskId === 'VID-102').timeEntryHours, 0);
+  const report = app.context.getTimeEntrySummary('2026-11-05', '2026-11-06', '');
+  assert.equal(report.totalHours, 0);
+  assert.deepEqual(Array.from(report.entries), []);
+  assert.equal(app.ledgers.get('Time_Entry_Master').rows.length, 2);
 });
 
 test('dated subtask entries feed task and parent progress without writing Task_Master Hours', () => {
@@ -645,6 +680,7 @@ test('parent subtask panel logs distinct entries for selected leaf subtasks in o
   app.mutationRunner = () => runner;
   app.showToast = () => {};
   app.loadTasks = () => { refreshed = true; };
+  state.timeEntryReport.key = '2026-11-01|2026-11-30|';
   app.savePanelTimeEntries();
 
   assert.equal(request[0], parent.id);
@@ -653,6 +689,7 @@ test('parent subtask panel logs distinct entries for selected leaf subtasks in o
     ['VID-CHILD-1', 1.25, 'Review'], ['VID-CHILD-2', 0.5, 'Polish']
   ]);
   assert.equal(refreshed, true);
+  assert.equal(state.timeEntryReport.key, '');
   assert.equal(Object.keys(state.subtaskPanel.timeEntryDrafts).length, 0);
 });
 
@@ -1019,7 +1056,7 @@ test('hierarchy mutations reject duplicate IDs and protect logged or legacy hour
   const app = server([parent, child, legacyRoot, destination]);
   app.context.initializeTaskHeaders_(app.sheet);
   const writes = app.writes.length;
-  assert.throws(() => app.context.setTaskParent('VID-002', ''), /logged hours/);
+  assert.throws(() => app.context.setTaskParent('VID-002', ''), /expected hours/);
   assert.throws(() => app.context.setTaskParent('VID-003', 'VID-001'), /stored Hours/);
   assert.equal(app.rows[2][13], 'VID-001');
   assert.equal(app.rows[2][15], 4);
@@ -2302,6 +2339,11 @@ test('only subtasks expose editable hours and root legacy values are excluded fr
   assert.match(attention, /Edit subtasks/);
   assert.match(attention, /metricHours-VID-CHILD/);
   assert.doesNotMatch(attention, /metricHours-VID-PARENT|metricHours-VID-STANDALONE/);
+
+  const logged = { ...child, timeEntryHours: 1.5, hasTimeEntries: true };
+  const loggedAttention = app.renderMetricsAttention({ attention: [{ task: logged, reason: 'Overdue now' }] });
+  assert.match(loggedAttention, /id="metricHours-VID-CHILD"/);
+  assert.match(loggedAttention, /1\.5 h logged/);
 });
 
 test('new task hours become editable only after selecting a parent task', () => {
