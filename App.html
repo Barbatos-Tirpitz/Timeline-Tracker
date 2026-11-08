@@ -3048,7 +3048,7 @@ html += `<div class="task-cell"
       const group = hourGroups.get(parent.id);
       const units = Math.round(taskOwnHours(task) * 100);
       group.units += units;
-      if (task.status === 'Done') group.completedUnits += units;
+      group.completedUnits += Math.round(taskCompletedHours(task) * 100);
       group.ids.push(task.id);
     });
     const groups = [...hourGroups.values()].sort((first, second) => second.units - first.units || first.name.localeCompare(second.name, undefined, { numeric: true }));
@@ -4467,19 +4467,23 @@ function deleteCurrentTask() {
       const sum = sums.get(task.parentTaskId);
       const units = Math.round(taskOwnHours(task) * 100);
       sum.units += units;
-      if (task.status === 'Done') sum.completed += units;
+      sum.completed += Math.round(taskCompletedHours(task) * 100);
     });
     tasks.forEach(task => {
       const sum = sums.get(task.id);
       if (!task.parentTaskId) task.hours = 0;
       task.subtaskHours = sum ? sum.units / 100 : 0;
       task.totalHours = sum ? sum.units / 100 : task.parentTaskId ? taskOwnHours(task) : 0;
-      task.completedHours = sum ? sum.completed / 100 : task.parentTaskId && task.status === 'Done' ? taskOwnHours(task) : 0;
+      task.completedHours = sum ? sum.completed / 100 : task.parentTaskId ? taskCompletedHours(task) : 0;
     });
   }
 
   function taskOwnHours(task) {
     return Math.round((Number(task.hours || 0) + Number(task.timeEntryHours || 0)) * 100) / 100;
+  }
+
+  function taskCompletedHours(task) {
+    return Math.round((Number(task.timeEntryHours || 0) + (task.status === 'Done' ? Number(task.hours || 0) : 0)) * 100) / 100;
   }
 
   function taskHourMetrics(tasks, hierarchy = state.tasks) {
@@ -4490,7 +4494,7 @@ function deleteCurrentTask() {
       if (!task.parentTaskId || parents.has(task.id)) return;
       const units = Math.round(taskOwnHours(task) * 100);
       total += units;
-      if (task.status === 'Done') completed += units;
+      completed += Math.round(taskCompletedHours(task) * 100);
     });
     return { total: total / 100, completed: completed / 100, percent: total ? Math.round(completed / total * 100) : 0 };
   }
