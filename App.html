@@ -4478,7 +4478,7 @@ function deleteCurrentTask() {
       if (!task.parentTaskId) task.hours = 0;
       task.subtaskHours = sum ? sum.units / 100 : 0;
       task.totalHours = sum ? sum.units / 100 : task.parentTaskId ? taskOwnHours(task) : 0;
-      task.completedHours = sum ? sum.completed / 100 : task.parentTaskId && task.status === 'Done' ? taskOwnHours(task) : 0;
+      task.completedHours = sum ? sum.completed / 100 : task.parentTaskId ? taskCompletedHours(task) : 0;
     });
   }
 
