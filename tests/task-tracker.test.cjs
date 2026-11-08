@@ -459,6 +459,7 @@ test('dated subtask entries feed task and parent progress without writing Task_M
   const completedChild = taskRow('VID-001', 'VID-000', 'Done');
   const app = server([parent, completedChild]);
   app.context.initializeTaskHeaders_(app.sheet);
+  app.rows[2][15] = 1.25;
 
   app.context.saveTaskTimeEntry('VID-001', '2026-11-05', 0.5, 'Final review');
   const updatedAt = app.context.getTasks().tasks.find(task => task.taskId === 'VID-001').updatedAt;
@@ -469,17 +470,18 @@ test('dated subtask entries feed task and parent progress without writing Task_M
   const tasks = app.context.getTasks().tasks;
   const loadedParent = tasks.find(task => task.taskId === 'VID-000');
   const loadedChild = tasks.find(task => task.taskId === 'VID-001');
-  assert.equal(loadedChild.hours, 0);
+  assert.equal(loadedChild.hours, 1.25);
   assert.equal(loadedChild.timeEntryHours, 0.5);
-  assert.equal(loadedChild.totalHours, 0.5);
-  assert.equal(loadedChild.completedHours, 0.5);
-  assert.equal(loadedParent.totalHours, 0.5);
-  assert.equal(loadedParent.completedHours, 0.5);
-  assert.equal(app.rows[2][15], undefined);
+  assert.equal(loadedChild.totalHours, 1.75);
+  assert.equal(loadedChild.completedHours, 1.75);
+  assert.equal(loadedParent.totalHours, 1.75);
+  assert.equal(loadedParent.completedHours, 1.75);
+  assert.equal(app.rows[2][15], 1.25);
   app.context.updateTaskStatus('VID-001', 'In Progress');
   const activeTasks = app.context.getTasks().tasks;
-  assert.equal(activeTasks.find(task => task.taskId === 'VID-001').totalHours, 0.5);
+  assert.equal(activeTasks.find(task => task.taskId === 'VID-001').totalHours, 1.75);
   assert.equal(activeTasks.find(task => task.taskId === 'VID-001').completedHours, 0.5);
+  assert.equal(activeTasks.find(task => task.taskId === 'VID-000').totalHours, 1.75);
   assert.equal(activeTasks.find(task => task.taskId === 'VID-000').completedHours, 0.5);
   assert.equal(activeTasks.find(task => task.taskId === 'VID-001').completedHours, 0);
   assert.equal(activeTasks.find(task => task.taskId === 'VID-000').completedHours, 0);
@@ -514,6 +516,26 @@ test('dated entries feed progress bars and lock manual Hours to avoid double cou
   assert.equal(parent.completedHours, 0.5);
   assert.equal(child.completedHours, 0);
   assert.equal(parent.completedHours, 0);
+});
+
+test('bulk manual-Hours edits are rejected for selected tasks with dated entries', () => {
+  const app = client();
+  const state = app.getState();
+  const parent = listTask('VID-PARENT');
+  const child = listTask('VID-CHILD', parent.id, { hours: 0, timeEntryHours: 0.5, hasTimeEntries: true });
+  state.taskById.set(parent.id, parent);
+  state.taskById.set(child.id, child);
+  state.subtaskPanel.parentId = parent.id;
+  state.subtaskPanel.selected.add(child.id);
+  state.subtaskPanel.patch.hours = 1;
+  app.elements.set('panelBulkStatus', { value: 'To Do' });
+  app.elements.set('formError', { textContent: '', style: {} });
+  app.showToast = () => {};
+  app.mutationRunner = () => { throw new Error('Bulk write must not run.'); };
+
+  app.runPanelSubtaskAction('edit');
+
+  assert.match(app.elements.get('formError').textContent, /Manual Hours cannot be changed.*dated entries/);
 });
 
 test('task editor exposes dated time entry controls and renders a separate logged-hours list', () => {

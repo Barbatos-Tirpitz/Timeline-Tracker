@@ -3852,6 +3852,10 @@ function createSubtask() {
     if (action === 'delete' && !confirm(`Delete ${ids.length} subtasks of ${parent.name}?\n\n${summary}\n\nThis cannot be undone.`)) return;
     const patch = { ...panel.patch };
     if (Object.prototype.hasOwnProperty.call(patch, 'clients')) patch.clients = state.clientSelections.bulkClients || [];
+    if (action === 'edit' && patch.hours !== undefined && ids.some(id => state.taskById.get(id)?.hasTimeEntries)) {
+      showPanelError('Manual Hours cannot be changed for subtasks with dated entries. Edit or delete their time entries instead.');
+      return;
+    }
     if (action === 'edit' && !Object.keys(patch).length) {
       showPanelError('Choose at least one field to apply.');
       return;
