@@ -414,6 +414,16 @@ function createTask(formData) {
     const description = String(formData.description || '').trim();
     const clients = formData.clients === undefined ? inheritedClients : normalizeClients_(formData.clients);
     const hours = normalizeTaskHours_(formData.hours);
+    const subtaskNames = formData.subtaskNames === undefined ? [] : formData.subtaskNames;
+    if (!Array.isArray(subtaskNames) || subtaskNames.some(name => typeof name !== 'string')) {
+      throw new Error('Initial subtask names must be a list of text values.');
+    }
+    const initialSubtaskNames = subtaskNames.map(name => name.trim()).filter(Boolean);
+    if (initialSubtaskNames.length > 100 || initialSubtaskNames.some(name => name.length > 200)) {
+      throw new Error('Enter 1-100 initial subtask names, at most 200 characters each.');
+    }
+    if (initialSubtaskNames.length && parentTaskId) throw new Error('Initial subtasks can only be added to a top-level task.');
+    if (initialSubtaskNames.length && formData.recurrence) throw new Error('Initial subtasks cannot be combined with recurring task creation.');
     if (formData.hours !== undefined && !hasHoursColumn_(sheet)) throw new Error('Run Upgrade Categories, Clients and Hours from the spreadsheet menu first.');
     if (!parentTaskId && hours > 0) throw new Error('Only subtasks can have expected hours. Parent totals are calculated from subtasks.');
 
@@ -445,6 +455,11 @@ function createTask(formData) {
         taskName, category, priority, startDate: parseTaskDate_(date),
         endDate: parseTaskDate_(shiftTaskDateKey_(date, durationDays)), description, clients, parentTaskId: '', hours: 0
       }));
+    } else if (initialSubtaskNames.length) {
+      records = records.concat(initialSubtaskNames.map(subtaskName => ({
+        taskName: subtaskName, category, priority, startDate, endDate, description: '',
+        clients, parentTaskIndex: 0, hours: 0
+      })));
     }
     const taskIds = appendTasks_(sheet, records);
 
@@ -453,7 +468,11 @@ function createTask(formData) {
       taskId: taskIds[0],
       taskIds,
       created: taskIds.length,
-      message: taskIds.length === 1 ? taskIds[0] + ' created successfully!' : taskIds.length + ' recurring tasks created.'
+      createdSubtasks: initialSubtaskNames.length,
+      createdRecurring: formData.recurrence ? taskIds.length : 0,
+      message: formData.recurrence
+        ? taskIds.length + ' recurring tasks created.'
+        : initialSubtaskNames.length ? 'Task and subtasks created successfully.' : taskIds[0] + ' created successfully!'
     };
 
   } finally {
@@ -1042,6 +1061,9 @@ function appendTasks_(sheet, records, existingRows) {
   if (!Number.isSafeInteger(maxId + records.length)) throw new Error('Task ID sequence exceeded the supported range.');
   const now = new Date();
   const ids = records.map((record, index) => 'VID-' + String(maxId + index + 1).padStart(3, '0'));
+  records.forEach(record => {
+    if (Number.isInteger(record.parentTaskIndex)) record.parentTaskId = ids[record.parentTaskIndex];
+  });
   const values = records.map((record, index) => {
     const row = lastRow + index + 1;
     return [ids[index], literalText_(record.taskName), record.category, record.priority, 'To Do', record.startDate, record.endDate,

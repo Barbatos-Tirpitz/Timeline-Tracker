@@ -126,7 +126,7 @@ Four actionable tiles show actual completions in the selected period, expected h
 Tiles and chart bars open All tasks with an explicit Metrics filter and the relevant client/date context. Parent context is retained without including unrelated siblings. The filter reevaluates task changes, can be cleared explicitly, and is removed when ordinary task filters are changed. Returning to Metrics preserves its period/client selection. Review for invoicing carries a selected client and period into an empty invoice draft; it does not mark anything billed or overwrite an unsaved invoice without confirmation.
 ### Tasks and scheduling
 
-- Create, update, and delete tasks; organize work with parent tasks and subtasks.
+- Create, update, and delete tasks; add up to 100 initial subtasks with a new parent in the same form.
 - Track status, category, priority, planned dates, actual work dates, client assignments, and hours.
 - Search and filter tasks by available criteria, including status, category, client, priority, and date range.
 - Select tasks for bulk status changes, edits, or deletion. Deletion requires explicit selection of subtasks; children are never silently included when a parent is selected.
