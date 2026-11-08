@@ -81,23 +81,23 @@ The application supports a parent-child task structure.
 
 **Current hierarchy depth:** One subtask level.
 
-Parent assignment is validated on task creation, subtask creation, bulk selection and transfer. Parents must exist and be top-level; duplicate IDs are rejected by direct row lookups. Deleting a parent requires explicitly selecting all of its subtasks. A subtask with logged hours cannot be detached, and a top-level task with legacy Hours cannot become a subtask until that stored value is resolved, so hierarchy changes cannot hide or silently activate hours.
+Parent assignment is validated on task creation, subtask creation, bulk selection and transfer. Parents must exist and be top-level; duplicate IDs are rejected by direct row lookups. Deleting a parent requires explicitly selecting all of its subtasks. A subtask with an expected-hours estimate or logged entries cannot be detached, and a top-level task with legacy Hours cannot become a subtask until that stored value is resolved, so hierarchy changes cannot hide or silently activate hours.
 
 ## Hours and Hours Progress
 
-Only subtasks can store logged Hours, separate from planned start/end, actual work dates and the calendar-day Duration formula. Enter 0-10,000 hours with up to two decimals. New subtasks start at zero; their parent assignment enables the Hours input. Top-level tasks cannot log hours directly.
+Only subtasks can have an expected-hours estimate, separate from actual logged time, planned start/end, actual work dates and the calendar-day Duration formula. Set 0-10,000 expected hours with up to two decimals. New subtasks start at zero; their parent assignment enables the Expected hours input. Top-level tasks cannot have an estimate directly.
 
 Every top-level task shows a read-only total of its direct subtasks, including zero when it has none. This total is consistent in task details, All tasks, Timeline labels/tooltips, Metrics and collapsed/filtered views. Legacy Hours values stored on top-level rows are retained in the sheet but ignored by reads, rollups and metrics; they are never mixed with subtask hours.
 
-**Hours progress** is the hours on Done subtasks divided by total subtask hours, not the percentage of subtask counts. For example, a Done 3-hour child and an unfinished 2-hour child produce 3 / 5 hours and 60%. Zero total hours produces 0%, never a divide-by-zero value. Reopening a child reduces completed hours without erasing its recorded hours. Accessible progress bars appear in the parent details, frozen timeline labels and Hours logged metric. Existing task-count progress remains separate.
+**Hours progress** compares actual time-entry hours logged against expected subtask hours, not the percentage of subtask counts or task status. For example, a 3-hour estimate with 2 hours logged produces 2 / 3 hours and 67%. Marking a task Done does not count its estimate as time spent. Zero expected hours produces 0%, never a divide-by-zero value. Accessible progress bars appear in the parent details, frozen timeline labels and expected-hours metric. Existing task-count progress remains separate.
 
-Global and dashboard hour metrics sum leaf-subtask hours once, including dated entries, never parent rollups. Dashboard date/client filters apply to subtask records and use the full hierarchy to avoid double counting context parents. The completed-hours numerator counts hours on Done subtasks; unfinished subtasks contribute to the total only.
+Global and dashboard expected-hour metrics sum leaf-subtask estimates once, never parent rollups. Dashboard date/client filters apply to subtask records and use the full hierarchy to avoid double counting context parents. Actual time spent is the sum of dated entries and is independent of task status.
 
-Dated time entries can be logged from a leaf subtask's edit dialog with a work date, hours, and optional note. They are stored in a separate `Time_Entry_Master` sheet and deleted with their task. Entries add to calculated task and parent totals; stored manual Hours remain separate and additive, and manual editing is locked once dated entries exist to avoid double-counting. Entries are not automatically added to invoice lines.
+Dated time entries can be logged from a leaf subtask's edit dialog or from the parent's bulk subtask panel with a work date, hours, and optional note. They are stored in a separate `Time_Entry_Master` sheet and deleted with their task. Entries contribute to actual logged-time progress but do not change expected Hours. Expected Hours remain editable after entries exist. Entries are not automatically added to invoice lines.
 
-Bulk Apply Hours assigns the same chosen value to every selected child, leaving unchecked fields unchanged. Hours-only saves write column P and Updated At only. They never alter timeline bar position/width/height, task dates, Duration formulas or invoice hours. Transfers/deletions change parent rollups on refresh but preserve the hours of remaining tasks. Invoice line hours and saved invoice snapshots stay independently controlled.
+Bulk Apply Expected Hours assigns the same chosen estimate to every selected child, leaving unchecked fields unchanged. Estimate-only saves write column P and Updated At only. They never alter timeline bar position/width/height, task dates, Duration formulas or invoice hours. Transfers/deletions change parent rollups on refresh but preserve the estimates of remaining tasks. Invoice line hours and saved invoice snapshots stay independently controlled.
 
-Hours is stored in column P, after Clients in O. Existing/blank task hours read as zero without implicit writes. Before recording hours on an existing spreadsheet, run **Task Manager > Upgrade Categories, Clients and Hours (with backup)**. The upgrade rejects occupied P, preserves prior task columns/formulas, and creates a backup before adding the header. Deploy both frontend and backend together and verify the upgrade on a copied spreadsheet first.
+Expected Hours are stored in column P, after Clients in O. Existing/blank estimates read as zero without implicit writes. Before setting estimates on an existing spreadsheet, run **Task Manager > Upgrade Categories, Clients and Hours (with backup)**. The upgrade rejects occupied P, preserves prior task columns/formulas, and creates a backup before adding the header. Deploy both frontend and backend together and verify the upgrade on a copied spreadsheet first.
 
 ## Categories and Clients
 
@@ -115,13 +115,13 @@ Subtask rows display their own client assignments as compact tags, independently
 
 The former Dashboard is now the dedicated **Metrics** workspace. Daily, Weekly, Biweekly, Monthly, Yearly, and Custom controls determine its analysis period. Presets use an editable reference date; Custom provides editable inclusive From and Through dates. Previous/next moves by the selected range's length, and Today resets the selected date or custom range. Monthly remains the default. The last period/date/client is remembered locally when browser storage is permitted. These analytics belong inside Metrics rather than repeating at the top of every workspace.
 
-Four actionable tiles show actual completions in the selected period, recorded hours on scheduled work, current overdue work for the selected client, and blocked scheduled work. Parent/standalone and subtask counts are separated. Overdue is explicitly **now**, not a historical snapshot of the selected month.
+Four actionable tiles show actual completions in the selected period, expected hours and logged actual time on scheduled work, current overdue work for the selected client, and blocked scheduled work. Parent/standalone and subtask counts are separated. Overdue is explicitly **now**, not a historical snapshot of the selected month.
 
 **Planned vs Actual Finish** compares each leaf task completed in the selected period with its planned end date. Each row shows both dates and a text result: a number of days early, on time, or a number of days late. Tasks without either date are excluded. Late finishes appear first, with up to eight rows shown and a View completed action for the full list. Completion is scoped by actual completion date, so the planned end can fall outside the selected period. Parent containers are excluded to avoid counting the same work twice.
 
-**Hours by Parent Task** shows the five largest groups by task-level subtask hours in the schedule window, with a View work shortcut for the full set. Shared-client subtasks count once for the selected client filter; hours are not split or added again for parent rollups. **Time logged by date** shows daily entry totals for the selected period and client scope; those entries also contribute to task and parent progress.
+**Expected Hours by Parent Task** shows the five largest groups by subtask estimates in the schedule window, with a View work shortcut for the full set. Shared-client subtasks count once for the selected client filter; estimates are not split or added again for parent rollups. **Time logged by date** shows daily entry totals for the selected period and client scope; those entries contribute to actual task and parent progress.
 
-**Needs Attention** prioritizes current overdue tasks, blocked work in the schedule window, work due today, and completed scheduled videos with zero recorded subtask hours. It shows at most eight rows, with View all, edit links, quick status changes and subtask-hour saves. Top-level tasks link to add or edit subtasks instead of exposing an hour input. Actions use the existing write/cooldown guards and one follow-up task refresh.
+**Needs Attention** prioritizes current overdue tasks, blocked work in the schedule window, work due today, and completed scheduled videos with zero expected subtask hours. It shows at most eight rows, with View all, edit links, quick status changes and expected-hour saves. Top-level tasks link to add or edit subtasks instead of exposing an hour input. Actions use the existing write/cooldown guards and one follow-up task refresh.
 
 Tiles and chart bars open All tasks with an explicit Metrics filter and the relevant client/date context. Parent context is retained without including unrelated siblings. The filter reevaluates task changes, can be cleared explicitly, and is removed when ordinary task filters are changed. Returning to Metrics preserves its period/client selection. Review for invoicing carries a selected client and period into an empty invoice draft; it does not mark anything billed or overwrite an unsaved invoice without confirmation.
 ### Tasks and scheduling
@@ -131,8 +131,8 @@ Tiles and chart bars open All tasks with an explicit Metrics filter and the rele
 - Search and filter tasks by available criteria, including status, category, client, priority, and date range.
 - Select tasks for bulk status changes, edits, or deletion. Deletion requires explicit selection of subtasks; children are never silently included when a parent is selected.
 - View schedule data in day, weekly, biweekly, or monthly periods. Biweekly means a continuous 14-day period.
-- Parent progress is based on the proportion of completed subtasks. Parent hours are a read-only sum of direct child hours; standalone tasks can also record hours.
-- Hours are recorded on leaf tasks and counted once in metrics. Hours progress for a parent is based on completed-subtask hours divided by total subtask hours.
+- Parent task-count progress is based on the proportion of Done subtasks. Parent expected Hours are a read-only sum of direct child estimates.
+- Actual time is recorded on leaf tasks and counted once in metrics. Hours progress compares logged time-entry hours with expected subtask Hours, independent of Done status.
 
 ### Metrics and reporting
 
@@ -191,7 +191,7 @@ Enable the Google Apps Script API for the authorized account. Each run first tes
 ## Data and behavior notes
 
 - The spreadsheet is the source of task data. Each deployment can use its own spreadsheet and web app.
-- Existing/blank task hours are treated as zero. Hours use column P, after Clients in column O; the upgrade should be run before recording hours on an existing spreadsheet.
+- Existing/blank expected hours are treated as zero. Estimates use column P, after Clients in column O; the upgrade should be run before setting estimates on an existing spreadsheet.
 - Parent and subtask schedules are independent. Changing a subtask does not change its parent's dates, and status updates do not cascade through the hierarchy.
 - In All tasks, parent groups and child lists are paginated separately. Selections persist across pages but are cleared when filters change.
 - Invoice data is stored separately in `Invoice_Master` and `Invoice_Settings`, created when invoices or billing defaults are first saved.
@@ -230,7 +230,7 @@ This is simple hourly invoicing, not a tax/accounting or automatic time-tracking
 
 ## All Tasks
 
-Subtasks have inline Hours inputs with explicit Save (or Enter), Unsaved/Check hours state, and disabled unchanged saves. Every top-level task shows calculated/read-only subtask hours. Unsaved inline values survive paging, sorting, filter changes and refreshes until saved; missing tasks, top-level tasks, and tasks that become parents are pruned. Failed writes retain the draft value, then reconcile task data. Closing/reloading the page warns when unsaved inline values remain.
+Subtasks have inline Expected hours inputs with explicit Save (or Enter), Unsaved/Check state, and disabled unchanged saves. Tasks with logged time show that actual total separately from their estimate. Every top-level task shows calculated/read-only expected subtask hours. Unsaved inline values survive paging, sorting, filter changes and refreshes until saved; missing tasks, top-level tasks, and tasks that become parents are pruned. Failed writes retain the draft value, then reconcile task data. Closing/reloading the page warns when unsaved inline values remain.
 
 Task detail, drag-reschedule, and single-task hour writes include the loaded Updated At version. If another session changes that task first, the server rejects the stale write instead of silently replacing the newer values; refresh/reopen before retrying. This protection does not make Google Sheets writes transactional, and status/deletion/bulk workflows retain their own validation and reconciliation behavior.
 

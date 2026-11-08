@@ -297,10 +297,9 @@ function getTasks() {
     childStats[parentId].hourUnits += manualUnits;
     childStats[parentId].hasTimeEntries ||= hasEntries;
 
-    childStats[parentId].completedHourUnits += hasEntries ? entryUnits : 0;
+    childStats[parentId].completedHourUnits += entryUnits;
     if (String(row[4]) === 'Done') {
       childStats[parentId].completed++;
-      if (!hasEntries) childStats[parentId].completedHourUnits += manualUnits;
     }
   });
 
@@ -315,7 +314,7 @@ function getTasks() {
     };
     const hasParent = Boolean(String(row[13] || '').trim());
     const hasEntries = timeEntryHours.has(taskId);
-    const ownCompletedHours = hasEntries ? timeEntryHours.get(taskId) : String(row[4]) === 'Done' ? ownHours.get(taskId) : 0;
+    const ownCompletedHours = timeEntryHours.get(taskId) || 0;
 
     return {
       taskId: taskId,
@@ -412,7 +411,7 @@ function createTask(formData) {
     const clients = formData.clients === undefined ? inheritedClients : normalizeClients_(formData.clients);
     const hours = normalizeTaskHours_(formData.hours);
     if (formData.hours !== undefined && !hasHoursColumn_(sheet)) throw new Error('Run Upgrade Categories, Clients and Hours from the spreadsheet menu first.');
-    if (!parentTaskId && hours > 0) throw new Error('Only subtasks can record hours. Parent totals are calculated from subtasks.');
+    if (!parentTaskId && hours > 0) throw new Error('Only subtasks can have expected hours. Parent totals are calculated from subtasks.');
 
     // Required-field validation.
     if (!taskName || !category || !priority ||
@@ -603,8 +602,7 @@ function assertEditableTaskHours_(sheet, taskId, rowNumber) {
     throw new Error('Parent hours are calculated from subtasks. Update the subtask hours instead.');
   }
   const taskParentId = String(sheet.getRange(rowNumber || findTaskRow(sheet, taskId), 14).getValue() || '').trim();
-  if (!taskParentId) throw new Error('Only subtasks can record hours. Parent totals are calculated from subtasks.');
-  if (timeEntryTaskIds_().has(taskId)) throw new Error('This task has dated time entries. Edit the entries instead of manual Hours.');
+  if (!taskParentId) throw new Error('Only subtasks can have expected hours. Parent totals are calculated from subtasks.');
 }
 
 function updateTaskHours(taskId, value, expectedUpdatedAt) {
@@ -1013,9 +1011,9 @@ function appendTasks_(sheet, records, existingRows) {
   });
   if (lastRow + records.length > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), lastRow + records.length - sheet.getMaxRows());
   const withHours = hasHoursColumn_(sheet);
-  if (!withHours && records.some(record => normalizeTaskHours_(record.hours) !== 0)) throw new Error('Run Upgrade Categories, Clients and Hours before recording hours.');
+  if (!withHours && records.some(record => normalizeTaskHours_(record.hours) !== 0)) throw new Error('Run Upgrade Categories, Clients and Hours before setting expected hours.');
   if (records.some(record => !String(record.parentTaskId || '').trim() && normalizeTaskHours_(record.hours) > 0)) {
-    throw new Error('Only subtasks can record hours. Parent totals are calculated from subtasks.');
+    throw new Error('Only subtasks can have expected hours. Parent totals are calculated from subtasks.');
   }
   if (withHours) values.forEach((row, index) => row.push(normalizeTaskHours_(records[index].hours)));
   sheet.getRange(lastRow + 1, 1, records.length, withHours ? 16 : 15).setValues(values);
@@ -1077,8 +1075,6 @@ function updateSubtasks(parentTaskId, taskIds, patch) {
       if (!hasHoursColumn_(selection.sheet)) throw new Error('Run Upgrade Categories, Clients and Hours from the spreadsheet menu first.');
       const parents = new Set(selection.rows.map(values => String(values[13] || '').trim()).filter(Boolean));
       if (selection.selected.some(record => parents.has(String(record.values[0])))) throw new Error('Parent hours are calculated from subtasks. Update the subtask hours instead.');
-      const tasksWithEntries = timeEntryTaskIds_();
-      if (selection.ids.some(id => tasksWithEntries.has(id))) throw new Error('Selected tasks with dated time entries cannot be edited through manual Hours.');
     }
     if (clients !== null && !hasClientsColumn_(selection.sheet)) throw new Error('Run Upgrade Categories and Clients first.');
     if (start || end) selection.selected.forEach(record => {

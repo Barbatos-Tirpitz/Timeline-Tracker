@@ -1511,7 +1511,7 @@
     </div>
 
     <div class="form-field full">
-      <label for="taskHours" id="taskHoursLabel">Task total hours (subtasks only)</label>
+      <label for="taskHours" id="taskHoursLabel">Expected hours (subtasks only)</label>
       <input id="taskHours" type="number" min="0" max="10000" step="0.01" value="0">
       <div id="taskHoursProgress"></div>
     </div>
@@ -2168,7 +2168,7 @@
       ['In progress', count('In Progress'), 'Currently being worked on'],
       ['Completed', done, total ? `${Math.round(done / total * 100)}% of these tasks` : 'No tasks yet'],
       ['Blocked', count('Blocked'), 'Need attention'],
-      ['Expected hours', formatHours(hours.total), `${formatHours(hours.completed)} h logged / completed · ${hours.percent}%`]
+      ['Expected hours', formatHours(hours.total), `${formatHours(hours.completed)} h logged · ${hours.percent}% of estimate`]
     ].map((s, index) => `
       <div class="stat">
         <div class="stat-label">${esc(s[0])}</div>
@@ -2432,7 +2432,7 @@ html += `<div class="task-cell"
         
         <div class="task-info">
           <button type="button" class="task-title" title="${esc(t.name)}" onclick="openEdit(${esc(JSON.stringify(t.id))})">${esc(t.name || 'Untitled task')}</button>
-          <div class="task-meta" title="${esc(formatHours(t.completedHours || 0) + (t.hasTimeEntries ? ' logged / ' : ' completed / ') + formatHours(t.totalHours || 0) + ' h expected · ' + ((t.clients || []).join(', ') || 'Unassigned'))}">${esc(t.id)} · ${formatHours(t.totalHours || 0)} h ${renderHoursProgress(t.completedHours || 0, t.totalHours || 0, true, true, t.hasTimeEntries)} · ${esc(t.category)} · ${esc((t.clients || []).join(', ') || 'Unassigned')}</div>
+          <div class="task-meta" title="${esc(formatHours(t.completedHours || 0) + ' logged / ' + formatHours(t.totalHours || 0) + ' h expected · ' + ((t.clients || []).join(', ') || 'Unassigned'))}">${esc(t.id)} · ${formatHours(t.totalHours || 0)} h ${renderHoursProgress(t.completedHours || 0, t.totalHours || 0, true, true)} · ${esc(t.category)} · ${esc((t.clients || []).join(', ') || 'Unassigned')}</div>
         </div>
       </div>`;
 
@@ -2693,7 +2693,9 @@ html += `<div class="task-cell"
           ${childCount ? `<button class="group-toggle" aria-label="${list.collapsed.has(task.id) ? 'Expand' : 'Collapse'} subtasks of ${esc(task.name)}" aria-expanded="${!list.collapsed.has(task.id)}" onclick="toggleListGroup(${argument})">${list.collapsed.has(task.id) ? '&#9654;' : '&#9660;'}</button>` : '<span class="group-toggle"></span>'}
           <div><a href="#" onclick="openEdit(${argument});return false">${esc(task.name || 'Untitled task')}</a>
           <div class="task-meta">${esc(task.id)}${contextOnly ? ' · Parent context' : ''}${!child && task.parentTaskId && !state.taskById.has(task.parentTaskId) ? ' · Parent unavailable' : ''}${childCount ? ` · ${childCount} matching subtasks` : ''}</div></div></div></td>
-        <td>${esc(task.category)}</td><td class="client-cell">${esc((task.clients || []).join(', ') || 'Unassigned')}</td><td>${esc(task.priority)}</td><td>${!task.parentTaskId || state.childrenByParent.has(task.id) || contextOnly || task.hasTimeEntries ? `<span title="${task.hasTimeEntries ? 'Includes dated time-entry hours' : 'Calculated from subtasks'}">${formatHours(task.totalHours || 0)} h</span>` : `<div class="inline-hours"><input class="field-control" id="inlineHours-${esc(task.id)}" type="number" min="0" max="10000" step="0.01" aria-label="Manual hours for ${esc(task.name)}" value="${esc(list.hourDrafts.has(task.id) ? list.hourDrafts.get(task.id) : task.hours || 0)}" ${busy ? 'disabled' : ''} oninput="state.list.hourDrafts.set(${argument},this.value);updateInlineHoursState(${argument})" onkeydown="if(event.key==='Enter'){event.preventDefault();saveInlineTaskHours(${argument})}"><button class="btn" id="inlineSave-${esc(task.id)}" ${busy ? 'disabled' : ''} title="Save manual hours for ${esc(task.name)}" onclick="saveInlineTaskHours(${argument})">Save</button></div><output class="inline-hours-note" id="inlineNote-${esc(task.id)}" aria-live="polite"></output>`}</td>
+        <td>${esc(task.category)}</td><td class="client-cell">${esc((task.clients || []).join(', ') || 'Unassigned')}</td><td>${esc(task.priority)}</td><td>${!task.parentTaskId || state.childrenByParent.has(task.id) || contextOnly
+          ? `<span title="Expected hours, calculated from subtasks">${formatHours(task.totalHours || 0)} h expected</span>`
+          : `<div class="inline-hours"><input class="field-control" id="inlineHours-${esc(task.id)}" type="number" min="0" max="10000" step="0.01" aria-label="Expected hours for ${esc(task.name)}" value="${esc(list.hourDrafts.has(task.id) ? list.hourDrafts.get(task.id) : task.hours || 0)}" ${busy ? 'disabled' : ''} oninput="state.list.hourDrafts.set(${argument},this.value);updateInlineHoursState(${argument})" onkeydown="if(event.key==='Enter'){event.preventDefault();saveInlineTaskHours(${argument})}"><button class="btn" id="inlineSave-${esc(task.id)}" ${busy ? 'disabled' : ''} title="Save expected hours for ${esc(task.name)}" onclick="saveInlineTaskHours(${argument})">Save</button></div>${task.hasTimeEntries ? `<span class="inline-hours-note">${formatHours(task.timeEntryHours || 0)} h logged</span>` : ''}<output class="inline-hours-note" id="inlineNote-${esc(task.id)}" aria-live="polite"></output>`}</td>
         <td><select class="field-control row-status" aria-label="Status for ${esc(task.name)}" ${busy || contextOnly ? 'disabled' : ''} onchange="changeInlineStatus(${argument},this)">
           ${['To Do', 'In Progress', 'Blocked', 'Done'].map(status => `<option ${task.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select></td>
         <td>${displayDate(task.start)}</td><td>${displayDate(task.end)}</td></tr>`;
@@ -2714,7 +2716,7 @@ html += `<div class="task-cell"
           <button class="btn" aria-label="Next subtasks of ${esc(group.root.name)}" ${page === pages ? 'disabled' : ''} onclick="changeChildPage(${argument},1)">&#8594;</button></div></td></tr>`;
       }
     });
-    const columns = [['name', 'Task'], ['category', 'Category'], ['clients', 'Clients'], ['priority', 'Priority'], ['totalHours', 'Hours'], ['status', 'Status'], ['start', 'Start'], ['end', 'End']];
+    const columns = [['name', 'Task'], ['category', 'Category'], ['clients', 'Clients'], ['priority', 'Priority'], ['totalHours', 'Expected hours'], ['status', 'Status'], ['start', 'Start'], ['end', 'End']];
     const invalidRange = list.filters.from && list.filters.to && list.filters.to < list.filters.from;
     $('taskTable').innerHTML = invalidRange
       ? '<div class="empty" role="alert"><strong>Invalid date range</strong>Through date must be on or after From date.</div>'
@@ -3125,7 +3127,7 @@ html += `<div class="task-cell"
       : dashboard.client ? dashboard.client.slice(7) : 'all clients';
     const tiles = [
       ['Completed', model.completed.length, `${completedParents} parent/standalone · ${model.completed.length - completedParents} subtasks`, 'completed'],
-      ['Expected hours', formatHours(model.hours.total), `${formatHours(model.hours.completed)} h logged / completed · scheduled scope`, 'hours'],
+      ['Expected hours', formatHours(model.hours.total), `${formatHours(model.hours.completed)} h logged · scheduled scope`, 'hours'],
       ['Overdue now', model.overdue.length, 'Current unfinished work · selected client', 'overdue'],
       ['Blocked', model.blocked.length, 'Current status · scheduled scope', 'blocked']
     ];
@@ -3147,7 +3149,7 @@ html += `<div class="task-cell"
       <section class="metrics-tiles" id="dashboardMetrics" aria-label="Selected period metrics">${tiles.map(([label, value, note, kind]) => `<button type="button" class="stat metrics-tile" onclick="openMetricTasks('${kind}')"><div class="stat-label">${label}</div><div class="stat-number">${value}</div><div class="stat-foot">${note}</div>${kind === 'hours' ? renderHoursProgress(model.hours.completed, model.hours.total, false, false) : ''}</button>`).join('')}</section>
       <div class="metrics-charts">
         <section class="metrics-section" aria-labelledby="metricsDeliveryHeading"><div class="metrics-section-head"><h3 id="metricsDeliveryHeading">Planned vs Actual Finish</h3><button class="subtask-link" ${model.finishVariance.length ? '' : 'disabled'} onclick="openMetricTasks('finishVariance')">View completed (${model.finishVariance.length})</button></div><div class="metrics-caption">Completed in this period · days variance = actual completion minus planned end; positive is late, negative is early.</div>${renderMetricsFinishVariance(model)}</section>
-        <section class="metrics-section" aria-labelledby="metricsHoursHeading"><div class="metrics-section-head"><h3 id="metricsHoursHeading">Hours by Parent Task</h3><button class="subtask-link" onclick="openMetricTasks('hours')">View work</button></div><div class="metrics-caption">Recorded task totals · selected schedule window</div>${renderMetricsParentChart(model)}</section>
+        <section class="metrics-section" aria-labelledby="metricsHoursHeading"><div class="metrics-section-head"><h3 id="metricsHoursHeading">Expected Hours by Parent Task</h3><button class="subtask-link" onclick="openMetricTasks('hours')">View work</button></div><div class="metrics-caption">Subtask estimates · selected schedule window</div>${renderMetricsParentChart(model)}</section>
       </div>
       <section class="metrics-section" aria-labelledby="metricsTimeEntriesHeading"><h3 id="metricsTimeEntriesHeading">Time logged by date</h3><div class="metrics-caption">Dated work entries for the selected period · separate from task Hours totals.</div><div id="metricsTimeEntryReport" aria-live="polite"></div></section>
       <section class="metrics-section" aria-labelledby="metricsAttentionHeading"><div class="metrics-section-head"><h3 id="metricsAttentionHeading">Needs Attention</h3><button class="subtask-link" onclick="openMetricTasks('attention')">View all (${model.attention.length})</button></div><div class="metrics-caption">Overdue and due-today items for ${esc(attentionClient)} are current and not limited to this period. Showing up to eight; View all opens every match. Blocked and missing-hour items use the selected schedule window.</div>${renderMetricsAttention(model)}</section>
@@ -3343,7 +3345,7 @@ html += `<div class="task-cell"
     const groups = model.groups.filter(group => group.units > 0);
     const maximum = Math.max(1, ...groups.map(group => group.units));
     if (!groups.length) return '<div class="metrics-zero">No expected hours in this schedule window.</div>';
-    return groups.slice(0, 5).map(group => `<button type="button" class="metrics-parent" onclick="openMetricTasks('parent',${esc(JSON.stringify(group.id))})" title="${esc(group.name)}: ${formatHours(group.units / 100)} expected hours" aria-label="${esc(group.name)}, ${formatHours(group.units / 100)} expected hours"><span class="metrics-parent-label"><span>${esc(group.name || group.id)}</span><strong>${formatHours(group.units / 100)} h</strong></span><span class="metrics-parent-track" aria-hidden="true"><span class="metrics-parent-fill" style="width:${group.units / maximum * 100}%"></span></span><span class="metrics-caption">${formatHours(group.completedUnits / 100)} h logged / completed</span></button>`).join('');
+    return groups.slice(0, 5).map(group => `<button type="button" class="metrics-parent" onclick="openMetricTasks('parent',${esc(JSON.stringify(group.id))})" title="${esc(group.name)}: ${formatHours(group.units / 100)} expected hours" aria-label="${esc(group.name)}, ${formatHours(group.units / 100)} expected hours"><span class="metrics-parent-label"><span>${esc(group.name || group.id)}</span><strong>${formatHours(group.units / 100)} h</strong></span><span class="metrics-parent-track" aria-hidden="true"><span class="metrics-parent-fill" style="width:${group.units / maximum * 100}%"></span></span><span class="metrics-caption">${formatHours(group.completedUnits / 100)} h logged</span></button>`).join('');
   }
 
   function renderMetricsAttention(model) {
@@ -3355,7 +3357,7 @@ html += `<div class="task-cell"
       const argument = esc(JSON.stringify(task.id));
       const hoursAction = topLevel ? `<button class="btn" onclick="openEdit(${argument})">${hasChildren ? 'Edit subtasks' : 'Add subtasks'}</button>`
         : task.hasTimeEntries ? `<span class="task-meta">${formatHours(task.timeEntryHours || 0)} h logged / ${formatHours(task.totalHours || 0)} h expected</span><button class="btn" onclick="openEdit(${argument})">View entries</button>`
-          : `<input class="field-control" id="metricHours-${esc(task.id)}" aria-label="Manual hours for ${esc(task.name)}" type="number" min="0" max="10000" step="0.01" value="${esc(task.hours || 0)}"><button class="btn" data-metric-command onclick="saveMetricsHours(${argument})">Save hours</button>`;
+          : `<input class="field-control" id="metricHours-${esc(task.id)}" aria-label="Expected hours for ${esc(task.name)}" type="number" min="0" max="10000" step="0.01" value="${esc(task.hours || 0)}"><button class="btn" data-metric-command onclick="saveMetricsHours(${argument})">Save expected hours</button>`;
       return `<tr><td class="metrics-attention-name"><button class="subtask-link" onclick="openEdit(${argument})">${esc(task.name || task.id)}</button><div class="task-meta">${esc(task.id)}${parent ? ' · ' + esc(parent.name) : ''}</div></td><td><span class="pill ${reason === 'Overdue now' ? 'blocked' : ''}">${reason}</span></td><td>${displayDate(task.end, true)}</td><td><div class="metrics-task-actions"><select class="field-control" data-metric-command aria-label="Status for ${esc(task.name)}" onchange="updateSelectedStatuses([${argument}],this.value)">${['To Do', 'In Progress', 'Blocked', 'Done'].map(status => `<option ${task.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select>${hoursAction}</div></td></tr>`;
     }).join('')}</tbody></table></div>`;
   }
@@ -3594,13 +3596,13 @@ html += `<div class="task-cell"
             </details>
             <details class="subtask-edit subtask-section" ${subtaskState.editOpen ? 'open' : ''} ontoggle="state.subtaskPanel.editOpen=this.open"><summary>Bulk edit selected subtasks</summary>
               <div class="form-grid">
-                ${[['category', 'Category'], ['priority', 'Priority'], ['hours', 'Hours per subtask'], ['startDate', 'Start date'], ['endDate', 'End date']].map(([key, label]) => {
+                ${[['category', 'Category'], ['priority', 'Priority'], ['hours', 'Expected hours per subtask'], ['startDate', 'Start date'], ['endDate', 'End date']].map(([key, label]) => {
                   const applied = Object.prototype.hasOwnProperty.call(subtaskState.patch, key);
                   const argument = esc(JSON.stringify(key));
                   const value = subtaskState.patch[key] ?? '';
                   const choices = key === 'category' ? state.categories : ['Low', 'Medium', 'High'];
                   return `<div class="form-field"><label class="apply-field"><input type="checkbox" ${applied ? 'checked' : ''} onchange="toggleSubtaskField(${argument},this.checked)">Apply ${label}</label>
-                    ${key === 'hours' ? `<input id="bulkValuehours" type="number" min="0" max="10000" step="0.01" aria-label="Bulk Hours per subtask" value="${esc(value)}" ${applied ? '' : 'disabled'} onchange="setSubtaskPatch('hours',this.value)">`
+                    ${key === 'hours' ? `<input id="bulkValuehours" type="number" min="0" max="10000" step="0.01" aria-label="Bulk expected hours per subtask" value="${esc(value)}" ${applied ? '' : 'disabled'} onchange="setSubtaskPatch('hours',this.value)">`
                       : key.endsWith('Date') ? `<input id="bulkValue${key}" type="date" aria-label="Bulk ${label}" value="${esc(value)}" ${applied ? '' : 'disabled'} onchange="setSubtaskPatch(${argument},this.value)">`
                       : `<select id="bulkValue${key}" aria-label="Bulk ${label}" ${applied ? '' : 'disabled'} onchange="setSubtaskPatch(${argument},this.value)">${choices.map(choice => `<option ${value === choice ? 'selected' : ''}>${esc(choice)}</option>`).join('')}</select>`}</div>`;
                 }).join('')}
@@ -3851,7 +3853,7 @@ function createSubtask() {
   function updateBulkEditSummary() {
     const panel = state.subtaskPanel;
     const fields = Object.keys(panel.patch);
-    const labels = { category: 'Category', priority: 'Priority', hours: 'Hours per subtask', startDate: 'Start date', endDate: 'End date', clients: 'Clients (replace)' };
+    const labels = { category: 'Category', priority: 'Priority', hours: 'Expected hours per subtask', startDate: 'Start date', endDate: 'End date', clients: 'Clients (replace)' };
     if ($('bulkEditSummary')) $('bulkEditSummary').textContent = `${panel.selected.size} selected · ${fields.length} fields${fields.length ? ': ' + fields.map(key => labels[key]).join(', ') : ''}`;
     if ($('bulkApplyBtn')) {
       $('bulkApplyBtn').textContent = `Apply ${fields.length} ${fields.length === 1 ? 'field' : 'fields'} to ${panel.selected.size} ${panel.selected.size === 1 ? 'subtask' : 'subtasks'}`;
@@ -3962,10 +3964,6 @@ function createSubtask() {
     if (action === 'delete' && !confirm(`Delete ${ids.length} subtasks of ${parent.name}?\n\n${summary}\n\nThis cannot be undone.`)) return;
     const patch = { ...panel.patch };
     if (Object.prototype.hasOwnProperty.call(patch, 'clients')) patch.clients = state.clientSelections.bulkClients || [];
-    if (action === 'edit' && patch.hours !== undefined && ids.some(id => state.taskById.get(id)?.hasTimeEntries)) {
-      showPanelError('Manual Hours cannot be changed for subtasks with dated entries. Edit or delete their time entries instead.');
-      return;
-    }
     if (action === 'edit' && !Object.keys(patch).length) {
       showPanelError('Choose at least one field to apply.');
       return;
@@ -4428,7 +4426,7 @@ function deleteCurrentTask() {
     input.readOnly = !isSubtask;
     if (!isSubtask || resetValue || wasReadOnly) input.value = '0';
     input.max = '10000';
-    $('taskHoursLabel').textContent = isSubtask ? 'Manual task hours' : 'Manual task hours (subtasks only)';
+    $('taskHoursLabel').textContent = isSubtask ? 'Expected hours' : 'Expected hours (subtasks only)';
     $('taskHoursProgress').innerHTML = '';
     updateTaskRecurrenceControl();
   }
@@ -4449,12 +4447,11 @@ function deleteCurrentTask() {
   function updateTaskHoursControl(task, resetValue = false) {
     const input = $('taskHours');
     const isSubtask = Boolean(task.parentTaskId);
-    const hasTimeEntries = isSubtask && task.hasTimeEntries === true;
-    input.readOnly = !isSubtask || hasTimeEntries;
-    if (resetValue || !isSubtask || hasTimeEntries) input.value = String(isSubtask ? task.hours || 0 : task.totalHours || 0);
+    input.readOnly = !isSubtask;
+    if (resetValue || !isSubtask) input.value = String(isSubtask ? task.hours || 0 : task.totalHours || 0);
     if (isSubtask) input.max = '10000'; else input.removeAttribute('max');
-    $('taskHoursLabel').textContent = !isSubtask ? 'Total subtask hours (calculated)' : hasTimeEntries ? 'Expected hours (logged time tracked separately)' : 'Manual task hours';
-    $('taskHoursProgress').innerHTML = renderHoursProgress(task.completedHours || 0, task.totalHours || 0, false, true, hasTimeEntries);
+    $('taskHoursLabel').textContent = !isSubtask ? 'Total expected hours (calculated)' : 'Expected hours';
+    $('taskHoursProgress').innerHTML = renderHoursProgress(task.completedHours || 0, task.totalHours || 0);
   }
 
   function taskCanLogTime(task) {
@@ -4599,9 +4596,7 @@ function deleteCurrentTask() {
   }
 
   function taskCompletedHours(task) {
-    const loggedHours = Number(task.timeEntryHours || 0);
-    if (task.hasTimeEntries || loggedHours > 0) return Math.round(loggedHours * 100) / 100;
-    return Math.round((task.status === 'Done' ? Number(task.hours || 0) : 0) * 100) / 100;
+    return Math.round(Number(task.timeEntryHours || 0) * 100) / 100;
   }
 
   function taskHourMetrics(tasks, hierarchy = state.tasks) {
@@ -4621,13 +4616,11 @@ function deleteCurrentTask() {
     return Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
   }
 
-  function renderHoursProgress(completed, total, compact = false, showLabel = true, loggedAgainstExpected = false) {
+  function renderHoursProgress(completed, total, compact = false, showLabel = true) {
     const percent = total > 0 ? Math.max(0, Math.min(100, Math.round(completed / total * 100))) : 0;
     const completedUnit = Number(completed) === 1 ? 'hour' : 'hours';
     const totalUnit = Number(total) === 1 ? 'hour' : 'hours';
-    const label = loggedAgainstExpected
-      ? `${formatHours(completed)} ${completedUnit} logged / ${formatHours(total)} ${totalUnit} expected (${percent}%)`
-      : `${formatHours(completed)} / ${formatHours(total)} hours on completed work (${percent}%)`;
+    const label = `${formatHours(completed)} ${completedUnit} logged / ${formatHours(total)} ${totalUnit} expected (${percent}%)`;
     return `${compact || !showLabel ? '' : `<div class="hours-progress-summary">${label}</div>`}<progress class="hours-progress${compact ? ' compact' : ''}" max="100" value="${percent}" aria-label="${esc(label)}" title="${esc(label)}">${percent}%</progress>`;
   }
 
