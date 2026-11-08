@@ -273,16 +273,13 @@ function getTasks() {
   const childStats = Object.create(null);
   const ownHours = new Map(taskRows.map(row => [String(row[0]), withHours ? normalizeTaskHours_(row[15], row[0]) : 0]));
   const timeEntryHours = timeEntryTotalsByTask_(taskRows, timezone);
-  const totalTaskHours = new Map(taskRows.map(row => {
-    const taskId = String(row[0]);
-    return [taskId, ownHours.get(taskId) + (timeEntryHours.get(taskId) || 0)];
-  }));
 
   taskRows.forEach(row => {
     const parentId = String(row[13] || '').trim();
     const taskId = String(row[0]);
     const manualUnits = Math.round(ownHours.get(taskId) * 100);
     const entryUnits = Math.round((timeEntryHours.get(taskId) || 0) * 100);
+    const hasEntries = timeEntryHours.has(taskId);
 
     if (!parentId) return;
 
@@ -291,17 +288,19 @@ function getTasks() {
         total: 0,
         completed: 0,
         hourUnits: 0,
-        completedHourUnits: 0
+        completedHourUnits: 0,
+        hasTimeEntries: false
       };
     }
 
     childStats[parentId].total++;
-    childStats[parentId].hourUnits += Math.round(totalTaskHours.get(String(row[0])) * 100);
+    childStats[parentId].hourUnits += manualUnits;
+    childStats[parentId].hasTimeEntries ||= hasEntries;
 
-    childStats[parentId].completedHourUnits += entryUnits;
+    childStats[parentId].completedHourUnits += hasEntries ? entryUnits : 0;
     if (String(row[4]) === 'Done') {
       childStats[parentId].completed++;
-      childStats[parentId].completedHourUnits += manualUnits;
+      if (!hasEntries) childStats[parentId].completedHourUnits += manualUnits;
     }
   });
 
@@ -311,10 +310,12 @@ function getTasks() {
       total: 0,
       completed: 0,
       hourUnits: 0,
-      completedHourUnits: 0
+      completedHourUnits: 0,
+      hasTimeEntries: false
     };
     const hasParent = Boolean(String(row[13] || '').trim());
-    const ownCompletedHours = (String(row[4]) === 'Done' ? ownHours.get(taskId) : 0) + (timeEntryHours.get(taskId) || 0);
+    const hasEntries = timeEntryHours.has(taskId);
+    const ownCompletedHours = hasEntries ? timeEntryHours.get(taskId) : String(row[4]) === 'Done' ? ownHours.get(taskId) : 0;
 
     return {
       taskId: taskId,
@@ -346,9 +347,9 @@ function getTasks() {
       hours: String(row[13] || '').trim() ? ownHours.get(taskId) : 0,
       manualHours: String(row[13] || '').trim() ? ownHours.get(taskId) : 0,
       timeEntryHours: timeEntryHours.get(taskId) || 0,
-      hasTimeEntries: timeEntryHours.has(taskId),
+      hasTimeEntries: hasEntries || stats.hasTimeEntries,
       subtaskHours: stats.hourUnits / 100,
-      totalHours: stats.total ? stats.hourUnits / 100 : String(row[13] || '').trim() ? totalTaskHours.get(taskId) : 0,
+      totalHours: stats.total ? stats.hourUnits / 100 : hasParent ? ownHours.get(taskId) : 0,
       completedHours: stats.total ? stats.completedHourUnits / 100 : hasParent ? ownCompletedHours : 0,
       subtaskCount: stats.total,
       completedSubtaskCount: stats.completed,

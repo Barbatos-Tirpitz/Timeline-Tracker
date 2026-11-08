@@ -2168,7 +2168,7 @@
       ['In progress', count('In Progress'), 'Currently being worked on'],
       ['Completed', done, total ? `${Math.round(done / total * 100)}% of these tasks` : 'No tasks yet'],
       ['Blocked', count('Blocked'), 'Need attention'],
-      ['Hours logged', formatHours(hours.total), `${formatHours(hours.completed)} h on completed work · ${hours.percent}%`]
+      ['Expected hours', formatHours(hours.total), `${formatHours(hours.completed)} h logged / completed · ${hours.percent}%`]
     ].map((s, index) => `
       <div class="stat">
         <div class="stat-label">${esc(s[0])}</div>
@@ -2432,7 +2432,7 @@ html += `<div class="task-cell"
         
         <div class="task-info">
           <button type="button" class="task-title" title="${esc(t.name)}" onclick="openEdit(${esc(JSON.stringify(t.id))})">${esc(t.name || 'Untitled task')}</button>
-          <div class="task-meta" title="${esc(formatHours(t.completedHours || 0) + ' / ' + formatHours(t.totalHours || 0) + ' h on completed work · ' + ((t.clients || []).join(', ') || 'Unassigned'))}">${esc(t.id)} · ${formatHours(t.totalHours || 0)} h ${renderHoursProgress(t.completedHours || 0, t.totalHours || 0, true)} · ${esc(t.category)} · ${esc((t.clients || []).join(', ') || 'Unassigned')}</div>
+          <div class="task-meta" title="${esc(formatHours(t.completedHours || 0) + (t.hasTimeEntries ? ' logged / ' : ' completed / ') + formatHours(t.totalHours || 0) + ' h expected · ' + ((t.clients || []).join(', ') || 'Unassigned'))}">${esc(t.id)} · ${formatHours(t.totalHours || 0)} h ${renderHoursProgress(t.completedHours || 0, t.totalHours || 0, true, true, t.hasTimeEntries)} · ${esc(t.category)} · ${esc((t.clients || []).join(', ') || 'Unassigned')}</div>
         </div>
       </div>`;
 
@@ -3047,13 +3047,13 @@ html += `<div class="task-cell"
     const overdue = clientTasks.filter(task => task.status !== 'Done' && task.end && task.end < today);
     const blocked = scoped.filter(task => task.status === 'Blocked');
     const dueToday = clientTasks.filter(task => task.status !== 'Done' && task.end && dateKey(task.end) === dateKey(today));
-    const missingHours = scopedLeaves.filter(task => task.parentTaskId && task.category === 'Video editing' && task.status === 'Done' && !taskOwnHours(task));
+    const missingHours = scopedLeaves.filter(task => task.parentTaskId && task.category === 'Video editing' && task.status === 'Done' && !taskExpectedHours(task));
     const hourGroups = new Map();
     scopedLeaves.filter(task => task.parentTaskId).forEach(task => {
       const parent = byId.get(task.parentTaskId) || task;
       if (!hourGroups.has(parent.id)) hourGroups.set(parent.id, { id: parent.id, name: parent.name, units: 0, completedUnits: 0, ids: [] });
       const group = hourGroups.get(parent.id);
-      const units = Math.round(taskOwnHours(task) * 100);
+      const units = Math.round(taskExpectedHours(task) * 100);
       group.units += units;
       group.completedUnits += Math.round(taskCompletedHours(task) * 100);
       group.ids.push(task.id);
@@ -3125,7 +3125,7 @@ html += `<div class="task-cell"
       : dashboard.client ? dashboard.client.slice(7) : 'all clients';
     const tiles = [
       ['Completed', model.completed.length, `${completedParents} parent/standalone · ${model.completed.length - completedParents} subtasks`, 'completed'],
-      ['Recorded hours', formatHours(model.hours.total), `${formatHours(model.hours.completed)} h on completed work · scheduled scope`, 'hours'],
+      ['Expected hours', formatHours(model.hours.total), `${formatHours(model.hours.completed)} h logged / completed · scheduled scope`, 'hours'],
       ['Overdue now', model.overdue.length, 'Current unfinished work · selected client', 'overdue'],
       ['Blocked', model.blocked.length, 'Current status · scheduled scope', 'blocked']
     ];
@@ -3342,8 +3342,8 @@ html += `<div class="task-cell"
   function renderMetricsParentChart(model) {
     const groups = model.groups.filter(group => group.units > 0);
     const maximum = Math.max(1, ...groups.map(group => group.units));
-    if (!groups.length) return '<div class="metrics-zero">No recorded hours in this schedule window.</div>';
-    return groups.slice(0, 5).map(group => `<button type="button" class="metrics-parent" onclick="openMetricTasks('parent',${esc(JSON.stringify(group.id))})" title="${esc(group.name)}: ${formatHours(group.units / 100)} hours" aria-label="${esc(group.name)}, ${formatHours(group.units / 100)} recorded hours"><span class="metrics-parent-label"><span>${esc(group.name || group.id)}</span><strong>${formatHours(group.units / 100)} h</strong></span><span class="metrics-parent-track" aria-hidden="true"><span class="metrics-parent-fill" style="width:${group.units / maximum * 100}%"></span></span><span class="metrics-caption">${formatHours(group.completedUnits / 100)} h on completed work</span></button>`).join('');
+    if (!groups.length) return '<div class="metrics-zero">No expected hours in this schedule window.</div>';
+    return groups.slice(0, 5).map(group => `<button type="button" class="metrics-parent" onclick="openMetricTasks('parent',${esc(JSON.stringify(group.id))})" title="${esc(group.name)}: ${formatHours(group.units / 100)} expected hours" aria-label="${esc(group.name)}, ${formatHours(group.units / 100)} expected hours"><span class="metrics-parent-label"><span>${esc(group.name || group.id)}</span><strong>${formatHours(group.units / 100)} h</strong></span><span class="metrics-parent-track" aria-hidden="true"><span class="metrics-parent-fill" style="width:${group.units / maximum * 100}%"></span></span><span class="metrics-caption">${formatHours(group.completedUnits / 100)} h logged / completed</span></button>`).join('');
   }
 
   function renderMetricsAttention(model) {
@@ -3354,7 +3354,7 @@ html += `<div class="task-cell"
       const hasChildren = state.childrenByParent.has(task.id);
       const argument = esc(JSON.stringify(task.id));
       const hoursAction = topLevel ? `<button class="btn" onclick="openEdit(${argument})">${hasChildren ? 'Edit subtasks' : 'Add subtasks'}</button>`
-        : task.hasTimeEntries ? `<span class="task-meta">${formatHours(task.totalHours || 0)} h including time entries</span><button class="btn" onclick="openEdit(${argument})">View entries</button>`
+        : task.hasTimeEntries ? `<span class="task-meta">${formatHours(task.timeEntryHours || 0)} h logged / ${formatHours(task.totalHours || 0)} h expected</span><button class="btn" onclick="openEdit(${argument})">View entries</button>`
           : `<input class="field-control" id="metricHours-${esc(task.id)}" aria-label="Manual hours for ${esc(task.name)}" type="number" min="0" max="10000" step="0.01" value="${esc(task.hours || 0)}"><button class="btn" data-metric-command onclick="saveMetricsHours(${argument})">Save hours</button>`;
       return `<tr><td class="metrics-attention-name"><button class="subtask-link" onclick="openEdit(${argument})">${esc(task.name || task.id)}</button><div class="task-meta">${esc(task.id)}${parent ? ' · ' + esc(parent.name) : ''}</div></td><td><span class="pill ${reason === 'Overdue now' ? 'blocked' : ''}">${reason}</span></td><td>${displayDate(task.end, true)}</td><td><div class="metrics-task-actions"><select class="field-control" data-metric-command aria-label="Status for ${esc(task.name)}" onchange="updateSelectedStatuses([${argument}],this.value)">${['To Do', 'In Progress', 'Blocked', 'Done'].map(status => `<option ${task.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select>${hoursAction}</div></td></tr>`;
     }).join('')}</tbody></table></div>`;
@@ -3521,7 +3521,7 @@ html += `<div class="task-cell"
       : 0;
 
     count.textContent = children.length
-      ? `${children.length} subtasks · ${progress}% complete · ${formatHours(task.totalHours || 0)} hours`
+      ? `${children.length} subtasks · ${progress}% complete · ${formatHours(task.totalHours || 0)} expected hours`
       : 'No subtasks yet';
 
     const childRows = displayedChildren.map(child => `
@@ -3533,7 +3533,7 @@ html += `<div class="task-cell"
             ${esc(child.name)}
           </button>
           <div class="task-meta">
-            ${esc(child.id)} · ${esc(child.category)} · ${formatHours(child.totalHours || 0)} h
+            ${esc(child.id)} · ${esc(child.category)} · ${formatHours(child.totalHours || 0)} h expected${child.hasTimeEntries ? ` · ${formatHours(child.timeEntryHours || 0)} h logged` : ''}
           </div>
           ${renderSubtaskClientTags(child)}
         </div>
@@ -4451,10 +4451,10 @@ function deleteCurrentTask() {
     const isSubtask = Boolean(task.parentTaskId);
     const hasTimeEntries = isSubtask && task.hasTimeEntries === true;
     input.readOnly = !isSubtask || hasTimeEntries;
-    if (resetValue || !isSubtask || hasTimeEntries) input.value = String(isSubtask ? hasTimeEntries ? task.totalHours || 0 : task.hours || 0 : task.totalHours || 0);
+    if (resetValue || !isSubtask || hasTimeEntries) input.value = String(isSubtask ? task.hours || 0 : task.totalHours || 0);
     if (isSubtask) input.max = '10000'; else input.removeAttribute('max');
-    $('taskHoursLabel').textContent = !isSubtask ? 'Total subtask hours (calculated)' : hasTimeEntries ? 'Total hours (manual + time entries)' : 'Manual task hours';
-    $('taskHoursProgress').innerHTML = renderHoursProgress(task.completedHours || 0, task.totalHours || 0);
+    $('taskHoursLabel').textContent = !isSubtask ? 'Total subtask hours (calculated)' : hasTimeEntries ? 'Expected hours (logged time tracked separately)' : 'Manual task hours';
+    $('taskHoursProgress').innerHTML = renderHoursProgress(task.completedHours || 0, task.totalHours || 0, false, true, hasTimeEntries);
   }
 
   function taskCanLogTime(task) {
@@ -4577,27 +4577,31 @@ function deleteCurrentTask() {
     const sums = new Map();
     tasks.forEach(task => {
       if (!task.parentTaskId) return;
-      if (!sums.has(task.parentTaskId)) sums.set(task.parentTaskId, { units: 0, completed: 0 });
+      if (!sums.has(task.parentTaskId)) sums.set(task.parentTaskId, { units: 0, completed: 0, hasTimeEntries: false });
       const sum = sums.get(task.parentTaskId);
-      const units = Math.round(taskOwnHours(task) * 100);
+      const units = Math.round(taskExpectedHours(task) * 100);
       sum.units += units;
       sum.completed += Math.round(taskCompletedHours(task) * 100);
+      sum.hasTimeEntries ||= Boolean(task.hasTimeEntries || Number(task.timeEntryHours || 0) > 0);
     });
     tasks.forEach(task => {
       const sum = sums.get(task.id);
       if (!task.parentTaskId) task.hours = 0;
       task.subtaskHours = sum ? sum.units / 100 : 0;
-      task.totalHours = sum ? sum.units / 100 : task.parentTaskId ? taskOwnHours(task) : 0;
+      task.totalHours = sum ? sum.units / 100 : task.parentTaskId ? taskExpectedHours(task) : 0;
       task.completedHours = sum ? sum.completed / 100 : task.parentTaskId ? taskCompletedHours(task) : 0;
+      task.hasTimeEntries = Boolean(task.hasTimeEntries || sum?.hasTimeEntries);
     });
   }
 
-  function taskOwnHours(task) {
-    return Math.round((Number(task.hours || 0) + Number(task.timeEntryHours || 0)) * 100) / 100;
+  function taskExpectedHours(task) {
+    return Math.round(Number(task.hours || 0) * 100) / 100;
   }
 
   function taskCompletedHours(task) {
-    return Math.round((Number(task.timeEntryHours || 0) + (task.status === 'Done' ? Number(task.hours || 0) : 0)) * 100) / 100;
+    const loggedHours = Number(task.timeEntryHours || 0);
+    if (task.hasTimeEntries || loggedHours > 0) return Math.round(loggedHours * 100) / 100;
+    return Math.round((task.status === 'Done' ? Number(task.hours || 0) : 0) * 100) / 100;
   }
 
   function taskHourMetrics(tasks, hierarchy = state.tasks) {
@@ -4606,7 +4610,7 @@ function deleteCurrentTask() {
     let completed = 0;
     tasks.forEach(task => {
       if (!task.parentTaskId || parents.has(task.id)) return;
-      const units = Math.round(taskOwnHours(task) * 100);
+      const units = Math.round(taskExpectedHours(task) * 100);
       total += units;
       completed += Math.round(taskCompletedHours(task) * 100);
     });
@@ -4617,9 +4621,13 @@ function deleteCurrentTask() {
     return Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
   }
 
-  function renderHoursProgress(completed, total, compact = false, showLabel = true) {
+  function renderHoursProgress(completed, total, compact = false, showLabel = true, loggedAgainstExpected = false) {
     const percent = total > 0 ? Math.max(0, Math.min(100, Math.round(completed / total * 100))) : 0;
-    const label = `${formatHours(completed)} / ${formatHours(total)} hours on completed work (${percent}%)`;
+    const completedUnit = Number(completed) === 1 ? 'hour' : 'hours';
+    const totalUnit = Number(total) === 1 ? 'hour' : 'hours';
+    const label = loggedAgainstExpected
+      ? `${formatHours(completed)} ${completedUnit} logged / ${formatHours(total)} ${totalUnit} expected (${percent}%)`
+      : `${formatHours(completed)} / ${formatHours(total)} hours on completed work (${percent}%)`;
     return `${compact || !showLabel ? '' : `<div class="hours-progress-summary">${label}</div>`}<progress class="hours-progress${compact ? ' compact' : ''}" max="100" value="${percent}" aria-label="${esc(label)}" title="${esc(label)}">${percent}%</progress>`;
   }
 
