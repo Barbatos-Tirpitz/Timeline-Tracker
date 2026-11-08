@@ -1864,6 +1864,7 @@
       }
       state.tasks = response.tasks.map(normalizeTask);
       applyTaskHourRollups(state.tasks);
+      state.timeEntryReport.key = '';
       state.spreadsheetToday = response.spreadsheetToday || dateKey(new Date());
       state.spreadsheetTimeZone = response.spreadsheetTimeZone || state.spreadsheetTimeZone || '';
       if (!state.dashboard.anchor) state.dashboard.anchor = parseDate(state.spreadsheetToday);
@@ -3247,7 +3248,7 @@ html += `<div class="task-cell"
   function openMetricTasks(kind, key = '') {
     const dashboard = state.dashboard;
     const range = dashboardRange(dashboard.period, dashboard.anchor);
-    const labels = { completed: 'Actual completions', overdue: 'Overdue now', blocked: 'Blocked scheduled work', hours: 'Recorded-hour work', attention: 'Needs Attention', parent: 'Work by parent', finishVariance: 'Finish variance' };
+    const labels = { completed: 'Actual completions', overdue: 'Overdue now', blocked: 'Blocked scheduled work', hours: 'Expected-hour work', attention: 'Needs Attention', parent: 'Work by parent', finishVariance: 'Finish variance' };
     const focus = { kind, key, label: labels[kind] || 'Metrics', start: dateKey(range.start), end: dateKey(range.end), client: dashboard.client, period: dashboard.period };
     ['taskSearch', 'taskStatusFilter', 'taskCategoryFilter', 'taskPriorityFilter', 'taskDateFrom', 'taskDateTo'].forEach(id => { $(id).value = ''; });
     $('taskClientFilter').value = dashboard.client;
@@ -3356,8 +3357,7 @@ html += `<div class="task-cell"
       const hasChildren = state.childrenByParent.has(task.id);
       const argument = esc(JSON.stringify(task.id));
       const hoursAction = topLevel ? `<button class="btn" onclick="openEdit(${argument})">${hasChildren ? 'Edit subtasks' : 'Add subtasks'}</button>`
-        : task.hasTimeEntries ? `<span class="task-meta">${formatHours(task.timeEntryHours || 0)} h logged / ${formatHours(task.totalHours || 0)} h expected</span><button class="btn" onclick="openEdit(${argument})">View entries</button>`
-          : `<input class="field-control" id="metricHours-${esc(task.id)}" aria-label="Expected hours for ${esc(task.name)}" type="number" min="0" max="10000" step="0.01" value="${esc(task.hours || 0)}"><button class="btn" data-metric-command onclick="saveMetricsHours(${argument})">Save expected hours</button>`;
+        : `<input class="field-control" id="metricHours-${esc(task.id)}" aria-label="Expected hours for ${esc(task.name)}" type="number" min="0" max="10000" step="0.01" value="${esc(task.hours || 0)}"><button class="btn" data-metric-command onclick="saveMetricsHours(${argument})">Save expected hours</button>${task.hasTimeEntries ? `<span class="task-meta">${formatHours(task.timeEntryHours || 0)} h logged</span>` : ''}`;
       return `<tr><td class="metrics-attention-name"><button class="subtask-link" onclick="openEdit(${argument})">${esc(task.name || task.id)}</button><div class="task-meta">${esc(task.id)}${parent ? ' · ' + esc(parent.name) : ''}</div></td><td><span class="pill ${reason === 'Overdue now' ? 'blocked' : ''}">${reason}</span></td><td>${displayDate(task.end, true)}</td><td><div class="metrics-task-actions"><select class="field-control" data-metric-command aria-label="Status for ${esc(task.name)}" onchange="updateSelectedStatuses([${argument}],this.value)">${['To Do', 'In Progress', 'Blocked', 'Done'].map(status => `<option ${task.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select>${hoursAction}</div></td></tr>`;
     }).join('')}</tbody></table></div>`;
   }
@@ -3946,6 +3946,7 @@ function createSubtask() {
     $('panelTimeEntryError').textContent = '';
     mutationRunner().withSuccessHandler(result => {
       tasks.forEach(task => { delete panel.timeEntryDrafts[task.id]; });
+      state.timeEntryReport.key = '';
       showToast(`Logged time for ${result.entries.length} subtasks under ${taskLabel(parent)}.`);
       loadTasks();
     }).withFailureHandler(error => {
