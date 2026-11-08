@@ -1410,6 +1410,45 @@ test('ordinary task creation persists standalone tasks and inherited subtask def
   assert.equal(app.rows[3][15], 2.5);
 });
 
+test('new task creation can atomically include named subtasks with inherited defaults', () => {
+  const parent = taskRow('VID-001');
+  parent[14] = '["Acme"]';
+  const app = server([parent]);
+  app.context.initializeTaskHeaders_(app.sheet);
+  const writesBeforeCreate = app.writes.length;
+
+  const result = app.context.createTask({
+    taskName: 'Prepare campaign', category: 'Scheduling', priority: 'High',
+    startDate: '2026-11-09', endDate: '2026-11-10', description: 'Plan work',
+    clients: ['Beta'], subtaskNames: [' Research ', '', 'Draft copy']
+  });
+
+  assert.equal(result.taskId, 'VID-002');
+  assert.equal(result.created, 3);
+  assert.equal(result.createdSubtasks, 2);
+  assert.deepEqual(Array.from(result.taskIds), ['VID-002', 'VID-003', 'VID-004']);
+  assert.equal(app.writes.length, writesBeforeCreate + 1);
+  assert.deepEqual(app.rows.slice(2).map(row => [row[1], row[13], row[14], row[15]]), [
+    ['Prepare campaign', '', '["Beta"]', 0],
+    ['Research', 'VID-002', '["Beta"]', 0],
+    ['Draft copy', 'VID-002', '["Beta"]', 0]
+  ]);
+});
+
+test('initial subtasks are rejected for nested or recurring task creation before writes', () => {
+  const app = server([taskRow('VID-001')]);
+  const base = {
+    taskName: 'Project', category: 'Scheduling', priority: 'Medium',
+    startDate: '2026-11-09', endDate: '2026-11-10', subtaskNames: ['Research']
+  };
+  const writesBeforeCreate = app.writes.length;
+  assert.throws(() => app.context.createTask({ ...base, parentTaskId: 'VID-001' }), /only be added to a top-level task/);
+  assert.throws(() => app.context.createTask({ ...base, recurrence: { frequency: 'Weekly', throughDate: '2026-12-01' } }), /cannot be combined with recurring/);
+  assert.throws(() => app.context.createTask({ ...base, subtaskNames: Array(101).fill('Step') }), /1-100/);
+  assert.equal(app.rows.length, 2);
+  assert.equal(app.writes.length, writesBeforeCreate);
+});
+
 test('recurrence controls enable only for standalone task creation', () => {
   assert.match(html, /id="repeatTask" type="checkbox" onchange="updateTaskRecurrenceControl\(\)"/);
   assert.match(html, /id="taskRecurrenceThrough" type="date" required/);
@@ -1490,6 +1529,7 @@ test('ordinary task form submits through createTask without recurrence', () => {
     taskName: { value: 'Design review' }, category: { value: 'Graphic Design' }, priority: { value: 'High' },
     startDate: { value: '2026-11-09' }, endDate: { value: '2026-11-10' }, description: { value: 'Review draft' },
     parentTaskId: { value: '' }, taskHours: { value: '0', readOnly: true }, repeatTask: { checked: false },
+    initialSubtaskNames: { value: 'Research\nDraft copy' },
     saveBtn: { disabled: false, textContent: 'Create task' }, formError: { style: { display: 'none' }, textContent: '' }
   };
   Object.entries(fields).forEach(([id, element]) => app.elements.set(id, element));
@@ -1502,8 +1542,42 @@ test('ordinary task form submits through createTask without recurrence', () => {
   assert.equal(submitted.endDate, '2026-11-10');
   assert.equal(submitted.parentTaskId, '');
   assert.deepEqual(Array.from(submitted.clients), ['Acme']);
+  assert.deepEqual(Array.from(submitted.subtaskNames), ['Research', 'Draft copy']);
   assert.equal(submitted.recurrence, undefined);
   assert.equal(fields.saveBtn.disabled, true);
+});
+
+test('initial subtask field is limited to standalone nonrecurring task creation', () => {
+  const app = client();
+  const state = app.getState();
+  const control = { hidden: false };
+  const input = { value: 'Research\nDraft', disabled: false };
+  const parent = { value: '' };
+  const repeat = { checked: false };
+  const hint = { textContent: '' };
+  const count = { textContent: '' };
+  app.elements.set('createSubtasksControl', control);
+  app.elements.set('initialSubtaskNames', input);
+  app.elements.set('parentTaskId', parent);
+  app.elements.set('repeatTask', repeat);
+  app.elements.set('initialSubtaskHint', hint);
+  app.elements.set('initialSubtaskCount', count);
+
+  app.updateCreateTaskSubtasksControl();
+  assert.equal(input.disabled, false);
+  assert.equal(count.textContent, '2 initial subtasks');
+  parent.value = 'VID-001';
+  app.updateCreateTaskSubtasksControl();
+  assert.equal(input.disabled, true);
+  assert.match(hint.textContent, /top-level task/);
+  parent.value = '';
+  repeat.checked = true;
+  app.updateCreateTaskSubtasksControl();
+  assert.equal(input.disabled, true);
+  assert.match(hint.textContent, /Turn off Repeat/);
+  state.editId = 'VID-002';
+  app.updateCreateTaskSubtasksControl();
+  assert.equal(control.hidden, true);
 });
 
 test('subtask client tags use each child assignment, show Unassigned, and escape all names', () => {

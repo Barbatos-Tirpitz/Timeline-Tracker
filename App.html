@@ -1510,6 +1510,13 @@
       </fieldset>
     </div>
 
+    <div class="form-field full" id="createSubtasksControl">
+      <label for="initialSubtaskNames">Initial subtasks (optional)</label>
+      <textarea class="field-control" id="initialSubtaskNames" rows="3" placeholder="One subtask per line" aria-describedby="initialSubtaskHint initialSubtaskCount" oninput="updateCreateTaskSubtasksControl()"></textarea>
+      <div class="task-meta" id="initialSubtaskHint">Add subtasks to this new task in the same save.</div>
+      <output class="task-meta" id="initialSubtaskCount" aria-live="polite">No initial subtasks</output>
+    </div>
+
     <div class="form-field full">
       <label for="taskHours" id="taskHoursLabel">Expected hours (subtasks only)</label>
       <input id="taskHours" type="number" min="0" max="10000" step="0.01" value="0">
@@ -4206,6 +4213,7 @@ function populateParentTaskOptions() {
     return {
       name: $('taskName').value.trim(), category: $('category').value, priority: $('priority').value,
       start: $('startDate').value, end: $('endDate').value, description: $('description').value.trim(),
+      initialSubtasks: state.editId ? '' : $('initialSubtaskNames').value.trim(),
       parent: state.editId ? null : $('parentTaskId').value,
       status: state.editId ? $('taskStatus').value : null,
       hours: $('taskHours').readOnly ? null : Number($('taskHours').value || 0),
@@ -4281,6 +4289,24 @@ function populateParentTaskOptions() {
     if (!data.taskName) return;
 
     const isEdit = Boolean(state.editId);
+    const initialSubtasks = !isEdit && $('initialSubtaskNames').value.trim()
+      ? subtaskBatch($('initialSubtaskNames').value, 1) : { names: [], error: '' };
+    if (initialSubtasks.error) {
+      $('formError').textContent = initialSubtasks.error;
+      $('formError').style.display = 'block';
+      return;
+    }
+    if (initialSubtasks.names.length && data.parentTaskId) {
+      $('formError').textContent = 'Initial subtasks can only be added to a new top-level task.';
+      $('formError').style.display = 'block';
+      return;
+    }
+    if (initialSubtasks.names.length && $('repeatTask').checked) {
+      $('formError').textContent = 'Turn off recurring tasks before adding initial subtasks.';
+      $('formError').style.display = 'block';
+      return;
+    }
+    if (initialSubtasks.names.length) data.subtaskNames = initialSubtasks.names;
     if (!isEdit && $('repeatTask').checked) {
       const throughDate = $('taskRecurrenceThrough').value;
       if (data.parentTaskId) {
@@ -4311,7 +4337,9 @@ function populateParentTaskOptions() {
         setSaving(false);
         state.taskBaseline = captureTaskForm();
         if (!hasPendingSubtaskWork()) closeModal(true);
-        const label = !isEdit && result.created > 1 ? `${result.created} recurring tasks` : taskLabel({ name: data.taskName, id: data.taskId || result.taskId });
+        const label = !isEdit && result.createdRecurring ? `${result.createdRecurring} recurring tasks`
+          : !isEdit && result.createdSubtasks ? `${taskLabel({ name: data.taskName, id: result.taskId })} with ${result.createdSubtasks} subtasks`
+            : taskLabel({ name: data.taskName, id: data.taskId || result.taskId });
         showToast(`${isEdit ? 'Updated' : 'Created'} ${label}.`);
         loadTasks();
       })
@@ -4443,6 +4471,28 @@ function deleteCurrentTask() {
     fields.hidden = !available || !checkbox.checked;
     fields.disabled = !available || !checkbox.checked;
     if (!state.writing && $('saveBtn')) $('saveBtn').textContent = checkbox.checked && available ? 'Create recurring tasks' : 'Create task';
+    updateCreateTaskSubtasksControl();
+  }
+
+  function updateCreateTaskSubtasksControl() {
+    const control = $('createSubtasksControl');
+    const input = $('initialSubtaskNames');
+    if (!control || !input) return;
+    const parentSelected = Boolean($('parentTaskId').value);
+    const recurring = Boolean($('repeatTask').checked);
+    const names = subtaskNames(input.value);
+    const batch = input.value.trim() ? subtaskBatch(input.value, 1) : { names: [], error: '' };
+    const hint = $('initialSubtaskHint');
+    const count = $('initialSubtaskCount');
+    control.hidden = Boolean(state.editId);
+    input.disabled = Boolean(state.editId) || parentSelected || recurring || state.writing || state.syncing;
+    if (hint) hint.textContent = recurring
+      ? 'Turn off Repeat this task to add initial subtasks.'
+      : parentSelected ? 'Clear Parent task to add subtasks to a new top-level task.'
+        : 'Add subtasks to this new task in the same save.';
+    if (count) count.textContent = batch.error || (names.length
+      ? `${names.length} initial ${names.length === 1 ? 'subtask' : 'subtasks'}`
+      : 'No initial subtasks');
   }
 
   function updateTaskHoursControl(task, resetValue = false) {
