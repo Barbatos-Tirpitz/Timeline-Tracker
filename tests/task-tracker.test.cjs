@@ -493,8 +493,6 @@ test('dated subtask entries feed task and parent progress without writing Task_M
 
   app.context.saveTaskTimeEntry('VID-001', '2026-11-05', 0.5, 'Final review');
   const updatedAt = app.context.getTasks().tasks.find(task => task.taskId === 'VID-001').updatedAt;
-  assert.throws(() => app.context.updateTaskHours('VID-001', 1, updatedAt), /dated time entries/);
-  assert.throws(() => app.context.updateSubtasks('VID-000', ['VID-001'], { hours: 1 }), /dated time entries/);
   assert.throws(() => app.context.setTaskParent('VID-001', ''), /dated entries/);
 
   const tasks = app.context.getTasks().tasks;
@@ -507,6 +505,14 @@ test('dated subtask entries feed task and parent progress without writing Task_M
   assert.equal(loadedParent.totalHours, 1.25);
   assert.equal(loadedParent.completedHours, 0.5);
   assert.equal(app.rows[2][15], 1.25);
+  app.context.updateTaskHours('VID-001', 2, updatedAt);
+  assert.equal(app.context.getTasks().tasks.find(task => task.taskId === 'VID-001').totalHours, 2);
+  const revisedAt = app.context.getTasks().tasks.find(task => task.taskId === 'VID-001').updatedAt;
+  app.context.updateSubtasks('VID-000', ['VID-001'], { hours: 1.25 });
+  const revised = app.context.getTasks().tasks;
+  assert.equal(revised.find(task => task.taskId === 'VID-001').totalHours, 1.25);
+  assert.equal(revised.find(task => task.taskId === 'VID-001').completedHours, 0.5);
+  assert.notEqual(revised.find(task => task.taskId === 'VID-001').updatedAt, revisedAt);
   app.context.updateTaskStatus('VID-001', 'In Progress');
   const activeTasks = app.context.getTasks().tasks;
   assert.equal(activeTasks.find(task => task.taskId === 'VID-001').totalHours, 1.25);
@@ -515,7 +521,37 @@ test('dated subtask entries feed task and parent progress without writing Task_M
   assert.equal(activeTasks.find(task => task.taskId === 'VID-000').completedHours, 0.5);
 });
 
-test('dated entries feed progress bars and lock manual Hours to avoid double counting', () => {
+test('one logged hour against one expected hour remains one of one when Done', () => {
+  const app = server([taskRow('VID-000'), taskRow('VID-001', 'VID-000', 'Done')]);
+  app.context.initializeTaskHeaders_(app.sheet);
+  app.rows[2][15] = 1;
+  app.context.saveTaskTimeEntry('VID-001', '2026-11-05', 1, 'Completed review');
+
+  const tasks = app.context.getTasks().tasks;
+  const parent = tasks.find(task => task.taskId === 'VID-000');
+  const child = tasks.find(task => task.taskId === 'VID-001');
+  assert.equal(child.totalHours, 1);
+  assert.equal(child.completedHours, 1);
+  assert.equal(parent.totalHours, 1);
+  assert.equal(parent.completedHours, 1);
+  assert.equal(app.rows[2][15], 1);
+});
+
+test('Done status does not count a manual estimate as actual logged time', () => {
+  const app = server([taskRow('VID-000'), taskRow('VID-001', 'VID-000', 'Done')]);
+  app.context.initializeTaskHeaders_(app.sheet);
+  app.rows[2][15] = 2;
+
+  const tasks = app.context.getTasks().tasks;
+  const parent = tasks.find(task => task.taskId === 'VID-000');
+  const child = tasks.find(task => task.taskId === 'VID-001');
+  assert.equal(child.totalHours, 2);
+  assert.equal(child.completedHours, 0);
+  assert.equal(parent.totalHours, 2);
+  assert.equal(parent.completedHours, 0);
+});
+
+test('dated entries feed progress bars while expected Hours remain editable', () => {
   const app = client();
   const state = app.getState();
   const parent = app.normalizeTask({ taskId: 'VID-PARENT', taskName: 'Project', status: 'To Do' });
@@ -532,9 +568,9 @@ test('dated entries feed progress bars and lock manual Hours to avoid double cou
   app.elements.set('taskHoursLabel', { textContent: '' });
   app.elements.set('taskHoursProgress', { innerHTML: '' });
   app.updateTaskHoursControl(child, true);
-  assert.equal(app.elements.get('taskHours').readOnly, true);
+  assert.equal(app.elements.get('taskHours').readOnly, false);
   assert.equal(app.elements.get('taskHours').value, '1');
-  assert.equal(app.elements.get('taskHoursLabel').textContent, 'Expected hours (logged time tracked separately)');
+  assert.equal(app.elements.get('taskHoursLabel').textContent, 'Expected hours');
   assert.match(app.elements.get('taskHoursProgress').innerHTML, /1 hour logged \/ 1 hour expected/);
 
   child.status = 'In Progress';
@@ -544,7 +580,7 @@ test('dated entries feed progress bars and lock manual Hours to avoid double cou
   assert.equal(parent.completedHours, 1);
 });
 
-test('bulk manual-Hours edits are rejected for selected tasks with dated entries', () => {
+test('bulk expected-Hours edits remain available for selected tasks with dated entries', () => {
   const app = client();
   const state = app.getState();
   const parent = listTask('VID-PARENT');
@@ -557,11 +593,21 @@ test('bulk manual-Hours edits are rejected for selected tasks with dated entries
   app.elements.set('panelBulkStatus', { value: 'To Do' });
   app.elements.set('formError', { textContent: '', style: {} });
   app.showToast = () => {};
-  app.mutationRunner = () => { throw new Error('Bulk write must not run.'); };
+  let request;
+  let success;
+  const runner = {
+    withSuccessHandler(callback) { success = callback; return this; },
+    withFailureHandler() { return this; },
+    updateSubtasks(...args) { request = args; success({ success: true }); }
+  };
+  app.mutationRunner = () => runner;
+  app.loadTasks = () => {};
 
   app.runPanelSubtaskAction('edit');
 
-  assert.match(app.elements.get('formError').textContent, /Manual Hours cannot be changed.*dated entries/);
+  assert.equal(request[0], parent.id);
+  assert.deepEqual(Array.from(request[1]), [child.id]);
+  assert.deepEqual(JSON.parse(JSON.stringify(request[2])), { hours: 1 });
 });
 
 test('parent subtask panel logs distinct entries for selected leaf subtasks in one request', () => {
@@ -668,7 +714,7 @@ test('Metrics renders dated actual entries separately from task Hours totals', (
   assert.match(report, /Cut review/);
 });
 
-test('dated entries feed subtask and parent progress while locking manual Hours', () => {
+test('dated entries feed subtask and parent progress while expected Hours stay editable', () => {
   const app = client();
   const state = app.getState();
   const parent = app.normalizeTask({ taskId: 'VID-PARENT', taskName: 'Project', status: 'To Do' });
@@ -688,9 +734,9 @@ test('dated entries feed subtask and parent progress while locking manual Hours'
   app.elements.set('taskHoursLabel', { textContent: '' });
   app.elements.set('taskHoursProgress', { innerHTML: '' });
   app.updateTaskHoursControl(child, true);
-  assert.equal(app.elements.get('taskHours').readOnly, true);
+  assert.equal(app.elements.get('taskHours').readOnly, false);
   assert.equal(app.elements.get('taskHours').value, '1');
-  assert.equal(app.elements.get('taskHoursLabel').textContent, 'Expected hours (logged time tracked separately)');
+  assert.equal(app.elements.get('taskHoursLabel').textContent, 'Expected hours');
   assert.match(app.elements.get('taskHoursProgress').innerHTML, /1 hour logged \/ 1 hour expected/);
 });
 
@@ -2189,9 +2235,9 @@ test('only subtasks can log hours; parent legacy values stay stored but are igno
   assert.equal(app.context.getTasks().tasks[0].totalHours, 0);
   assert.throws(() => app.context.updateTaskHours('VID-001', 4, app.context.getTasks().tasks[0].updatedAt), /Parent hours are calculated from subtasks/);
   const standaloneVersion = app.context.getTasks().tasks[2].updatedAt;
-  assert.throws(() => app.context.updateTaskHours('VID-003', 4, standaloneVersion), /Only subtasks can record hours/);
-  assert.throws(() => app.context.updateTask({ taskId: 'VID-003', taskName: 'Standalone', category: 'Video editing', priority: 'High', startDate: '2026-11-02', endDate: '2026-11-03', hours: 4, expectedUpdatedAt: standaloneVersion }), /Only subtasks can record hours/);
-  assert.throws(() => app.context.createTask({ taskName: 'Standalone', category: 'Video editing', priority: 'High', startDate: '2026-11-02', endDate: '2026-11-03', hours: 4 }), /Only subtasks can record hours/);
+  assert.throws(() => app.context.updateTaskHours('VID-003', 4, standaloneVersion), /Only subtasks can have expected hours/);
+  assert.throws(() => app.context.updateTask({ taskId: 'VID-003', taskName: 'Standalone', category: 'Video editing', priority: 'High', startDate: '2026-11-02', endDate: '2026-11-03', hours: 4, expectedUpdatedAt: standaloneVersion }), /Only subtasks can have expected hours/);
+  assert.throws(() => app.context.createTask({ taskName: 'Standalone', category: 'Video editing', priority: 'High', startDate: '2026-11-02', endDate: '2026-11-03', hours: 4 }), /Only subtasks can have expected hours/);
   const childVersion = app.context.getTasks().tasks[1].updatedAt;
   app.context.updateTaskHours('VID-002', 4, childVersion);
   app.context.updateTask({ taskId: 'VID-002', taskName: 'Moved child', category: 'Video editing', priority: 'High', startDate: '2026-11-02', endDate: '2026-11-11', expectedUpdatedAt: app.context.getTasks().tasks[1].updatedAt });
@@ -2204,20 +2250,21 @@ test('only subtasks can log hours; parent legacy values stay stored but are igno
   assert.equal(app.context.getTasks().tasks[0].totalHours, 4);
 });
 
-test('hour metrics and progress weight child hours and do not count parent totals twice', () => {
+test('hour metrics compare logged actuals with estimates without treating Done as time spent', () => {
   const app = client();
-  const tasks = [listTask('VID-1', '', { hours: 0 }), listTask('VID-2', 'VID-1', { hours: 3, status: 'Done' }), listTask('VID-3', 'VID-1', { hours: 2 }), listTask('VID-4', 'VID-5', { hours: 1.5, status: 'Done' }), listTask('VID-5', '', { hours: 0 })];
+  const tasks = [listTask('VID-1', '', { hours: 0 }), listTask('VID-2', 'VID-1', { hours: 3, timeEntryHours: 1, hasTimeEntries: true, status: 'Done' }), listTask('VID-3', 'VID-1', { hours: 2, timeEntryHours: 0.5, hasTimeEntries: true }), listTask('VID-4', 'VID-5', { hours: 1.5, status: 'Done' }), listTask('VID-5', '', { hours: 0 })];
   app.applyTaskHourRollups(tasks);
   assert.equal(tasks[0].totalHours, 5);
-  assert.equal(tasks[0].completedHours, 3);
+  assert.equal(tasks[0].completedHours, 1.5);
   const summary = app.taskHourMetrics(tasks, tasks);
   assert.equal(summary.total, 6.5);
-  assert.equal(summary.completed, 4.5);
+  assert.equal(summary.completed, 1.5);
   assert.equal(app.taskHourMetrics([tasks[0]], tasks).total, 0);
   assert.equal(app.taskHourMetrics([tasks[0], tasks[1]], tasks).total, 3);
   assert.match(app.renderHoursProgress(3, 5), /value="60"/);
   assert.match(app.renderHoursProgress(0, 0), /value="0"/);
-  assert.match(app.renderHoursProgress(3, 5), /3 \/ 5 hours/);
+  assert.match(app.renderHoursProgress(3, 5), /3 hours logged \/ 5 hours expected/);
+  assert.equal(tasks[3].completedHours, 0);
 });
 
 test('only subtasks expose editable hours and root legacy values are excluded from metrics', () => {
@@ -2240,7 +2287,7 @@ test('only subtasks expose editable hours and root legacy values are excluded fr
   app.updateTaskHoursControl(parent, true);
   assert.equal(hoursInput.readOnly, true);
   assert.equal(hoursInput.value, '2');
-  assert.equal(app.elements.get('taskHoursLabel').textContent, 'Total subtask hours (calculated)');
+  assert.equal(app.elements.get('taskHoursLabel').textContent, 'Total expected hours (calculated)');
   app.updateTaskHoursControl(child, true);
   assert.equal(hoursInput.readOnly, false);
   assert.equal(hoursInput.value, '2');
@@ -2292,14 +2339,15 @@ test('editing only a subtask hours value routes through the hours-only endpoint'
   assert.deepEqual(Array.from(app.calls[0].args), ['VID-2', '3.5', child.updatedAt]);
 });
 
-test('completed hours and parent totals update on reopening, transfer and deletion without changing planned dates', () => {
+test('logged hours stay independent from status through transfer and deletion without changing expected dates', () => {
   const first = taskRow('VID-002', 'VID-001', 'Done'); first[15] = 2.25; first[5] = new Date(2026, 10, 3); first[6] = new Date(2026, 10, 7);
   const second = taskRow('VID-003', 'VID-001', 'To Do'); second[15] = 3.5;
   const app = server([taskRow('VID-001'), first, second, taskRow('VID-004')]);
   app.context.initializeTaskHeaders_(app.sheet);
+  app.context.saveTaskTimeEntry('VID-002', '2026-11-05', 2.25, 'Review');
   assert.equal(app.context.getTasks().tasks[0].completedHours, 2.25);
   app.context.updateTaskStatus('VID-003', 'Done');
-  assert.equal(app.context.getTasks().tasks[0].completedHours, 5.75);
+  assert.equal(app.context.getTasks().tasks[0].completedHours, 2.25);
   app.context.updateTaskStatus('VID-003', 'To Do');
   assert.equal(app.context.getTasks().tasks[0].completedHours, 2.25);
   app.context.setTaskParent('VID-002', 'VID-004');
@@ -2311,6 +2359,7 @@ test('completed hours and parent totals update on reopening, transfer and deleti
   assert.equal(app.rows[2][6], first[6]);
   app.context.deleteTask('VID-002');
   assert.equal(app.context.getTasks().tasks.find(task => task.taskId === 'VID-004').totalHours, 0);
+  assert.equal(app.context.getTasks().tasks.find(task => task.taskId === 'VID-004').completedHours, 0);
 });
 
 test('Revision is accepted independently of legacy category conversion', () => {
