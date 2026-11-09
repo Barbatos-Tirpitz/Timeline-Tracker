@@ -1995,6 +1995,13 @@ test('invoice and expense frontend formatting respects zero-decimal currencies',
   assert.match(html, /id="billing\$\{key\}"[^>]*normalizeMoneyInput/);
 });
 
+test('invoice exports omit video and total-hour count summaries', () => {
+  assert.doesNotMatch(html, /invoice\.lines\.length\s*\+\s*['"] videos\s*\|/i);
+  assert.doesNotMatch(html, /\[['"]Videos['"],\s*invoice\.lines\.length\]/);
+  assert.doesNotMatch(html, /['"]Videos:\s*['"]\s*\+\s*invoice\.lines\.length/);
+  assert.match(html, /\[['"]Description['"],\s*['"]Hours['"],\s*['"]Hourly rate['"],\s*['"]Amount['"]\]/);
+});
+
 test('Multi Purpose Planner nests expense records and dashboard with an expense-specific top action', () => {
   assert.match(html, /<title>Multi Purpose Planner<\/title>/);
   assert.match(html, /id="expenseNav"[^>]*aria-controls="expenseWorkspaceNav"/);

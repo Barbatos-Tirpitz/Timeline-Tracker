@@ -5383,7 +5383,6 @@ function deleteCurrentTask() {
     pdf.line(margin, y, right, y);
     y += 8;
     pdf.setFont('helvetica', 'bold');
-    block(invoice.lines.length + ' videos | ' + invoiceTotals(invoice).hoursUnits / 100 + ' hours');
     block('Total: ' + money(invoiceTotals(invoice).minor), 14);
     pdf.setFont('helvetica', 'normal');
     if (invoice.notes) { y += 5; block(invoice.notes); }
@@ -5417,7 +5416,7 @@ function deleteCurrentTask() {
     if (!invoiceReadyForCopy()) return;
     const invoice = state.invoices.editor;
     const rows = [['Invoice', invoice.number || 'Draft'], ['Invoice name', invoice.name || ''], ['Client', invoice.client], ['Status', invoice.status], ['Currency', invoice.currency],
-      ['Period start', formatDisplayDate(invoice.periodStart)], ['Period end', formatDisplayDate(invoice.periodEnd)], ['Videos', invoice.lines.length], [], ['Description', 'Hours', 'Hourly rate', 'Amount'],
+      ['Period start', formatDisplayDate(invoice.periodStart)], ['Period end', formatDisplayDate(invoice.periodEnd)], [], ['Description', 'Hours', 'Hourly rate', 'Amount'],
       ...invoice.lines.map(line => [line.description, line.hours, line.rate, (invoiceAmount(line.hours, line.rate, invoice.currency) / currencyScale(invoice.currency)).toFixed(currencyScale(invoice.currency) === 1 ? 0 : 2)]),
       ['Total', '', '', (invoiceTotals(invoice).minor / currencyScale(invoice.currency)).toFixed(currencyScale(invoice.currency) === 1 ? 0 : 2)]];
     const text = '\uFEFF' + rows.map(row => row.map(invoiceCsvCell).join(',')).join('\r\n');
@@ -5435,7 +5434,7 @@ function deleteCurrentTask() {
     if (!invoiceReadyForCopy()) return;
     const invoice = state.invoices.editor;
     const text = [invoice.number || 'Draft invoice', invoice.name || '', invoice.status, 'From: ' + invoice.senderName, 'Client: ' + invoice.client,
-      formatDisplayDate(invoice.periodStart) + ' - ' + formatDisplayDate(invoice.periodEnd), 'Videos: ' + invoice.lines.length, ...invoice.lines.map(line => `${line.description}: ${line.hours} hours × ${invoiceMoney(Number(line.rate) * currencyScale(invoice.currency), invoice.currency)} = ${invoiceMoney(invoiceAmount(line.hours, line.rate, invoice.currency), invoice.currency)}`),
+      formatDisplayDate(invoice.periodStart) + ' - ' + formatDisplayDate(invoice.periodEnd), ...invoice.lines.map(line => `${line.description}: ${line.hours} hours × ${invoiceMoney(Number(line.rate) * currencyScale(invoice.currency), invoice.currency)} = ${invoiceMoney(invoiceAmount(line.hours, line.rate, invoice.currency), invoice.currency)}`),
       'Total: ' + invoiceMoney(invoiceTotals(invoice).minor, invoice.currency), 'Due: ' + formatDisplayDate(invoice.dueDate), invoice.notes].join('\n');
     try { await navigator.clipboard.writeText(text); showToast('Invoice copied for ' + invoice.client + '.'); }
     catch { showToast('Clipboard access is unavailable. Use Print / PDF or CSV.'); }
