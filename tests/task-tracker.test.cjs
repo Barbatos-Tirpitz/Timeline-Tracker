@@ -500,6 +500,67 @@ test('bulk time entries validate every direct leaf subtask before one ledger wri
   assert.equal(app.ledgers.get('Time_Entry_Master').rows.length, 3);
 });
 
+test('task IDs with stray whitespace still group, log time and roll up like other tasks', () => {
+  const app = server([taskRow('VID-010 '), taskRow(' VID-011', 'VID-010'), taskRow('VID-012', 'VID-010')]);
+  app.context.saveTaskTimeEntry('VID-011', '2026-11-05', 1.5, 'Single');
+  app.context.saveTaskTimeEntries('VID-010', '2026-11-06', [{ taskId: 'VID-012', hours: 2, note: 'Bulk' }]);
+  const tasks = app.context.getTasks().tasks;
+  const parent = tasks.find(task => task.taskId === 'VID-010');
+  assert.ok(parent);
+  assert.equal(parent.subtaskCount, 2);
+  assert.equal(parent.completedHours, 3.5);
+  assert.equal(tasks.find(task => task.taskId === 'VID-011').timeEntryHours, 1.5);
+  assert.deepEqual(Array.from(app.context.getTaskTimeEntries('VID-011').entries, entry => entry.hours), [1.5]);
+  assert.equal(app.context.getTimeEntrySummary('2026-11-05', '2026-11-06', '').totalHours, 3.5);
+  assert.equal(app.context.updateSubtasks('VID-010', ['VID-011'], { priority: 'High' }).updated, 1);
+});
+
+test('mocked dataset: an affected family logs single and bulk entries once without changing a control family', () => {
+  const app = server([
+    taskRow('VID-100'), taskRow('VID-101', 'VID-100'), taskRow('VID-102', 'VID-100'),
+    taskRow('VID-200 '), taskRow(' VID-201', 'VID-200'), taskRow('VID-202', 'VID-200 ')
+  ], false, Infinity, true, 'Asia/Manila');
+  app.context.saveTaskTimeEntry('VID-101', '2026-11-10', 1, 'Control');
+  app.context.saveTaskTimeEntry('VID-201', '2026-11-10', 2.25, 'Affected single');
+  app.context.saveTaskTimeEntries('VID-200', '2026-11-11', [{ taskId: 'VID-202', hours: 0.75, note: 'Affected bulk' }]);
+
+  assert.deepEqual(app.ledgers.get('Time_Entry_Master').rows.slice(1).map(row => [row[1], row[3], row[4]]), [
+    ['VID-101', 1, 'Control'], ['VID-201', 2.25, 'Affected single'], ['VID-202', 0.75, 'Affected bulk']
+  ]);
+  const tasks = new Map(Array.from(app.context.getTasks().tasks, task => [task.taskId, task]));
+  assert.equal(tasks.get('VID-100').completedHours, 1);
+  assert.equal(tasks.get('VID-200').subtaskCount, 2);
+  assert.equal(tasks.get('VID-200').completedHours, 3);
+  assert.equal(tasks.get('VID-202').parentTaskId, 'VID-200');
+  assert.deepEqual(Array.from(app.context.getTaskTimeEntries('VID-201').entries, entry => [entry.date, entry.hours]), [['2026-11-10', 2.25]]);
+  assert.deepEqual(Array.from(app.context.getTaskTimeEntries('VID-202').entries, entry => [entry.date, entry.hours]), [['2026-11-11', 0.75]]);
+  assert.deepEqual(Array.from(app.context.getTaskTimeEntries('VID-102').entries), []);
+});
+
+test('mocked dataset: rejected time entries leave the ledger unchanged', () => {
+  const app = server([
+    taskRow('VID-300'), taskRow('VID-301', 'VID-300'),
+    taskRow('VID-310'), taskRow('VID-311', 'VID-310'), taskRow('VID-312', 'VID-311'),
+    taskRow('VID-320'), taskRow('VID-321', 'VID-320'), taskRow('VID-321', 'VID-320')
+  ]);
+  app.context.saveTaskTimeEntry('VID-301', '2026-11-10', 1, 'Baseline');
+  const ledgerRows = () => app.ledgers.get('Time_Entry_Master').rows.length;
+  const before = ledgerRows();
+  [
+    [() => app.context.saveTaskTimeEntry('VID-300', '2026-11-10', 1, ''), /only be logged on subtasks/],
+    [() => app.context.saveTaskTimeEntry('VID-311', '2026-11-10', 1, ''), /without their own subtasks/],
+    [() => app.context.saveTaskTimeEntry('VID-301', '2026-02-30', 1, ''), /valid work date/],
+    [() => app.context.saveTaskTimeEntry('VID-301', '2026-11-10', 0, ''), /greater than 0/],
+    [() => app.context.saveTaskTimeEntry('VID-301', '2026-11-10', 24.01, ''), /no more than 24 hours/],
+    [() => app.context.saveTaskTimeEntry('VID-301', '2026-11-10', 1.005, ''), /two decimal places/],
+    [() => app.context.saveTaskTimeEntry('VID-321', '2026-11-10', 1, ''), /Duplicate task ID/],
+    [() => app.context.saveTaskTimeEntry('VID-999', '2026-11-10', 1, ''), /Task ID not found/],
+    [() => app.context.saveTaskTimeEntries('VID-300', '2026-11-10', [{ taskId: 'VID-301', hours: 1 }, { taskId: 'VID-312', hours: 1 }]), /direct subtask/],
+    [() => app.context.saveTaskTimeEntries('VID-300', '2026-11-10', [{ taskId: 'VID-301', hours: 1 }, { taskId: 'VID-301', hours: 1 }]), /Duplicate subtask IDs/]
+  ].forEach(([run, message]) => assert.throws(run, message));
+  assert.equal(ledgerRows(), before);
+});
+
 test('deleted task IDs are not reused and orphaned entries are not attributed to new tasks', () => {
   const app = server([taskRow('VID-100'), taskRow('VID-101', 'VID-100')]);
   app.context.initializeTaskHeaders_(app.sheet);
