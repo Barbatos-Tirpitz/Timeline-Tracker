@@ -876,8 +876,10 @@ test('parent subtask panel logs distinct entries for selected leaf subtasks in o
 test('task editor exposes dated time entry controls and renders a separate logged-hours list', () => {
   assert.match(html, /\.form-field\[hidden\], \.form-grid\[hidden\] \{ display: none; \}/);
   assert.match(html, /<fieldset id="taskTimeEntryForm" class="task-time-entry-form" disabled>/);
-  assert.match(html, /id="timeEntryDate" type="date" required/);
-  assert.match(html, /id="timeEntryHours" type="number" min="0\.01" max="24" step="0\.01" placeholder="e.g. 1\.5" required/);
+  assert.match(html, /id="timeEntryDate" type="date">/);
+  assert.match(html, /id="timeEntryHours" type="number" min="0\.01" max="24" step="0\.01" placeholder="e.g. 1\.5">/);
+  assert.match(html, /Choose a valid work date to log time/);
+  assert.match(html, /Enter valid hours to log time/);
   assert.match(html, /Entry hours \*<input class="field-control" id="timeEntryHours"/);
   assert.match(html, /class="task-recurrence-toggle" for="repeatTask"/);
   assert.match(html, /class="task-time-entry-actions"/);
@@ -898,6 +900,21 @@ test('task editor exposes dated time entry controls and renders a separate logge
   assert.equal(app.elements.get('taskTimeEntriesTotal').textContent, '3.5 hours logged');
   assert.match(app.elements.get('taskTimeEntriesList').innerHTML, /&lt;script&gt;unsafe&lt;\/script&gt;/);
   assert.match(app.elements.get('taskTimeEntriesList').innerHTML, /deleteTaskTimeEntry/);
+});
+
+test('logging time still requires a valid date and hours after removing form-wide required fields', () => {
+  const app = client();
+  const state = app.getState();
+  state.editId = 'VID-1';
+  app.elements.set('timeEntryDate', { value: '', checkValidity: () => true, reportValidity() {} });
+  app.elements.set('timeEntryHours', { value: '', checkValidity: () => true, reportValidity() {} });
+  app.elements.set('timeEntryNote', { value: '' });
+  app.elements.set('timeEntryError', { textContent: '' });
+  app.saveTaskTimeEntry();
+  assert.equal(app.elements.get('timeEntryError').textContent, 'Choose a valid work date to log time.');
+  app.elements.get('timeEntryDate').value = '2026-11-10';
+  app.saveTaskTimeEntry();
+  assert.equal(app.elements.get('timeEntryError').textContent, 'Enter valid hours to log time.');
 });
 
 test('only leaf subtasks can show the task time-entry form', () => {
@@ -2630,7 +2647,7 @@ test('new task hours become editable only after selecting a parent task', () => 
 test('editing only a subtask hours value routes through the hours-only endpoint', () => {
   const app = loadingClient();
   const state = app.getState();
-  const child = listTask('VID-2', 'VID-1', { hours: 2, totalHours: 2, category: 'Video editing', start: app.parseDate('2026-11-03'), end: app.parseDate('2026-11-07') });
+  const child = listTask('VID-2', 'VID-1', { hours: 2, totalHours: 2, timeEntryHours: 1.5, hasTimeEntries: true, category: 'Video editing', start: app.parseDate('2026-11-03'), end: app.parseDate('2026-11-07') });
   state.loaded = true;
   state.editId = child.id;
   state.taskById.set(child.id, child);
