@@ -355,11 +355,13 @@ function server(records, missingSheet = false, failAfter = Infinity, documentLoc
     const deletions = [];
     return {
       rows: ledgerRows, deletions,
+      copyTo() { return { setName() {} }; },
       getLastRow: () => ledgerRows.length,
       getMaxRows: () => 10000,
       getRange(row, column, height = 1, width = 1) {
         return {
           getValues: () => Array.from({ length: height }, (_, offset) => Array.from({ length: width }, (_, index) => ledgerRows[row - 1 + offset]?.[column - 1 + index] ?? '')),
+          getFormulas: () => Array.from({ length: height }, () => Array(width).fill('')),
           setValues(values) {
             values.forEach((valuesRow, offset) => {
               if (!ledgerRows[row - 1 + offset]) ledgerRows[row - 1 + offset] = [];
@@ -367,6 +369,7 @@ function server(records, missingSheet = false, failAfter = Infinity, documentLoc
             });
             return this;
           },
+          setValue(value) { return this.setValues([[value]]); },
           setNumberFormat() { return this; }
         };
       },
@@ -513,6 +516,122 @@ test('task IDs with stray whitespace still group, log time and roll up like othe
   assert.deepEqual(Array.from(app.context.getTaskTimeEntries('VID-011').entries, entry => entry.hours), [1.5]);
   assert.equal(app.context.getTimeEntrySummary('2026-11-05', '2026-11-06', '').totalHours, 3.5);
   assert.equal(app.context.updateSubtasks('VID-010', ['VID-011'], { priority: 'High' }).updated, 1);
+});
+
+test('new subtasks store a trimmed parent ID even when the request contains spaces', () => {
+  const parent = taskRow('VID-010');
+  parent[5] = new Date('2026-11-02T00:00:00Z');
+  parent[6] = new Date('2026-11-06T00:00:00Z');
+  const app = server([parent]);
+  const created = app.context.createSubtasks(' VID-010 ', ['Edit']);
+  assert.equal(app.rows[2][0], created.taskIds[0]);
+  assert.equal(app.rows[2][13], 'VID-010');
+});
+
+test('manual edits to Task ID and Parent Task ID cells are trimmed; other cells and sheets are untouched', () => {
+  const app = server([taskRow('VID-001'), taskRow('VID-002', 'VID-001')]);
+  app.rows[1][0] = ' VID-001 ';
+  app.rows[2][1] = ' Name with spaces ';
+  app.rows[2][13] = 'VID-001  ';
+  const edit = (sheetName, row, column, height, width) => ({ range: {
+    getSheet: () => ({ ...app.sheet, getName: () => sheetName }),
+    getRow: () => row, getColumn: () => column, getNumRows: () => height, getNumColumns: () => width
+  } });
+  app.context.onEdit(edit('Other', 2, 1, 1, 1));
+  assert.equal(app.rows[1][0], ' VID-001 ');
+  app.context.onEdit(edit('Task_Master', 1, 1, 3, 14));
+  assert.equal(app.rows[0][0], 'Task ID');
+  assert.equal(app.rows[1][0], 'VID-001');
+  assert.equal(app.rows[2][1], ' Name with spaces ');
+  assert.equal(app.rows[2][13], 'VID-001');
+  assert.equal(app.rows[2][7], '=G2-F2+1');
+});
+
+function captureNotices(app) {
+  const notices = { alerts: [], toasts: [] };
+  app.ui.alert = (...args) => { notices.alerts.push(args); return app.ui.answer; };
+  app.context.SpreadsheetApp.getActiveSpreadsheet().toast = (...args) => notices.toasts.push(args);
+  return notices;
+}
+
+test('Check and Clean Task IDs trims ID cells with backups and only reports duplicates and missing parents', () => {
+  const app = server([
+    taskRow('VID-001 '), taskRow('VID-002', ' VID-001'), taskRow('VID-003'), taskRow('VID-003'), taskRow('VID-004', 'VID-404')
+  ]);
+  app.context.saveTaskTimeEntry('VID-002', '2026-11-05', 1, '');
+  const ledger = app.ledgers.get('Time_Entry_Master');
+  ledger.rows[1][1] = 'VID-002 ';
+  const notices = captureNotices(app);
+
+  app.ui.answer = 'NO';
+  app.context.cleanTaskIds();
+  assert.equal(app.rows[1][0], 'VID-001 ');
+  assert.equal(app.backups.length, 0);
+
+  app.ui.answer = 'YES';
+  app.context.cleanTaskIds();
+  assert.equal(app.backups.length, 1);
+  assert.equal(app.rows[1][0], 'VID-001');
+  assert.equal(app.rows[2][13], 'VID-001');
+  assert.equal(ledger.rows[1][1], 'VID-002');
+  assert.deepEqual([app.rows[3][0], app.rows[4][0], app.rows[5][13]], ['VID-003', 'VID-003', 'VID-404']);
+  const report = notices.alerts.at(-1)[1];
+  assert.match(report, /Removed extra spaces from 3 ID cells/);
+  assert.match(report, /VID-003 in rows 4, 5/);
+  assert.match(report, /VID-004 -> VID-404 \(row 6\)/);
+
+  const writes = app.writes.length;
+  app.context.cleanTaskIds();
+  assert.equal(app.writes.length, writes);
+  assert.match(notices.alerts.at(-1)[1], /No extra spaces found/);
+});
+
+test('task loads warn about duplicate IDs and missing parents; ID errors explain the fix', () => {
+  const clean = server([taskRow('VID-001'), taskRow('VID-002', 'VID-001')]);
+  assert.equal(clean.context.getTasks().dataWarning, '');
+  const app = server([taskRow('VID-001'), taskRow('VID-001'), taskRow('VID-002', 'VID-404')]);
+  const warning = app.context.getTasks().dataWarning;
+  assert.match(warning, /Duplicate Task IDs .*VID-001 in rows 2, 3/);
+  assert.match(warning, /VID-002 -> VID-404/);
+  assert.match(warning, /Check and Clean Task IDs/);
+  assert.throws(() => app.context.findTaskRow(app.sheet, 'VID-001'), /Duplicate task ID: VID-001\. Use Task Manager > Check and Clean Task IDs/);
+  assert.throws(() => app.context.findTaskRow(app.sheet, 'VID-999'), /Task ID not found: VID-999\. Refresh the app/);
+});
+
+test('manual edits that create a duplicate ID or orphan subtasks raise a spreadsheet warning', () => {
+  const app = server([taskRow('VID-001'), taskRow('VID-002', 'VID-001'), taskRow('VID-003')]);
+  const notices = captureNotices(app);
+  const edit = (row, column) => ({ range: {
+    getSheet: () => ({ ...app.sheet, getName: () => 'Task_Master' }),
+    getRow: () => row, getColumn: () => column, getNumRows: () => 1, getNumColumns: () => 1
+  } });
+  app.context.onEdit(edit(4, 2));
+  assert.equal(notices.toasts.length, 0);
+  app.rows[3][0] = 'VID-002 ';
+  app.context.onEdit(edit(4, 1));
+  assert.equal(app.rows[3][0], 'VID-002');
+  assert.match(notices.toasts.at(-1)[0], /VID-002 in rows 3, 4/);
+  app.rows[3][0] = 'VID-003';
+  app.rows[1][0] = 'VID-100';
+  app.context.onEdit(edit(2, 1));
+  assert.match(notices.toasts.at(-1)[0], /VID-002 -> VID-001 \(row 3\)/);
+});
+
+test('task data warnings are shown once per distinct message', () => {
+  const app = loadingClient();
+  app.messages = [];
+  vm.runInContext('showToast = message => messages.push(message);', app);
+  const state = app.getState();
+  state.activeView = 'tasks';
+  const respond = dataWarning => {
+    app.loadTasks();
+    app.calls.at(-1).success({ success: true, tasks: [], dataWarning });
+  };
+  respond('Duplicate Task IDs: VID-001.');
+  respond('Duplicate Task IDs: VID-001.');
+  respond('');
+  respond('Duplicate Task IDs: VID-001.');
+  assert.deepEqual(Array.from(app.messages), ['Duplicate Task IDs: VID-001.', 'Duplicate Task IDs: VID-001.']);
 });
 
 test('mocked dataset: an affected family logs single and bulk entries once without changing a control family', () => {

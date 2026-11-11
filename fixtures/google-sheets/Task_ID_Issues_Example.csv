@@ -1,0 +1,5 @@
+Task ID,Task Name,Category,Priority,Status,Start Date,End Date,Duration,Description,Actual Start,Actual End,Created At,Updated At,Parent Task ID,Clients,Hours
+VID-900,Sample Parent,Graphic Design,Medium,To Do,2026-11-09,2026-11-15,=G2-F2+1,Intentional test data,,,,,,[],0
+VID-901 ,Spaced ID Sample,Graphic Design,Medium,To Do,2026-11-09,2026-11-12,=G3-F3+1,Intentional trailing space in Task ID,,,,, VID-900 ,[],0
+VID-901,Duplicate ID Sample,Graphic Design,Low,To Do,2026-11-09,2026-11-12,=G4-F4+1,Intentional duplicate after trimming,,,,,VID-900,[],0
+VID-902,Missing Parent Sample,Graphic Design,Low,To Do,2026-11-09,2026-11-12,=G5-F5+1,Intentional missing parent ID,,,,,VID-999,[],0
