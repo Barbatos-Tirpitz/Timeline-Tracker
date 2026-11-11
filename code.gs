@@ -275,12 +275,12 @@ function getTasks() {
 
   // Calculate child counts for every parent.
   const childStats = Object.create(null);
-  const ownHours = new Map(taskRows.map(row => [String(row[0]), withHours ? normalizeTaskHours_(row[15], row[0]) : 0]));
+  const ownHours = new Map(taskRows.map(row => [String(row[0]).trim(), withHours ? normalizeTaskHours_(row[15], row[0]) : 0]));
   const timeEntryHours = timeEntryTotalsByTask_(taskRows, timezone);
 
   taskRows.forEach(row => {
     const parentId = String(row[13] || '').trim();
-    const taskId = String(row[0]);
+    const taskId = String(row[0]).trim();
     const manualUnits = Math.round(ownHours.get(taskId) * 100);
     const entryUnits = Math.round((timeEntryHours.get(taskId) || 0) * 100);
     const hasEntries = timeEntryHours.has(taskId);
@@ -308,7 +308,7 @@ function getTasks() {
   });
 
   const tasks = taskRows.map(row => {
-    const taskId = String(row[0]);
+    const taskId = String(row[0]).trim();
     const stats = childStats[taskId] || {
       total: 0,
       completed: 0,
@@ -345,7 +345,7 @@ function getTasks() {
         ? Utilities.formatDate(row[10], timezone, 'yyyy-MM-dd') : '',
       updatedAt: taskVersion_(row[12]),
 
-      parentTaskId: String(row[13] || ''),
+      parentTaskId: String(row[13] || '').trim(),
       clients: withClients ? readClients_(row[14], taskId) : [],
       hours: String(row[13] || '').trim() ? ownHours.get(taskId) : 0,
       manualHours: String(row[13] || '').trim() ? ownHours.get(taskId) : 0,
@@ -523,8 +523,9 @@ function findTaskRow(sheet, taskId) {
     .getDisplayValues();
 
   const matches = [];
+  taskId = String(taskId || '').trim();
   ids.forEach((row, index) => {
-    if (row[0] === taskId) matches.push(index);
+    if (row[0].trim() === taskId) matches.push(index);
   });
   if (!matches.length) {
     throw new Error('Task ID not found: ' + taskId);
@@ -692,14 +693,14 @@ function readTimeEntry_(row, timezone) {
     throw new Error('Stored time entry is invalid.');
   }
   return {
-    id: String(row[0]), taskId: String(row[1]), date,
+    id: String(row[0]), taskId: String(row[1]).trim(), date,
     hours: normalizeTimeEntryHours_(row[3]), note: String(row[4] || ''),
     createdAt: String(row[5] || '')
   };
 }
 
 function timeEntryTotalsByTask_(taskRows, timezone) {
-  const taskParents = new Map(taskRows.filter(row => row[0]).map(row => [String(row[0]), String(row[13] || '').trim()]));
+  const taskParents = new Map(taskRows.filter(row => row[0]).map(row => [String(row[0]).trim(), String(row[13] || '').trim()]));
   const parentIds = new Set([...taskParents.values()].filter(Boolean));
   const sheet = timeEntrySheet_(false);
   const totals = new Map();
@@ -743,7 +744,7 @@ function getTaskTimeEntries(taskId) {
   if (!sheet || sheet.getLastRow() < 2) return { success: true, entries: [] };
   const timezone = ss.getSpreadsheetTimeZone();
   const entries = sheet.getRange(2, 1, sheet.getLastRow() - 1, TIME_ENTRY_CONFIG.HEADERS.length).getValues()
-    .filter(row => String(row[1] || '') === taskId)
+    .filter(row => String(row[1] || '').trim() === taskId)
     .map(row => readTimeEntry_(row, timezone))
     .sort((first, second) => second.date.localeCompare(first.date) || second.createdAt.localeCompare(first.createdAt));
   return { success: true, entries };
@@ -760,8 +761,8 @@ function getTimeEntrySummary(startValue, endValue, clientFilter) {
   const taskRows = taskSheet.getLastRow() > 1
     ? taskSheet.getRange(2, 1, taskSheet.getLastRow() - 1, taskReadWidth_(taskSheet)).getValues() : [];
   const parentIds = new Set(taskRows.map(row => String(row[13] || '').trim()).filter(Boolean));
-  const tasks = new Map(taskRows.filter(row => row[0]).map(row => [String(row[0]), {
-    name: String(row[1] || ''), parentTaskId: String(row[13] || '').trim(), hasChildren: parentIds.has(String(row[0])),
+  const tasks = new Map(taskRows.filter(row => row[0]).map(row => [String(row[0]).trim(), {
+    name: String(row[1] || ''), parentTaskId: String(row[13] || '').trim(), hasChildren: parentIds.has(String(row[0]).trim()),
     clients: hasClientsColumn_(taskSheet) ? readClients_(row[14], row[0]) : []
   }]));
   const sheet = timeEntrySheet_(false);
@@ -883,7 +884,7 @@ function deleteTaskTimeEntry(taskId, entryId) {
     const sheet = timeEntrySheet_(false);
     if (!sheet || sheet.getLastRow() < 2) throw new Error('Time entry not found.');
     const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, TIME_ENTRY_CONFIG.HEADERS.length).getValues();
-    const index = rows.findIndex(row => String(row[0] || '') === entryId && String(row[1] || '') === taskId);
+    const index = rows.findIndex(row => String(row[0] || '') === entryId && String(row[1] || '').trim() === taskId);
     if (index < 0) throw new Error('Time entry not found.');
     sheet.deleteRows(index + 2, 1);
     return { success: true, message: 'Time entry deleted.' };
@@ -1004,8 +1005,8 @@ function updateTaskStatuses(taskIds, newStatus, parentTaskId) {
 
 function assertSubtaskSelection_(selection, parentTaskId) {
   parentTaskId = String(parentTaskId || '').trim();
-  const parent = selection.rows.find(values => String(values[0]) === parentTaskId);
-  if (!parent || parent[13]) throw new Error('Select an existing top-level parent task.');
+  const parent = selection.rows.find(values => String(values[0]).trim() === parentTaskId);
+  if (!parent || String(parent[13] || '').trim()) throw new Error('Select an existing top-level parent task.');
   if (selection.selected.some(record => String(record.values[13] || '').trim() !== parentTaskId)) {
     throw new Error('Selection contains tasks that are no longer direct subtasks of this parent. Refresh and select again.');
   }
@@ -1100,7 +1101,7 @@ function createSubtasks(parentTaskId, names, quantity = 1) {
     const selection = readTaskSelection_([parentTaskId]);
     if (!hasClientsColumn_(selection.sheet)) throw new Error('Run Upgrade Categories and Clients first.');
     const parent = selection.selected[0].values;
-    if (parent[13]) throw new Error('Only top-level tasks can have subtasks.');
+    if (String(parent[13] || '').trim()) throw new Error('Only top-level tasks can have subtasks.');
     validateCategory_(parent[2]);
     if (!CONFIG.PRIORITIES.includes(parent[3]) ||
         !parent[5] || !parent[6] || typeof parent[5].getTime !== 'function' || typeof parent[6].getTime !== 'function' ||
@@ -1136,7 +1137,7 @@ function updateSubtasks(parentTaskId, taskIds, patch) {
     if (hours !== null) {
       if (!hasHoursColumn_(selection.sheet)) throw new Error('Run Upgrade Categories, Clients and Hours from the spreadsheet menu first.');
       const parents = new Set(selection.rows.map(values => String(values[13] || '').trim()).filter(Boolean));
-      if (selection.selected.some(record => parents.has(String(record.values[0])))) throw new Error('Parent hours are calculated from subtasks. Update the subtask hours instead.');
+      if (selection.selected.some(record => parents.has(String(record.values[0]).trim()))) throw new Error('Parent hours are calculated from subtasks. Update the subtask hours instead.');
     }
     if (clients !== null && !hasClientsColumn_(selection.sheet)) throw new Error('Run Upgrade Categories and Clients first.');
     if (start || end) selection.selected.forEach(record => {
