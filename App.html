@@ -1529,8 +1529,8 @@
         <div id="taskTimeEntryParentNotice" class="task-meta" hidden>Time can only be logged on subtasks. Open a subtask to add an entry.</div>
         <fieldset id="taskTimeEntryForm" class="task-time-entry-form" disabled>
           <div class="form-grid">
-            <label class="form-field">Work date<input class="field-control" id="timeEntryDate" type="date" required></label>
-            <label class="form-field">Entry hours *<input class="field-control" id="timeEntryHours" type="number" min="0.01" max="24" step="0.01" placeholder="e.g. 1.5" required></label>
+            <label class="form-field">Work date<input class="field-control" id="timeEntryDate" type="date"></label>
+            <label class="form-field">Entry hours *<input class="field-control" id="timeEntryHours" type="number" min="0.01" max="24" step="0.01" placeholder="e.g. 1.5"></label>
             <label class="form-field full">Note<input class="field-control" id="timeEntryNote" maxlength="200" placeholder="What did you work on?"></label>
           </div>
           <div class="task-time-entry-actions"><span class="invoice-field-error" id="timeEntryError" role="alert"></span><button class="btn btn-primary" type="button" id="saveTimeEntryBtn" onclick="saveTaskTimeEntry()">Log time</button></div>
@@ -4586,8 +4586,14 @@ function deleteCurrentTask() {
     const hoursInput = $('timeEntryHours');
     const noteInput = $('timeEntryNote');
     if (!taskId || state.writing || state.syncing) return;
-    if (!dateInput.checkValidity() || !parseDate(dateInput.value) || !hoursInput.checkValidity()) {
-      (dateInput.checkValidity() && parseDate(dateInput.value) ? hoursInput : dateInput).reportValidity();
+    if (!dateInput.value || !dateInput.checkValidity() || !parseDate(dateInput.value)) {
+      $('timeEntryError').textContent = 'Choose a valid work date to log time.';
+      dateInput.reportValidity();
+      return;
+    }
+    if (!hoursInput.value || !hoursInput.checkValidity()) {
+      $('timeEntryError').textContent = 'Enter valid hours to log time.';
+      hoursInput.reportValidity();
       return;
     }
     if (noteInput.value.length > 200) {
