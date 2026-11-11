@@ -53,7 +53,136 @@ function onOpen() {
     .addItem('Build / Refresh Timeline', 'setupTimeline')
     .addItem('Initialize Task Database', 'setupTaskDatabase')
     .addItem('Upgrade Categories, Clients and Hours (with backup)', 'upgradeTaskDatabase')
+    .addItem('Check and Clean Task IDs (with backup)', 'cleanTaskIds')
     .addToUi();
+}
+
+const TASK_ID_HELP = ' Use Task Manager > Check and Clean Task IDs.';
+
+function taskIdRows_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { values: [], formulas: [] };
+  const range = sheet.getRange(2, 1, lastRow - 1, Math.min(14, sheet.getMaxColumns()));
+  return { values: range.getValues(), formulas: range.getFormulas() };
+}
+
+function taskIdIssues_(values, formulas = []) {
+  const rowsById = new Map();
+  const spaced = [];
+  values.forEach((row, index) => {
+    const rowNumber = index + 2;
+    [0, 13].forEach(column => {
+      const value = row[column];
+      if (typeof value === 'string' && value.trim() !== value && !(formulas[index] && formulas[index][column])) {
+        spaced.push({ rowNumber, column: column + 1, value: value.trim() });
+      }
+    });
+    const id = String(row[0] || '').trim();
+    if (!id) return;
+    if (!rowsById.has(id)) rowsById.set(id, []);
+    rowsById.get(id).push(rowNumber);
+  });
+  const duplicates = [...rowsById].filter(([, rowNumbers]) => rowNumbers.length > 1).map(([id, rowNumbers]) => ({ id, rowNumbers }));
+  const missingParents = values.map((row, index) => ({
+    rowNumber: index + 2, id: String(row[0] || '').trim(), parentTaskId: String(row[13] || '').trim()
+  })).filter(record => record.id && record.parentTaskId && !rowsById.has(record.parentTaskId));
+  return { spaced, duplicates, missingParents };
+}
+
+function taskIdIssueSummary_(issues) {
+  const list = (items, format) => items.slice(0, 10).map(format).join('; ') + (items.length > 10 ? '; and ' + (items.length - 10) + ' more' : '');
+  const lines = [];
+  if (issues.duplicates.length) {
+    lines.push('Duplicate Task IDs (rename one copy): ' + list(issues.duplicates, item => item.id + ' in rows ' + item.rowNumbers.join(', ')) + '.');
+  }
+  if (issues.missingParents.length) {
+    lines.push('Subtasks with a missing parent: ' + list(issues.missingParents, item => item.id + ' -> ' + item.parentTaskId + ' (row ' + item.rowNumber + ')') + '.');
+  }
+  return lines.join('\n');
+}
+
+function cleanTaskIds() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+  if (!sheet) throw new Error('Initialize Task_Master first.');
+  const preview = taskIdRows_(sheet);
+  const previewIssues = taskIdIssues_(preview.values, preview.formulas);
+  const previewEntries = spacedTimeEntryIds_();
+  if ((previewIssues.spaced.length || previewEntries.length) && ui.alert('Clean task IDs?',
+    'Remove extra spaces from ' + previewIssues.spaced.length + ' Task_Master ID cells and ' + previewEntries.length +
+    ' Time_Entry_Master task IDs? Backups are created first. Duplicates and missing parents are only reported.',
+    ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  let issues;
+  let cleaned = 0;
+  try {
+    const current = taskIdRows_(sheet);
+    issues = taskIdIssues_(current.values, current.formulas);
+    const entries = spacedTimeEntryIds_();
+    const stamp = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyyMMdd_HHmmss_SSS');
+    if (issues.spaced.length) {
+      sheet.copyTo(ss).setName('Task_Backup_' + stamp);
+      issues.spaced.forEach(cell => sheet.getRange(cell.rowNumber, cell.column).setValue(cell.value));
+    }
+    if (entries.length) {
+      const entrySheet = timeEntrySheet_(false);
+      entrySheet.copyTo(ss).setName('Time_Entry_Backup_' + stamp);
+      entries.forEach(entry => entrySheet.getRange(entry.rowNumber, 2).setValue(entry.value));
+    }
+    cleaned = issues.spaced.length + entries.length;
+  } finally {
+    lock.releaseLock();
+  }
+  const summary = taskIdIssueSummary_(issues);
+  ui.alert('Task ID check', (cleaned ? 'Removed extra spaces from ' + cleaned + ' ID cells.' : 'No extra spaces found.') +
+    '\n' + (summary || 'No duplicate IDs or missing parents found.'), ui.ButtonSet.OK);
+}
+
+function spacedTimeEntryIds_() {
+  const sheet = timeEntrySheet_(false);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  const range = sheet.getRange(2, 2, sheet.getLastRow() - 1, 1);
+  const formulas = range.getFormulas();
+  return range.getValues().map(([value], index) => ({ rowNumber: index + 2, value, formula: formulas[index][0] }))
+    .filter(entry => typeof entry.value === 'string' && entry.value.trim() !== entry.value && !entry.formula)
+    .map(entry => ({ rowNumber: entry.rowNumber, value: entry.value.trim() }));
+}
+
+// Simple trigger: only fires for manual edits, never for script writes.
+function onEdit(e) {
+  const range = e && e.range;
+  if (!range || range.getSheet().getName() !== CONFIG.SHEET_NAME) return;
+  const startRow = Math.max(range.getRow(), 2);
+  const height = range.getRow() + range.getNumRows() - startRow;
+  if (height < 1) return;
+  const touches = column => column >= range.getColumn() && column < range.getColumn() + range.getNumColumns();
+  if (!touches(1) && !touches(14)) return;
+  [1, 14].forEach(column => {
+    if (!touches(column)) return;
+    const cells = range.getSheet().getRange(startRow, column, height, 1);
+    const formulas = cells.getFormulas();
+    let changed = false;
+    const values = cells.getValues().map(([value], index) => {
+      if (formulas[index][0]) return [formulas[index][0]];
+      if (typeof value !== 'string' || value.trim() === value) return [value];
+      changed = true;
+      return [value.trim()];
+    });
+    if (changed) cells.setValues(values);
+  });
+  const lastEdited = startRow + height - 1;
+  const current = taskIdRows_(range.getSheet());
+  const issues = taskIdIssues_(current.values, current.formulas);
+  const inEdit = rowNumber => rowNumber >= startRow && rowNumber <= lastEdited;
+  const summary = taskIdIssueSummary_({
+    duplicates: issues.duplicates.filter(item => item.rowNumbers.some(inEdit)),
+    // Renaming a parent in column A orphans subtasks on other rows.
+    missingParents: touches(1) ? issues.missingParents : issues.missingParents.filter(item => inEdit(item.rowNumber))
+  });
+  if (summary) SpreadsheetApp.getActiveSpreadsheet().toast(summary, 'Task ID check', 15);
 }
 
 function normalizeClients_(values) {
@@ -261,6 +390,7 @@ function getTasks() {
   const taskRows = rows.filter(row =>
     String(row[0] || '').trim() !== ''
   );
+  const dataWarning = taskIdIssueSummary_(taskIdIssues_(rows));
 
   if (!taskRows.length) {
     return {
@@ -368,6 +498,7 @@ function getTasks() {
     hasTasks: true,
     spreadsheetToday,
     spreadsheetTimeZone: timezone,
+    dataWarning: dataWarning ? dataWarning + TASK_ID_HELP : '',
     total: tasks.length,
     tasks: tasks
   };
@@ -528,9 +659,9 @@ function findTaskRow(sheet, taskId) {
     if (row[0].trim() === taskId) matches.push(index);
   });
   if (!matches.length) {
-    throw new Error('Task ID not found: ' + taskId);
+    throw new Error('Task ID not found: ' + taskId + '. Refresh the app; if it persists, use Task Manager > Check and Clean Task IDs.');
   }
-  if (matches.length > 1) throw new Error('Duplicate task ID: ' + taskId);
+  if (matches.length > 1) throw new Error('Duplicate task ID: ' + taskId + '.' + TASK_ID_HELP);
 
   return matches[0] + 2;
 }
@@ -935,7 +1066,7 @@ function readTaskSelection_(taskIds) {
   rows.forEach((values, index) => {
     const id = String(values[0] || '').trim();
     if (!id) return;
-    if (byId.has(id)) throw new Error('Duplicate task ID: ' + id);
+    if (byId.has(id)) throw new Error('Duplicate task ID: ' + id + '.' + TASK_ID_HELP);
     byId.set(id, { rowNumber: index + 2, values });
   });
   ids.forEach(id => {
@@ -1053,7 +1184,7 @@ function appendTasks_(sheet, records, existingRows) {
   const seen = new Set();
   rows.forEach(values => {
     const id = String(values[0] || '').trim();
-    if (id && seen.has(id)) throw new Error('Duplicate task ID: ' + id);
+    if (id && seen.has(id)) throw new Error('Duplicate task ID: ' + id + '.' + TASK_ID_HELP);
     if (id) seen.add(id);
   });
   const properties = PropertiesService.getScriptProperties();
@@ -1109,6 +1240,7 @@ function createSubtasks(parentTaskId, names, quantity = 1) {
       throw new Error('Save valid parent category, priority and planned dates before adding subtasks.');
     }
     const clients = readClients_(parent[14], parentTaskId);
+    parentTaskId = selection.ids[0];
     const records = names.map(taskName => ({ taskName, category: parent[2], priority: parent[3], startDate: parent[5], endDate: parent[6], clients, parentTaskId }));
     const taskIds = appendTasks_(selection.sheet, records, selection.rows);
     return { success: true, taskIds, created: taskIds.length, message: taskIds.length + ' subtasks created.' };

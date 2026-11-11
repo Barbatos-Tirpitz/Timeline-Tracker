@@ -1631,6 +1631,7 @@
     clientSelections: {},
     spreadsheetToday: '',
     spreadsheetTimeZone: '',
+    dataWarning: '',
     dashboard: { period: 'monthly', anchor: null, customStart: '', customEnd: '', client: '' },
     timeEntries: { taskId: '', items: [], loading: false, error: '', request: 0 },
     timeEntryReport: { key: '', entries: [], totalHours: 0, loading: false, error: '', request: 0 },
@@ -1899,6 +1900,9 @@
       renderStats();
       updateDataNotice();
       renderActiveView();
+      const dataWarning = String(response.dataWarning || '');
+      if (dataWarning && dataWarning !== state.dataWarning) showToast(dataWarning);
+      state.dataWarning = dataWarning;
       if (state.editId && $('taskModal').classList.contains('open')) {
         const selectedTask = state.taskById.get(state.editId);
         if (selectedTask) renderSubtaskPanel(selectedTask);

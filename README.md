@@ -191,6 +191,7 @@ Enable the Google Apps Script API for the authorized account. Each run first tes
 ## Data and behavior notes
 
 - The spreadsheet is the source of task data. Each deployment can use its own spreadsheet and web app.
+- Task IDs and Parent Task IDs are compared without leading/trailing spaces, and manual edits to those columns are trimmed automatically. Run **Task Manager → Check and Clean Task IDs (with backup)** to remove spaces from existing ID cells and list duplicate IDs or subtasks with a missing parent; duplicates and missing parents must be fixed manually. The app also shows a warning when it loads tasks with these problems.
 - Existing/blank expected hours are treated as zero. Estimates use column P, after Clients in column O; the upgrade should be run before setting estimates on an existing spreadsheet.
 - Parent and subtask schedules are independent. Changing a subtask does not change its parent's dates, and status updates do not cascade through the hierarchy.
 - In All tasks, parent groups and child lists are paginated separately. Selections persist across pages but are cleared when filters change.

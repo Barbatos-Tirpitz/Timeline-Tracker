@@ -1,0 +1,6 @@
+Task ID,Task Name,Category,Priority,Status,Start Date,End Date,Duration,Description,Actual Start,Actual End,Created At,Updated At,Parent Task ID,Clients,Hours
+VID-001,Website Relaunch,Graphic Design,High,In Progress,2026-11-09,2026-11-20,=G2-F2+1,Homepage and brand refresh,2026-11-09,,2026-11-01 09:00:00,2026-11-10 09:00:00,,"[""Acme Studio""]",0
+VID-002,Homepage Layout,Graphic Design,High,In Progress,2026-11-09,2026-11-13,=G3-F3+1,Desktop and mobile homepage layout,2026-11-09,,2026-11-01 09:05:00,2026-11-10 09:00:00,VID-001,"[""Acme Studio""]",5
+VID-003,Brand Assets,Graphic Design,Medium,Done,2026-11-09,2026-11-11,=G4-F4+1,Export approved logo and color assets,2026-11-09,2026-11-10,2026-11-01 09:10:00,2026-11-10 16:00:00,VID-001,"[""Acme Studio""]",3
+VID-004,November Video,Video editing,Medium,To Do,2026-11-12,2026-11-26,=G5-F5+1,Prepare a short product video,,,2026-11-02 10:00:00,2026-11-02 10:00:00,,"[""Northwind Media""]",0
+VID-005,Product Cut,Video editing,High,To Do,2026-11-12,2026-11-18,=G6-F6+1,Assemble the first video cut,,,2026-11-02 10:05:00,2026-11-02 10:05:00,VID-004,"[""Northwind Media""]",4
